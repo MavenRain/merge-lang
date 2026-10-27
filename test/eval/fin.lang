@@ -1,0 +1,12 @@
+-- Fin n is (k : ℕ) × Path Bool (natLe (natAdd k 1) n) true. A value is pack k refl.
+two : Fin 3
+two = pack 2 refl
+
+first : Fin 1
+first = pack 0 refl
+
+index : ℕ
+index = witness two
+
+big : Fin 18446744073709551615
+big = pack 18446744073709551614 refl

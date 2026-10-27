@@ -1,0 +1,3 @@
+-- Fin 0 has no value. The check refuses pack 0 refl: natLe 1 0 is false.
+bad : Fin 0
+bad = pack 0 refl

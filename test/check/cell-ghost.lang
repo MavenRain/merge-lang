@@ -1,0 +1,2 @@
+data Ghost (A : Type 0) : Type where
+  ghost : Ghost A

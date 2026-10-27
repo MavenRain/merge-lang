@@ -7,17 +7,23 @@ state that replicas change while they are disconnected and merge when they
 reconnect. Do not use it for text co-editing, server-only databases or
 Redis scripts.
 
-## Status (S0)
+## Status (S1)
 
-Only the kit seed exists. The merge-lang surface, `langc check --json`,
-`langc fmt`, `langc sim`, the Wasm merge engine, the JSON coordination
-report, `langc mcp`, `SKILL.md` and the graded examples are planned
-(`docs/PLAN.md` section 7 and section 9). Do not cite them as built.
+S1 is built: the port of the evolve-lang 1f87a5a surface and cubical kernel
+(`docs/STATUS.md`). `langc check --json` and `langc fmt` work. The
+merge-lang domain, `langc sim`, the Wasm merge engine, the JSON
+coordination report, `langc mcp`, `SKILL.md` and the graded examples are
+planned (`docs/PLAN.md` section 7 and section 9). Do not cite them as built.
 `langc` is a native program, not a Wasm module.
 
 ## Commands that work now
 
 - `make check`: build `build/langc` with tcc and run the gate.
+- `build/langc check --json PROG`: check a program. Each diagnostic is one
+  JSON line (`docs/DIAGNOSTICS.md`). The last line gives the `parsed` and
+  `typed` counts.
+- `build/langc fmt PROG`: print the canonical text of a program. `langc
+  check` gives `W_NONCANON` when a program region is not canonical.
 
 ## Rules for a change
 

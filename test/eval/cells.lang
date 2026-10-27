@@ -1,0 +1,22 @@
+-- Cell families (S2b U4): a declared Maybe and a declared Trunc check.
+-- A fold over Maybe takes the nothing case, then the just case, then
+-- the value. The builtin Option stays.
+data Maybe (A : Type 0) : Type where
+  nothing : Maybe A
+  just : (m : A) → Maybe A
+
+data Trunc (A : Type 0) : Type where
+  inc : (a : A) → Trunc A
+  squash : (x : Trunc A) → (y : Trunc A) → Path (Trunc A) x y
+
+squashed : (A : Type 0) → (u : Trunc A) → (v : Trunc A) → Path (Trunc A) u v
+squashed A u v = squash A u v
+
+orZero : (s : Maybe ℕ) → ℕ
+orZero s = fold 0 (λ (n : ℕ) → n) s
+
+orZeroJust : ℕ
+orZeroJust = orZero (just ℕ 5)
+
+orZeroNothing : ℕ
+orZeroNothing = orZero (nothing ℕ)

@@ -29,6 +29,12 @@ realization matrix.
 - A test is a function `p : A -> Option Unit`. The result `some unit` keeps
   the element. A host can use a type with two values in place of
   `Option Unit` (mech uses `Flag`, and `true` keeps).
+- merge-lang: the forms in this file keep the kit syntax. The merge-lang
+  program surface is `SPEC.md` section 2, with the ASCII aliases of
+  `SPEC.md` section 2.3. merge-lang drops some kit names (for example
+  `Flag`, `Prod`, `List` and `filter`); `langc check` gives the
+  replacement as a hint. `formers/tcc-wasm.md` gives the merge-lang status
+  of each former.
 
 ## 2. Programs and refusal rules
 
@@ -44,12 +50,13 @@ refusal rules. They keep a program inside the former layer.
 
 - **R1. No new data type.** The compiler refuses the host form that declares
   a data type (mech `mu`; assay `mu` and `nu`).
-- **R2. No unproved fact.** The compiler refuses `axiom`. When the host kernel
+- **R2. No unproved fact.** The compiler refuses `axiom` (merge-lang
+  `postulate`). When the host kernel
   accepts an axiom, the compiler runs the host axiom report on its output. It
   refuses each axiom that the host file does not list as part of the target
   protocol.
 - **R3. No general recursion.** The compiler refuses the host form for a
-  recursive definition (`def rec`). Recursion comes only from F6 `fold` and
+  recursive definition (`def rec`; merge-lang `rec`). Recursion comes only from F6 `fold` and
   F7 `unfold`. When F7 has the status HOST-LIMIT, recursion comes only from
   F6.
 - **R4. No new core name.** The compiler refuses a definition whose name is
@@ -57,6 +64,11 @@ refusal rules. They keep a program inside the former layer.
 - **R5. Host forms.** Each host adds the host forms that are not formers
   (mech: `poly`, `specialize`; assay: the contract forms). The host file
   gives the full list. `SPEC.md` section 2 copies it.
+
+merge-lang refines the first two rules (`docs/PLAN.md` section 2): R1
+admits CM and CC signatures and gives `REFUSE_CELL` for signatures that
+fail the criterion. R2 permits only the domain to declare base data with
+no type argument and refuses `postulate` as an unproved fact.
 
 The compiler writes the target. A program cannot write a part of the target
 directly.

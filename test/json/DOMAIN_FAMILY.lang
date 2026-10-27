@@ -1,0 +1,2 @@
+start : (h : Hop 1 2) → ℕ
+start h = fold (λ (x : ℕ) → x) h

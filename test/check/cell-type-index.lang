@@ -1,0 +1,2 @@
+data F : Type 0 → Type where
+  mk : F ℕ

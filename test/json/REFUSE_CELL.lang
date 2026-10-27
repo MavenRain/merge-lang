@@ -1,0 +1,2 @@
+data Pair (A : Type 0) : Type where
+  mk : (x : A) → (y : A) → Pair A

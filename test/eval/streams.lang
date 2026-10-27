@@ -1,0 +1,35 @@
+-- Codata streams (S2c U3): a declared Stream checks, and its corecursor
+-- and destructors evaluate. nats counts up from 0, evens is its parity by
+-- extend, and duplicate is extend of the identity.
+codata Stream (A : Type 0) : Type where
+  corec : (head : A) → (tail : Stream A) → Stream A
+
+nats : Stream ℕ
+nats = corec ℕ ℕ (λ (s : ℕ) → s) (λ (s : ℕ) → natAdd s 1) 0
+
+natsHead : ℕ
+natsHead = head ℕ nats
+
+natsAt3 : ℕ
+natsAt3 = head ℕ (tail ℕ (tail ℕ (tail ℕ nats)))
+
+extend : (A : Type 0) → (B : Type 0) → (f : Stream A → B) → (x : Stream A) → Stream B
+extend A B f x = corec B (Stream A) f (tail A) x
+
+parity : (n : ℕ) → ℕ
+parity n = fold (λ (p : ℕ) → natSub 1 p) 0 n
+
+evens : Stream ℕ
+evens = extend ℕ ℕ (λ (w : Stream ℕ) → parity (head ℕ w)) nats
+
+evensAt1 : ℕ
+evensAt1 = head ℕ (tail ℕ evens)
+
+evensAt2 : ℕ
+evensAt2 = head ℕ (tail ℕ (tail ℕ evens))
+
+duplicate : (A : Type 0) → (x : Stream A) → Stream (Stream A)
+duplicate A x = extend A (Stream A) (λ (y : Stream A) → y) x
+
+dupAt1 : ℕ
+dupAt1 = head ℕ (head (Stream ℕ) (tail (Stream ℕ) (duplicate ℕ nats)))

@@ -1,0 +1,2 @@
+codata Stream (n : ℕ) : Type where
+  corec : (head : ℕ) → (tail : Stream n) → Stream n

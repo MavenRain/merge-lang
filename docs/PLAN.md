@@ -10,9 +10,11 @@ resource allocation rule. The host is TinyCC. The v1 targets are a Wasm
 merge engine, a deterministic replica simulator (`langc sim`) and a JSON
 coordination report.
 
-S0 status: only the tcc-wasm kit seed of lang-template, `design/DESIGN.md`,
-this plan, `README.md`, `AGENTS.md` and `docs/COMPARISON.md` exist. No
-merge-lang feature is built. Section 9 gives the slices.
+S1 status: the tcc-wasm kit seed of lang-template, `design/DESIGN.md`, this
+plan, `README.md`, `AGENTS.md`, `docs/COMPARISON.md` and slice S1 exist. S1
+is the port of evolve-lang 1f87a5a (section 8): the surface, `langc fmt`,
+`W_NONCANON`, `check --json` and the cubical kernel. No merge-lang domain is
+built yet (O4). O12 is the first unit of S2. Section 9 gives the slices.
 
 merge-lang does not prove facts about the network. It assumes that each
 replica state that is sent arrives some time, and it does not model loss,
@@ -43,8 +45,7 @@ USER rulings (2026-10-27, the request and AskUserQuestion; the words are in
   The offline gate compares it byte for byte with a golden file.
 - R6 agent adoption: the six bullets of the pasted list (section 7).
 
-Readings (NOT ruled; section 11 has a Q item for each, with (a) as the
-recommendation):
+Readings RULED by the USER on 2026-10-27 (section 11 has the marks):
 
 - Kit and port path: the tcc-wasm seed (done in S0). S1 ports the
   surface and the cubical kernel of evolve-lang 1f87a5a in one patch.
@@ -64,7 +65,12 @@ recommendation):
   only (Q8). Declaration forms (Q9).
 - The three examples of the description map to three library state
   parts: `GSet` (tags), `MVReg` (task owner), `Counter` and `Escrow`
-  (inventory) (Q10 to Q13).
+  (inventory) (Q10, Q11). The inventory has `sell` and `restock`
+  (increments, Balegas `R[i][i]`) (Q12 (b)). ℤ is admitted (Q13 (b)).
+- Formers admitted by the USER beyond the recommendation: `FMSet` in
+  generator form (Q14 (b)), the free CM of operations `Ops A` (Q15 (b)),
+  and a `Replica` cofamily, a Moore machine (Q16 (b)). Section 2.2 marks
+  them. Their design and slices are O12.
 
 ## 2. The reading of R1
 
@@ -102,8 +108,9 @@ Classification rules of the precedent, kept:
   REFUSED: they use `A` outside the generator.
 - `Maybe` (one 0-cell `nothing`, generator `just`) and `Trunc` (one 1-cell
   `squash`) are CMs.
-- Only `domain/domain.lang` declares a family or a cofamily. A program
-  that declares one gets `REFUSE_DATA`.
+- Only `domain/domain.lang` declares base data with no type argument.
+  A program can declare a CM or CC signature that passes R1. A program
+  base data declaration gets `REFUSE_DATA`.
 
 ### 2.2 Every type former merge-lang needs
 
@@ -120,13 +127,13 @@ Classification rules of the precedent, kept:
 | `Read n` | the read of an `MVReg`: `empty`, `one x`, `conflict s` with a proof that `s` has 2 or more members | base, indexed (R2) | no type parameter (Q11) |
 | `Op` of a program | the operations of a declaration, with their arguments | base (R2) | a closed sum that the declaration generates |
 | `Option A` | the result of `apply`: `none` when the local precondition fails | CM | one 0-cell `none`, generator `some` |
-| op sequences | the changes of one replica in a schedule | ambient | `Fin m → Op`, a vector (Q15) |
+| op sequences | the changes of one replica in a schedule | ambient | `Fin m → Op`, a vector; `Ops A` is also admitted (Q15 (b), O12) |
 | schedules, traces | none in the guest | not admitted | the simulator enumerates them in C (Q16) |
 | causal context | the `MVReg` context `Fin r → ℕ` | ambient | a version vector; no new former |
-| `FMSet A` | none | not admitted | a set over a finite atom domain is a vector `Fin n → Bool` (Q14) |
+| `FMSet A` | to be set by O12 | CM, ADMITTED (Q14 (b)) | generator form with unit, associativity, commutativity and set truncation cells (quorum-lang PLAN 2) |
 | `Pfin⁺ A`, the free join-semilattice | none in v1 | not admitted | the reading of `Read` as the free join-semilattice needs set truncation, a 2-cell (Q11) |
-| free CM of operations `Ops A` (mandate-lang 4.6) | none in v1 | not admitted | no description sentence has a script whose later operation reads an earlier response (Q15) |
-| `Replica A` cofamily, a Moore machine (mandate-lang 4.7) | none in v1 | not admitted | the simulator replica is a C value (Q16) |
+| free CM of operations `Ops A` (mandate-lang 4.6) | scripts whose later operations read earlier responses; use set by O12 | CM, ADMITTED (Q15 (b)) | the mandate-lang 4.6 form |
+| `Replica A` cofamily, a Moore machine (mandate-lang 4.7) | convergence as a statement about guest replicas; use set by O12 | CC, ADMITTED (Q16 (b)) | the mandate-lang 4.7 `Machine` form |
 | `Trunc A` | none in v1 | not admitted | the laws are Pi types into `Path` of sets; no law needs proof irrelevance |
 | `Stream A` | none | not admitted | schedules are finite |
 | cons `List A`, cons `FMSet A` | none | REFUSED | `REFUSE_CELL`: `A` occurs outside the generator |
@@ -195,8 +202,6 @@ numbered for the admission table:
 | floats | D7 asks for a deterministic engine; no sentence needs them |
 | wall-clock time, timestamps, last-writer-wins register | D4: a concurrent owner write "should remain an explicit conflict"; last-writer-wins takes a winner in silence; no clocks (determinism) |
 | `remove` on tags, the add-wins OR-set with dots | D3 names additions only (Q10) |
-| increments (`restock`) | D5 names a decrement only (Q12) |
-| `ℤ`, signed values | D5 needs "never negative" as a predicate: `nonneg c` compares the decrements with the stock in ℕ (Q13) |
 | sequence and text CRDTs (RGA, Peritext) | no sentence; Automerge covers text |
 | JSON documents, nested maps (the Automerge document model) | no sentence; a state is a fixed product of declared parts |
 | a merge function that the user writes | D6 "checked merge laws": v1 merges are library merges with proved laws (`REFUSE_NO_MERGE`); a user merge with proof terms is O6 |
@@ -204,7 +209,10 @@ numbered for the admission table:
 | consensus, locks, leases | D6 asks to distinguish operations that need coordination, not to build a coordination protocol; `transfer` is the one coordination operation |
 | membership changes (add or remove a replica) | no sentence; `replicas` fixes the set |
 | op-based or delta-state messages | the reading is state based (Q5) |
-| `FMSet`, the free CM of operations, a replica cofamily | section 2.2 (Q14, Q15, Q16) |
+
+The S0 plan refused increments (`restock`), `ℤ`, `FMSet`, the free CM of
+operations and a replica cofamily. The USER ruled Q12 to Q16 (b) on
+2026-10-27: all five are admitted. O12 gives their design and slices.
 
 ## 4. The merge model
 
@@ -478,10 +486,10 @@ EXTRA.
 | lang-template | 5265a2a | `hosts/tcc-wasm` (the seed); `hosts/tcc-json/src/json.{c,h}` (the report writer, S6) |
 | evolve-lang | 1f87a5a | S1: the Agda-like surface, `langc fmt`, `W_NONCANON`, `check --json`, `docs/DIAGNOSTICS.md`, and the kernel of its S2a to S2d (`I`, `PathP`, `Path`, `transp`, `hcomp`, systems, indexed families, higher constructors, `REFUSE_CELL` for CM and CC, `Option`, `Fin`, the value printer); the same tcc-wasm 5265a2a seed; PLAN shape |
 | leaf-lang | f5e587d | the source of the evolve-lang surface; PLAN 2.1 (read only) |
-| quorum-lang | 09f7f59 | PLAN 2: `FMSet` in generator form, the refused cons form, `Maybe`, `Trunc` (read only) |
+| quorum-lang | 09f7f59 | PLAN 2: `FMSet` in generator form (admitted, Q14 (b)), the refused cons form, `Maybe`, `Trunc` (read only) |
 | intent-lang | 67445ae | `REFUSE_CELL`, cofamily (in evolve-lang 1f87a5a already) |
 | resolve-lang | 632d819 | `REFUSE_CELL` (second implementation, read only) |
-| mandate-lang | 94de313 | PLAN 4.6 free cell monad of operations (not admitted, Q15) |
+| mandate-lang | 94de313 | PLAN 4.6 free cell monad of operations (admitted, Q15 (b)); PLAN 4.7 `Machine` (the `Replica` cofamily, Q16 (b)) |
 | zkpolicy-lang | 1d263fb | `Glue`, `ua` (not ported, O5) |
 | agent-lang | 96e5473 | diagnostic fix text |
 | dil-lang | 9e57528 | diagnostic fix text; README head (distinct space) |
@@ -498,8 +506,8 @@ on the new checks, docs, close (stage, commit message, next prompt).
 | Slice | Scope | Gate and mutants |
 |---|---|---|
 | S0 | kit seed, `design/DESIGN.md`, this plan, README, `AGENTS.md`, `docs/COMPARISON.md` | `make check` EXIT 0: examples 10 checked, 0 failed; parse refusals 9; check refusals 19; evals 32; ir 10 lowered; wasm 13 modules valid; differential 813 cases, 0 mismatches; gate 0 failures; review and domain regressions passed |
-| S1 | one port of evolve-lang 1f87a5a (section 8): surface (Q7), `langc fmt`, `W_NONCANON`, `check --json` with `parsed` and `typed` counts, the S2a to S2d kernel; the kit sample domain stays (O4) | `make check` EXIT 0 with the evolve-lang 1f87a5a counts (its PLAN 9 S2d row: examples 10; parse refusals 10; check refusals 54; evals 62; ir 10; wasm 13; differential 773 cases, 0 mismatches; fmt 101 canonical, 6 non-canonical pairs; json 26 fixtures, diagnostics 38 codes; cubical 36 checks, 22 round trips), re-measured at S1 STEP 0 on evolve-lang 1f87a5a; mutants: the `REFUSE_CELL` CM test, the `Fin` bound, the `W_NONCANON` test |
-| S2 | domain: `natMax`, `sumFin`, `GSet`, `MVReg`, `Read`, `Counter`, `Escrow`, the product join; L1 to L4 as library guest terms; replace the kit sample domain | one eval test per part operation and merge; L1 to L4 type-check; mutants on each merge (swap `natMax` for `natAdd`, drop the context test of `MVReg`) |
+| S1 | one port of evolve-lang 1f87a5a (section 8): surface (Q7), `langc fmt`, `W_NONCANON`, `check --json` with `parsed` and `typed` counts, the S2a to S2d kernel; the kit sample domain stays (O4) | `make check` EXIT 0 with the evolve-lang 1f87a5a counts (its PLAN 9 S2d row: examples 10; parse refusals 10; check refusals 54; evals 62; ir 10; wasm 13; differential 773 cases, 0 mismatches; fmt 101 canonical, 6 non-canonical pairs; json 26 fixtures, diagnostics 38 codes; cubical 36 checks, 22 round trips), re-measured at S1 STEP 0 on evolve-lang 1f87a5a; mutants: the `REFUSE_CELL` CM test, the `Fin` bound, the `W_NONCANON` test. DONE 2026-10-27: `make check` EXIT 0 with these counts (also: diagnostics 24 codes with a fixture, 14 with no fixture; gate 0 failures; review, domain and diagnostic edit regressions passed); the three mutants KILLED. Review adds seven C classification cases (43 checks total); the upstream counts above remain the port baseline |
+| S2 | first the O12 replan (Q12 to Q16 (b)); then domain: `natMax`, `sumFin`, `GSet`, `MVReg`, `Read`, `Counter`, `Escrow`, the product join; L1 to L4 as library guest terms; replace the kit sample domain | one eval test per part operation and merge; L1 to L4 type-check; mutants on each merge (swap `natMax` for `natAdd`, drop the context test of `MVReg`) |
 | S3 | forms: `replicas`, `atoms`, `replicated`, `state`, `op`, `invariant`, `allocate`, elaborated to guest terms (Q9); `REFUSE_NO_MERGE`, `REFUSE_OP_INFINITE_ARG`, `REFUSE_RAW_WRITE`, `REFUSE_ALLOC_SUM`; `examples/tags.merge`, `owner.merge`, `inventory.merge`, `inventory-escrow.merge` parse and type | one fixture per code; `fmt` round trip on the forms; mutants on each J1 and J2 test |
 | S4 | the checker: J4 to J6, the bounded search core in C (shared with S5), `REFUSE_NEEDS_COORDINATION`, `REFUSE_RULE_MISMATCH`, `REFUSE_READ_WINNER`, `W_BOUNDED`; L5, L6a, L6b, L7, L8; `laws` and `pairs` counts in `check --json` | one test per code with its JSON shape; `inventory.merge` refused, `inventory-escrow.merge` GREEN with L7 proved; mutants on each class test and on L7 |
 | S5 | `langc sim`: schedules, order, reduction, transcript; golden `test/sim/*.out` (the demo); determinism gate | the demo transcript equals its golden file; two runs byte-identical; mutants on the order and on the minimality test |
@@ -539,73 +547,79 @@ on the new checks, docs, close (stage, commit message, next prompt).
 - O11 the MVReg merge with one slot per replica (4.2) is correct only
   under the single-writer rule. S2 proves L1 to L3 for it; if the proof
   fails, S2 falls back to the dotted set form and records it.
+- O12 the USER ruled Q12 to Q16 (b) on 2026-10-27: `restock`, ℤ,
+  `FMSet`, `Ops A` and a `Replica` cofamily are admitted. Sections 3 to
+  6 and 9 still show the S0 design (`sell` only, ℕ only, vectors for
+  sets, no guest replica). The S2 kickoff replans them and asks the new
+  Q items before the S2 build.
 
 ## 11. Questions for the USER
 
-Each item has options. (a) is the recommendation. All are OPEN at S0.
+Each item has options; (a) was the recommendation. Marks (2026-10-27):
+RULED (letter) is a USER ruling.
 
-- Q1 R1 reading. (a) the precedent reading of 2.1: ambient Pi, Sigma,
+- Q1 R1 reading. RULED (a). (a) the precedent reading of 2.1: ambient Pi, Sigma,
   Path, U are not limited; declared type constructors are only CM and
   CC; the cell test is syntactic; cons is refused; the dropped clause
   named the model, not a former. (b) the same, and also refuse higher
   inductive types (no path constructors in a CM).
-- Q2 kit and port path. (a) tcc-wasm seed; S1 = one port of evolve-lang
+- Q2 kit and port path. RULED (a). (a) tcc-wasm seed; S1 = one port of evolve-lang
   1f87a5a (surface and kernel S2a to S2d); `json.c` from tcc-json in S6.
   (b) port from leaf-lang, quorum-lang and intent-lang one by one, as
   evolve-lang did (four slices more).
-- Q3 Wasm target. (a) an engine module per program, emitted by the Wasm
+- Q3 Wasm target. RULED (a). (a) an engine module per program, emitted by the Wasm
   writer of `langc`; `langc` itself is native, not Wasm. (b) build
   `langc` with clang for wasm32-wasi (this breaks R3).
-- Q4 engine ABI. (a) the memory ABI of 5.1 (export `memory`, `alloc`,
+- Q4 engine ABI. RULED (a). (a) the memory ABI of 5.1 (export `memory`, `alloc`,
   `reset`; state pointers; a writer change so that engine entries keep
   the heap). (b) pack each state in one `i64` and refuse larger states.
-- Q5 merge model. (a) state based: a state is a join-semilattice, merge
+- Q5 merge model. RULED (a). (a) state based: a state is a join-semilattice, merge
   is the join, each operation is inflationary. (b) operation based, with
   causal delivery assumed.
-- Q6 discharge marks. (a) proved, bounded, refuted; the report never says
+- Q6 discharge marks. RULED (a). (a) proved, bounded, refuted; the report never says
   proved for bounded. (b) proofs only: refuse a law with no proof term.
-- Q7 surface. (a) the Agda-like Unicode surface of quorum-lang (Q13),
+- Q7 surface. RULED (a). (a) the Agda-like Unicode surface of quorum-lang (Q13),
   leaf-lang (Q14) and evolve-lang (Q7). (b) ASCII keywords. Unicode
   symbols can cost more tokens; S9 measures it.
-- Q8 proofs. (a) guest language only. (b) also a Lean export.
-- Q9 declaration forms. (a) dedicated forms `replicas`, `atoms`,
+- Q8 proofs. RULED (a). (a) guest language only. (b) also a Lean export.
+- Q9 declaration forms. RULED (a). (a) dedicated forms `replicas`, `atoms`,
   `replicated`, `state`, `op`, `invariant`, `allocate` that elaborate to
   guest terms. (b) plain guest definitions over the domain types only.
-- Q10 tags. (a) `GSet` with `add` only (D3 names additions). (b) the
+- Q10 tags. RULED (a). (a) `GSet` with `add` only (D3 names additions). (b) the
   add-wins OR-set with dots, and `remove`.
-- Q11 owner read type. (a) `Read n`, a base indexed family: `empty`,
+- Q11 owner read type. RULED (a). (a) `Read n`, a base indexed family: `empty`,
   `one x`, `conflict s` with a proof that `s` has 2 or more members. (b)
   `Pfin⁺ A`, the free join-semilattice as a CM higher inductive type; it
   needs set truncation, a 2-cell, and the evolve-lang kernel has 1-cells
   only (its Q-S2b-5).
-- Q12 inventory operations. (a) `sell` (a decrement) only, with a
+- Q12 inventory operations. RULED (b). (a) `sell` (a decrement) only, with a
   declared initial stock and initial split; the escrow rule is the
   rights and `transfer`. (b) also `restock` (increments, Balegas
   `R[i][i]`).
-- Q13 integers. (a) ℕ only; `nonneg` compares in ℕ; the transcript prints
+- Q13 integers. RULED (b). (a) ℕ only; `nonneg` compares in ℕ; the transcript prints
   the signed stock. (b) admit ℤ.
-- Q14 `FMSet`. (a) not admitted; a set over an atom domain is a vector
+- Q14 `FMSet`. RULED (b). (a) not admitted; a set over an atom domain is a vector
   `Fin n → Bool`. (b) admit `FMSet` in generator form (quorum-lang).
-- Q15 free CM of operations. (a) not admitted; the changes of a replica
+- Q15 free CM of operations. RULED (b). (a) not admitted; the changes of a replica
   are a vector of operations. (b) admit `Ops A` (mandate-lang 4.6) for
   scripts whose later operations read earlier responses.
-- Q16 replica as a cofamily. (a) not admitted; the simulator replica is
+- Q16 replica as a cofamily. RULED (b). (a) not admitted; the simulator replica is
   a C value. (b) a `Replica` cofamily, a Moore machine (mandate-lang 4.7
   `Machine`), so that convergence is a statement about guest replicas.
-- Q17 simulator bounds and order. (a) the 5.2 defaults (`P = 1`,
+- Q17 simulator bounds and order. RULED (a). (a) the 5.2 defaults (`P = 1`,
   `M = 2`, the declared replicas), order by total operations then
   declaration order, the reduction of 5.2. (b) seeded random schedules
   (this breaks byte determinism).
-- Q18 demo files. (a) `examples/inventory.merge` (no rule: refused with
+- Q18 demo files. RULED (a). (a) `examples/inventory.merge` (no rule: refused with
   the counterexample) and `examples/inventory-escrow.merge` (kept), both
   golden; the demo transcript is the first. (b) one file and a flag that
   adds the rule.
-- Q19 tokenizer for the baseline. (a) a fixed offline proxy, as leaf-lang
+- Q19 tokenizer for the baseline. RULED (a). (a) a fixed offline proxy, as leaf-lang
   Q13 and evolve-lang Q12. (b) a named BPE tokenizer through a script.
-- Q20 report entry. (a) `langc build` writes `NAME.report.json`; `langc
+- Q20 report entry. RULED (a). (a) `langc build` writes `NAME.report.json`; `langc
   check --json` prints the same schema with diagnostics. (b) a separate
   `langc report` command.
-- Q21 engine code. (a) one IR template per part, plus the invariants
+- Q21 engine code. RULED (a). (a) one IR template per part, plus the invariants
   lowered through the kit IR; the differential gate checks the module
   against `langc eval` of the guest terms. (b) lower the guest terms of
   the parts directly (the IR then needs finite vectors as arrays).

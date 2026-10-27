@@ -1,0 +1,5 @@
+price : ℕ
+price = 1200
+
+wrong : Path ℕ (natAdd price 1) price
+wrong = refl

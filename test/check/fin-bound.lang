@@ -1,0 +1,3 @@
+-- Fin 3 has the values 0, 1 and 2. The check refuses pack 3 refl: natLe 4 3 is false.
+bad : Fin 3
+bad = pack 3 refl

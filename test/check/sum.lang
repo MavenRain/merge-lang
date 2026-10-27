@@ -1,0 +1,3 @@
+-- S2d removed Sum. The check gives NAME_UNKNOWN and the hint "use Option or a base sum".
+choice : Sum ℕ ℕ
+choice = inr 5

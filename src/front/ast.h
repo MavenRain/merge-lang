@@ -38,14 +38,17 @@ typedef struct {
   const char *name;
   const Field *fields;
   size_t field_count;
+  const Term **indices; /* the result indices: one for each index of the family */
+  const Term *result;   /* a path constructor: its type Path (F A) s t; NULL for a point constructor */
   int line;
   int col;
 } Ctor;
 
 typedef enum {
-  DECL_DEF,    /* def [rec] name : type := body */
-  DECL_AXIOM,  /* axiom name : type */
-  DECL_FAMILY  /* family name params := ctor | ... */
+  DECL_DEF,    /* [rec] name : type, then the clause name args = body */
+  DECL_AXIOM,  /* postulate name : type */
+  DECL_FAMILY,  /* data name params : Type where, then one constructor a line */
+  DECL_COFAMILY /* codata name params : Type where, then the one corecursor clause */
 } DeclKind;
 
 /* A family is legal only in the domain file (rule R1). */
@@ -60,11 +63,15 @@ typedef struct {
   int is_rec;
   int line;
   int col;
+  int end_line; /* the last token of the declaration */
+  int end_col;
   const char *name;
   const Term *type;
   const Term *body;
   const Field *params;
   size_t param_count;
+  const Term **indices; /* the index types of `data F params : A1 → .. → Type` */
+  size_t index_count;
   const Ctor *ctors;
   size_t ctor_count;
 } Decl;

@@ -1,0 +1,2 @@
+data V (A : Type 0) (n : ℕ) : Type where
+  v : (a : A) → V A n

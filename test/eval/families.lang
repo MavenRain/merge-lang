@@ -1,0 +1,3 @@
+-- An indexed domain family (S2b U1): a projection of a `Hop` step.
+hopStart : (n : ℕ) → ℕ
+hopStart n = hopFrom (up n)

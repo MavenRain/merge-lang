@@ -83,10 +83,10 @@ counted loops and bounded loops. It has no calls, no function values and
 no stack of its own. Two programs need more than that. The lowering
 refuses them with a HOST-LIMIT code. These are not defects.
 
-- `REFUSE_RUNTIME_CLOSURE` (`src/front/lower.c:503`): a function value
+- `REFUSE_RUNTIME_CLOSURE` (`src/front/lower.c:583`): a function value
   must exist at run time, for example as the result of a `fold`. The IR
   has no closures. `test/ir/closure.lang` is the gate case.
-- `REFUSE_RUNTIME_TREE` (`src/front/lower.c:990`): a `fold` walks a value
+- `REFUSE_RUNTIME_TREE` (`src/front/lower.c:926`): a `fold` walks a value
   of a family with two or more recursive fields, and the value exists
   only at run time. A loop walks one spine. A tree needs recursion or an
   explicit stack. `test/ir/tree.lang` is the gate case.

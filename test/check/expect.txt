@@ -14,6 +14,41 @@ universe.lang TYPE_MISMATCH
 universe-range.lang TYPE_UNIVERSE
 no-type.lang TYPE_INFER
 bare-fun.lang TYPE_INFER
-filter-sum.lang TYPE_MISMATCH
 arity.lang TYPE_ARITY
 not-function.lang TYPE_NOT_FUNCTION
+eq.lang NAME_UNKNOWN
+sum.lang NAME_UNKNOWN unknown name Sum (S2d removed it); use Option or a base sum
+fin-bound.lang TYPE_REFL the left side normalizes to false, the right side normalizes to true
+fin-empty.lang TYPE_REFL the left side normalizes to false, the right side normalizes to true
+system-disagree.lang TYPE_SYSTEM
+transp-const.lang TYPE_LINE
+transp-face.lang TYPE_LINE
+transp-name.lang REFUSE_NAME
+hcomp-base.lang TYPE_SYSTEM
+index-mismatch.lang TYPE_MISMATCH
+index-fold.lang DOMAIN_FAMILY
+cell-list.lang REFUSE_CELL must be the one field of its constructor
+cell-pair.lang REFUSE_CELL must be the one field of its constructor
+cell-ghost.lang REFUSE_CELL
+cell-type-index.lang REFUSE_CELL
+cell-value-param.lang REFUSE_CELL is not a universe
+cell-field.lang REFUSE_CELL
+cell-two-gen.lang REFUSE_CELL
+cell-path-shape.lang REFUSE_CELL must have the type Path T s t
+cell-path-dim.lang REFUSE_CELL has dimension 2
+cell-path-end.lang REFUSE_CELL
+codata-no-obs.lang REFUSE_CELL has 0 observations
+codata-dup-field.lang REFUSE_NAME tail is already a field of this clause
+codata-params.lang REFUSE_CELL it has 2 parameters; a cocell signature has one type parameter
+codata-value-param.lang REFUSE_CELL the parameter n is not a universe
+codata-index.lang REFUSE_CELL it has an index
+codata-clauses.lang REFUSE_CELL it must have one clause, and the clause is not a path constructor
+codata-result.lang REFUSE_CELL it must have one clause, and the clause is not a path constructor
+codata-closed-field.lang REFUSE_CELL the field n must be the observation A
+codata-other-arg.lang REFUSE_CELL the field tail must be the observation A
+codata-nested.lang REFUSE_CELL the field deep must be the observation A
+codata-open-label.lang REFUSE_CELL the field pick must be the observation A
+codata-path-field.lang REFUSE_CELL the field loop must be the observation A
+codata-label-universe.lang REFUSE_CELL the label type of pick is in Type 1, above Type 0 of A
+codata-two-obs.lang REFUSE_CELL it has 2 observations
+hit-fold.lang DOMAIN_FAMILY

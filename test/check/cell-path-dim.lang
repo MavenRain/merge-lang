@@ -1,0 +1,3 @@
+data Trunc (A : Type 0) : Type where
+  inc : (a : A) → Trunc A
+  sq : (x : Trunc A) → (y : Trunc A) → (p : Path (Trunc A) x y) → (q : Path (Trunc A) x y) → Path (Path (Trunc A) x y) p q
