@@ -1,0 +1,3 @@
+-- sumFin at a variable n stays stuck, and its loop would need pack k refl at run time.
+total : (n : ℕ) → ℕ
+total n = sumFin n (λ (i : Fin n) → witness i)

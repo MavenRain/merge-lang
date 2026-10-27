@@ -43,6 +43,8 @@ typedef enum {
   OP_NAT_MUL,
   OP_NAT_EQ,
   OP_NAT_LE,
+  OP_NAT_MAX,
+  OP_SUM_FIN,
   OP_FLAG_IF,
   OP_PROJ,
   OP_SSET,  /* the sort of pretypes; no surface name */

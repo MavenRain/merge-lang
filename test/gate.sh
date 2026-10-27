@@ -145,6 +145,7 @@ done
 build/langc ir test/ir/spine.lang > /dev/null || { echo "FAIL spine.lang: ir"; fail=$((fail + 1)); }
 ir_refused tree REFUSE_RUNTIME_TREE
 ir_refused path REFUSE_RUNTIME_PATH
+ir_refused sumfin-open REFUSE_RUNTIME_PATH
 
 # The Wasm target: each module builds and is valid. Then the differential: on
 # the grid of test/grid.awk, node and `langc eval` give the same result for

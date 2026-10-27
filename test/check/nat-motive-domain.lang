@@ -1,0 +1,3 @@
+-- The motive of a fold over ℕ takes a ℕ, not a Bool.
+bad : (n : ℕ) → Path ℕ 0 0
+bad n = fold (λ (b : Bool) → Path ℕ 0 0) (λ (k : ℕ) (acc : Path ℕ 0 0) → acc) refl n

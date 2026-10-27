@@ -1,0 +1,3 @@
+-- natMax n n is stuck for a variable n, so refl does not prove it.
+bad : (n : ℕ) → Path ℕ (natMax n n) n
+bad n = refl

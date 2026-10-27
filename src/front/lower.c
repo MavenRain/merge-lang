@@ -685,6 +685,8 @@ static int lower_canon(Low *l, Buf *b, const Value *v, Operand *out) {
   case OP_NAT_MUL:
   case OP_NAT_EQ:
   case OP_NAT_LE:
+  case OP_NAT_MAX:
+  case OP_SUM_FIN:
   case OP_FLAG_IF:
   case OP_PROJ:
     return closure(l);
@@ -721,7 +723,7 @@ static int flag_if(Low *l, Buf *b, const Value *v, Operand *out) {
   Buf no = buf_under(b);
   Buf in = buf_under(b);
   *out = slot_get(l, res);
-  return lower(l, b, v->args[0], &c) && lower_into(l, &yes, v->args[1], res) && lower_into(l, &no, v->args[2], res) &&
+  return lower(l, b, v->args[v->inst == 0u ? 0u : 3u], &c) && lower_into(l, &yes, v->args[1], res) && lower_into(l, &no, v->args[2], res) &&
          if_flag(l, &in, c.w, &yes, &no) && guard(l, b, c.f, res, &in);
 }
 
@@ -760,7 +762,7 @@ static int two_cases(Low *l, Buf *b, const Value *v, uint32_t none_fields, Opera
   uint32_t fields[2];
   fields[0] = none_fields;
   fields[1] = 1;
-  return cases_of(l, b, v->args[2], v->args, fields, 2, out);
+  return cases_of(l, b, v->args[2u + v->inst], v->args + v->inst, fields, 2, out);
 }
 
 /* The fuel of a walk over a heap spine. */
@@ -969,16 +971,33 @@ static int carrier_bind(Low *l, Buf *b, const Value *v, Operand *out) {
          two_arms(l, b, x, &a0, &a1, res);
 }
 
-/* ACC := Z, then ACC := STEP ACC, N times. */
+/* natMax a b is a + (b - a). IR_OP_SUB stops at 0, so the sum does not
+   carry. */
+static int nat_max(Low *l, Buf *b, const Value *v, Operand *out) {
+  Operand x;
+  Operand y;
+  if (!lower(l, b, v->args[0], &x) || !lower(l, b, v->args[1], &y))
+    return 0;
+  return atoms(l, b, ex_bin(l, IR_OP_ADD, x.w, ex_bin(l, IR_OP_SUB, y.w, x.w)), ex_or(l, x.f, y.f), out);
+}
+
+/* ACC := Z, then ACC := STEP ACC, N times. With a motive (inst 1) the
+   step also takes the counter K: K := 0, ACC := STEP K ACC, K := K + 1. */
 static int fold_nat(Low *l, Buf *b, const Value *v, Operand *out) {
+  uint32_t at = v->inst;
   Operand n;
-  Operand a;
+  Operand args[2];
   Slot acc = slot_new(l);
+  Slot k = at == 1u ? slot_new(l) : acc;
   Buf in = buf_under(b);
   Buf body = buf_under(&in);
   *out = slot_get(l, acc);
-  a = slot_get(l, acc);
-  return lower(l, b, v->args[2], &n) && lower_into(l, &in, v->args[1], acc) && apply_into(l, &body, v->args[0], &a, 1, acc) &&
+  args[0] = slot_get(l, k);
+  args[1] = slot_get(l, acc);
+  return lower(l, b, v->args[2u + at], &n) && lower_into(l, &in, v->args[1u + at], acc) &&
+         (at == 0u || store(l, &in, k, operand(ex_const(l, 0), ex_const(l, 0)))) &&
+         apply_into(l, &body, v->args[at], &args[1u - at], 1u + at, acc) &&
+         (at == 0u || store(l, &body, k, operand(ex_bin(l, IR_OP_ADD, ex_local(l, k.w), ex_const(l, 1)), ex_const(l, 0)))) &&
          st_repeat(l, &in, n.w, &body) && guard(l, b, n.f, acc, &in);
 }
 
@@ -1046,6 +1065,10 @@ static int lower_stuck(Low *l, Buf *b, const Value *v, Operand *out) {
     return nat_bin(l, b, v, IR_OP_EQ, 0, out);
   case OP_NAT_LE:
     return nat_bin(l, b, v, IR_OP_LE, 0, out);
+  case OP_NAT_MAX:
+    return nat_max(l, b, v, out);
+  case OP_SUM_FIN:
+    return runtime_path(l);
   case OP_FLAG_IF:
     return flag_if(l, b, v, out);
   }

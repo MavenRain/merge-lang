@@ -7,10 +7,12 @@ state that replicas change while they are disconnected and merge when they
 reconnect. Do not use it for text co-editing, server-only databases or
 Redis scripts.
 
-## Status (S1)
+## Status (S1b)
 
-S1 is built: the port of the evolve-lang 1f87a5a surface and cubical kernel
-(`docs/STATUS.md`). `langc check --json` and `langc fmt` work. The
+S1 and S1b are built: the port of the evolve-lang 1f87a5a surface and
+cubical kernel (S1), and induction in the kernel (S1b: `natMax`, a `fold`
+over ℕ with a motive, `elim` for Bool and `Option`, and `sumFin`;
+`docs/STATUS.md`). `langc check --json` and `langc fmt` work. The
 merge-lang domain, `langc sim`, the Wasm merge engine, the JSON
 coordination report, `langc mcp`, `SKILL.md` and the graded examples are
 planned (`docs/PLAN.md` section 7 and section 9). Do not cite them as built.

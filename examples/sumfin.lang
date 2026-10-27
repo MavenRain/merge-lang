@@ -1,0 +1,9 @@
+-- sumFin n f is f (pack 0 refl) + ... + f (pack (n - 1) refl) at a numeral n.
+sumFinThree : (a : ℕ) → ℕ
+sumFinThree a = sumFin 3 (λ (i : Fin 3) → natAdd a (witness i))
+
+sumFinNone : (a : ℕ) → ℕ
+sumFinNone a = sumFin 0 (λ (i : Fin 0) → a)
+
+sumFinWitness : Path ℕ (sumFin 4 (λ (i : Fin 4) → witness i)) 6
+sumFinWitness = refl

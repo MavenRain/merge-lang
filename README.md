@@ -10,11 +10,13 @@ resource allocation rule. The host is TinyCC. The planned targets are a
 Wasm merge engine, a deterministic replica simulator (`langc sim`) and a
 JSON coordination report.
 
-## Status (S1)
+## Status (S1b)
 
 This repository is the tcc-wasm kit seed of lang-template, the design, the
-plan and slice S1: the port of the evolve-lang 1f87a5a surface and cubical
-kernel (`docs/STATUS.md`). No merge-lang domain is built yet. There is no
+plan, slice S1 (the port of the evolve-lang 1f87a5a surface and cubical
+kernel) and slice S1b (induction in the kernel: `natMax`, a `fold` over ℕ
+with a motive, `elim` for Bool and `Option`, and `sumFin`;
+`docs/STATUS.md`). No merge-lang domain is built yet. There is no
 merge engine, no replica simulator and no coordination report yet.
 `make check` passes. `docs/PLAN.md` section 9 gives the slices.
 

@@ -66,7 +66,9 @@ typedef enum {
   RULE_PARTIAL,
   RULE_SYSTEM,
   RULE_TRANSP,
-  RULE_HCOMP
+  RULE_HCOMP,
+  RULE_ELIM,
+  RULE_SUM_FIN
 } Rule;
 
 typedef struct {
@@ -123,7 +125,10 @@ static const Builtin BUILTINS[] = {
   {"natMul", 2, RULE_NAT2, OP_NAT_MUL, OP_NAT, 0},
   {"natEq", 2, RULE_NAT2, OP_NAT_EQ, OP_BOOL, 0},
   {"natLe", 2, RULE_NAT2, OP_NAT_LE, OP_BOOL, 0},
-  {"flagIf", 3, RULE_FLAG_IF, OP_FLAG_IF, OP_BOOL, 0}
+  {"natMax", 2, RULE_NAT2, OP_NAT_MAX, OP_NAT, 0},
+  {"sumFin", 2, RULE_SUM_FIN, OP_SUM_FIN, OP_NAT, 0},
+  {"flagIf", 3, RULE_FLAG_IF, OP_FLAG_IF, OP_BOOL, 0},
+  {"elim", 4, RULE_ELIM, OP_FLAG_IF, OP_BOOL, 0}
 };
 
 #define BUILTIN_COUNT ((uint32_t)(sizeof BUILTINS / sizeof BUILTINS[0]))
@@ -518,15 +523,17 @@ static const Core *rule_type1(Call *k) {
    PLAN 2.2 (Q-S2d-1 (a), Q-S2d-2 (a)). No Op: the Core is the unfolded
    Sigma, so the messages print the Sigma. The path type is under the
    binder k: k is the index 0 and n moves up one level. */
-static const Core *rule_fin(Call *k) {
-  Checker *c = k->c;
-  const Core *n = check(c, k->args[0], nat_type(c));
+static const Core *fin_core(Checker *c, const Core *n) {
   const Core *next = op3(c, OP_NAT_ADD, 0, 2, core_index(c, CORE_VAR, 0), core_leaf(c, CORE_NAT, 1u), NULL);
   const Core *bound = n == NULL ? NULL : op3(c, OP_NAT_LE, 0, 2, next, quote_value(c->m, c->level + 1u, here(c, n)), NULL);
   const Core *line = core_bind(c, CORE_LAM, "_", NULL, op3(c, OP_BOOL, 0, 0, NULL, NULL, NULL));
   const Core *path = op3(c, OP_PATHP, 0, 3, line, bound, op3(c, OP_TRUE, 0, 0, NULL, NULL, NULL));
-  k->type = val_univ(c->m, 0);
   return core_bind(c, CORE_SIGMA, "k", op3(c, OP_NAT, 0, 0, NULL, NULL, NULL), path);
+}
+
+static const Core *rule_fin(Call *k) {
+  k->type = val_univ(k->c->m, 0);
+  return fin_core(k->c, check(k->c, k->args[0], nat_type(k->c)));
 }
 
 /* Path A: the constant line `λ _ → A` (there is no OP_PATH). */
@@ -790,11 +797,76 @@ static int family_has_path(const Machine *m, uint32_t fam) {
   return 0;
 }
 
+/* M of fold M step base n over ℕ: a function from ℕ to a type. As
+   try_infer, a failure leaves no diagnostic, and the call is then a fold
+   step z n applied to more arguments. */
+static const Core *try_nat_motive(Checker *c, const Term *t, const Value **motive) {
+  Diag saved = *c->m->diag;
+  const Value *nat = nat_type(c);
+  const Value *ty = NULL;
+  const Core *body = NULL;
+  const Core *mc = NULL;
+  if (t->kind == TERM_LAM && (t->left == NULL || annotation_ok(c, t->left, nat)) && push(c, t->name, nat)) {
+    body = infer(c, t->right, &ty);
+    pop(c);
+    mc = body == NULL || ty == NULL || ty->kind != VAL_UNIV ? NULL : core_bind(c, CORE_LAM, t->name, NULL, body);
+  } else if (t->kind != TERM_LAM) {
+    mc = try_infer(c, t, &ty);
+    if (mc == NULL || ty == NULL || ty->kind != VAL_PI || !convert_at(c, c->level, ty->dom, nat))
+      mc = NULL;
+    else {
+      ty = closure_apply(c->m, ty, val_var(c->m, c->level));
+      if (ty == NULL || ty->kind != VAL_UNIV)
+        mc = NULL;
+    }
+  }
+  *motive = here(c, mc);
+  if (*motive == NULL)
+    *c->m->diag = saved;
+  return *motive == NULL ? NULL : mc;
+}
+
+/* fold M step base n over ℕ: base : M 0, step : (k : ℕ) → M k →
+   M (natAdd k 1), and the result is M n. The layout is [M, step, base, n];
+   inst 1 marks the motive. */
+static const Core *fold_nat_motive(Call *k, const Core *mc, const Value *motive, const Core *s) {
+  Checker *c = k->c;
+  Machine *m = c->m;
+  const Value *kv = val_var(m, c->level);
+  const Env *kenv = env_push(m, c->env, kv);
+  const Core *add = op3(c, OP_NAT_ADD, 0, 2, quote_value(m, c->level + 1u, kv), quote_value(m, 0u, val_nat(m, 1u)), NULL);
+  const Value *next = add == NULL || kenv == NULL ? NULL : eval_core(m, kenv, add);
+  const Value *mk = apply_value(m, motive, kv);
+  const Value *mnext = next == NULL ? NULL : apply_value(m, motive, next);
+  const Core *dk = mk == NULL ? NULL : quote_value(m, c->level + 1u, mk);
+  const Core *rk = mnext == NULL ? NULL : quote_value(m, c->level + 2u, mnext);
+  const Core *acc = dk == NULL || rk == NULL ? NULL : core_bind(c, CORE_PI, "acc", dk, rk);
+  const Core *nat = quote_value(m, c->level, nat_type(c));
+  const Value *want = acc == NULL || nat == NULL ? NULL : here(c, core_bind(c, CORE_PI, "k", nat, acc));
+  const Value *zero = apply_value(m, motive, val_nat(m, 0u));
+  const Core *cores[4];
+  cores[0] = mc;
+  cores[2] = zero == NULL ? NULL : check(c, k->args[2], zero);
+  cores[1] = cores[2] == NULL || want == NULL ? NULL : check(c, k->args[1], want);
+  cores[3] = s;
+  k->used = 4u;
+  k->type = cores[1] == NULL ? NULL : apply_value(m, motive, here(c, s));
+  return k->type == NULL ? NULL : core_op(c, OP_FOLD_NAT, 1u, 0, cores, 4u);
+}
+
 static const Core *rule_fold(Call *k) {
   Checker *c = k->c;
   const Value *st = NULL;
-  const Core *s = try_infer(c, k->args[k->argc - 1u], &st);
-  uint32_t fam = val_is(st, OP_FAMILY) ? st->inst : NO_FAMILY;
+  const Value *motive = NULL;
+  const Core *s = k->argc >= 4u ? try_infer(c, k->args[3], &st) : NULL;
+  const Core *mc = s != NULL && val_is(st, OP_NAT) ? try_nat_motive(c, k->args[0], &motive) : NULL;
+  uint32_t fam;
+  /* A motive fold takes four arguments; the rest of the spine applies
+     its result. */
+  if (mc != NULL)
+    return fold_nat_motive(k, mc, motive, s);
+  s = try_infer(c, k->args[k->argc - 1u], &st);
+  fam = val_is(st, OP_FAMILY) ? st->inst : NO_FAMILY;
   if (s != NULL && fam != NO_FAMILY && c->m->families[fam].index_count > 0u)
     return nul(FAIL(c, "DOMAIN_FAMILY", "fold over %s is not in S2: a fold over an indexed family needs a dependent eliminator (S3)", c->m->families[fam].name));
   if (s != NULL && fam != NO_FAMILY && family_has_path(c->m, fam))
@@ -893,6 +965,72 @@ static const Core *rule_flag_if(Call *k) {
   const Core *no = yes == NULL ? NULL : check(c, k->args[2], res);
   k->type = res;
   return op3(c, OP_FLAG_IF, 0, 3, b, yes, no);
+}
+
+/* The motive of elim over D: P : D → Type 1, else P : D → Type 0. The
+   one site that checks the motive. A failed first try leaves no
+   diagnostic (quorum-lang 351cbf4 elim_motive). */
+static const Core *elim_motive(Checker *c, const Term *t, const Value *d) {
+  Diag saved = *c->m->diag;
+  const Env *env = c->env;
+  const Core *p = check(c, t, val_arrow(c->m, d, val_univ(c->m, 1u)));
+  if (p != NULL)
+    return p;
+  *c->m->diag = saved;
+  c->env = env;
+  return check(c, t, val_arrow(c->m, d, val_univ(c->m, 0u)));
+}
+
+/* (a : A) → P (some a), with PV the value of the motive P. */
+static const Value *elim_some(Checker *c, const Value *pv, const Value *a) {
+  const Core *some = op3(c, OP_SOME, 0, 1, core_index(c, CORE_VAR, 0u), NULL, NULL);
+  const Core *body = some == NULL ? NULL : core_app(c, core_index(c, CORE_VAR, 1u), some);
+  const Env *env = body == NULL ? NULL : env_push(c->m, NULL, pv);
+  return env == NULL ? NULL : val_closure(c->m, VAL_PI, "a", a, env, body);
+}
+
+/* elim P yes no b (Bool) or elim P z s o (Option A): the dependent
+   eliminator (quorum-lang 351cbf4 rule_elim). Inst 1 retains the motive
+   in [P, yes, no, x] so a neutral normal form remains well typed.
+   More arguments apply to the result. */
+static const Core *rule_elim(Call *k) {
+  Checker *c = k->c;
+  Machine *m = c->m;
+  const Value *d = NULL;
+  const Core *x = infer(c, k->args[3], &d);
+  const Core *p;
+  const Value *pv;
+  const Core *yes;
+  const Core *no;
+  const Core *cores[4];
+  int flag;
+  if (x == NULL)
+    return NULL;
+  if (!val_is(d, OP_BOOL) && !val_is(d, OP_OPTION))
+    return nul(FAIL(c, "TYPE_MISMATCH", "elim needs a last argument of type Bool or Option A, found a term of type %s; a ℕ takes fold M step base n", show(c, d)));
+  flag = val_is(d, OP_BOOL);
+  p = elim_motive(c, k->args[0], d);
+  pv = here(c, p);
+  yes = pv == NULL ? NULL : check(c, k->args[1], apply_value(m, pv, tyop(c, flag ? OP_TRUE : OP_NONE, 0, NULL, NULL, NULL)));
+  no = yes == NULL ? NULL : check(c, k->args[2], flag ? apply_value(m, pv, tyop(c, OP_FALSE, 0, NULL, NULL, NULL)) : elim_some(c, pv, d->args[0]));
+  if (no == NULL)
+    return NULL;
+  k->type = apply_value(m, pv, here(c, x));
+  cores[0] = p;
+  cores[1] = yes;
+  cores[2] = no;
+  cores[3] = x;
+  return core_op(c, flag ? OP_FLAG_IF : OP_OPTION_ELIM, 1u, 0, cores, 4u);
+}
+
+/* sumFin n f : ℕ, f : Fin n → ℕ (auction-lang rule_all_fin). */
+static const Core *rule_sum_fin(Call *k) {
+  Checker *c = k->c;
+  const Core *n = check(c, k->args[0], nat_type(c));
+  const Value *fin = n == NULL ? NULL : here(c, fin_core(c, n));
+  const Core *f = fin == NULL ? NULL : check(c, k->args[1], val_arrow(c->m, fin, nat_type(c)));
+  k->type = nat_type(c);
+  return op3(c, OP_SUM_FIN, 0, 2, n, f, NULL);
 }
 
 /* ~ r, r ∧ s and r ∨ s: each argument is in I, and so is the result. */
@@ -1250,6 +1388,10 @@ static const Core *rule(Call *k) {
     return rule_nat2(k);
   case RULE_FLAG_IF:
     return rule_flag_if(k);
+  case RULE_ELIM:
+    return rule_elim(k);
+  case RULE_SUM_FIN:
+    return rule_sum_fin(k);
   case RULE_PATHP:
     return rule_pathp(k);
   }

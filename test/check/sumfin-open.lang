@@ -1,0 +1,3 @@
+-- sumFin n f is stuck for a variable n, so refl does not prove it.
+bad : (n : ℕ) → Path ℕ (sumFin n (λ (i : Fin n) → 0)) 0
+bad n = refl

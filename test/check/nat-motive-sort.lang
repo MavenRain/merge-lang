@@ -1,0 +1,3 @@
+-- The motive of a fold over ℕ gives a type, not a number.
+bad : (n : ℕ) → ℕ
+bad n = fold (λ (k : ℕ) → 0) (λ (k : ℕ) (acc : ℕ) → acc) 0 n

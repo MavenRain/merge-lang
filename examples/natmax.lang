@@ -1,0 +1,30 @@
+-- natMax and induction over ℕ: fold M step base n.
+natMaxOf : (a : ℕ) → (b : ℕ) → ℕ
+natMaxOf a b = natMax a b
+
+natMaxZero : (a : ℕ) → ℕ
+natMaxZero a = natMax a 0
+
+natMaxSucc : (a : ℕ) → (b : ℕ) → ℕ
+natMaxSucc a b = natMax (natAdd a 1) (natAdd b 1)
+
+natTri : (n : ℕ) → ℕ
+natTri n = fold (λ (k : ℕ) → ℕ) (λ (k : ℕ) (acc : ℕ) → natAdd acc k) 0 n
+
+natMaxZeroR : (a : ℕ) → Path ℕ (natMax a 0) a
+natMaxZeroR a = refl
+
+natMaxZeroL : (b : ℕ) → Path ℕ (natMax 0 b) b
+natMaxZeroL b = refl
+
+natMaxSuccSucc : (a : ℕ) → (b : ℕ) → Path ℕ (natMax (natAdd a 1) (natAdd b 1)) (natAdd (natMax a b) 1)
+natMaxSuccSucc a b = refl
+
+natMaxIdem : (n : ℕ) → Path ℕ (natMax n n) n
+natMaxIdem n = fold (λ (k : ℕ) → Path ℕ (natMax k k) k) (λ (k : ℕ) (ih : Path ℕ (natMax k k) k) → cong (λ (x : ℕ) → natAdd x 1) ih) refl n
+
+natMaxComm : (a : ℕ) → (b : ℕ) → Path ℕ (natMax a b) (natMax b a)
+natMaxComm a = fold (λ (k : ℕ) → (b : ℕ) → Path ℕ (natMax k b) (natMax b k)) (λ (k : ℕ) (ih : (b : ℕ) → Path ℕ (natMax k b) (natMax b k)) (b : ℕ) → fold (λ (j : ℕ) → Path ℕ (natMax (natAdd k 1) j) (natMax j (natAdd k 1))) (λ (j : ℕ) (h : Path ℕ (natMax (natAdd k 1) j) (natMax j (natAdd k 1))) → cong (λ (x : ℕ) → natAdd x 1) (ih j)) refl b) (λ (b : ℕ) → refl) a
+
+natMaxAssoc : (a : ℕ) → (b : ℕ) → (c : ℕ) → Path ℕ (natMax (natMax a b) c) (natMax a (natMax b c))
+natMaxAssoc a = fold (λ (k : ℕ) → (b : ℕ) → (c : ℕ) → Path ℕ (natMax (natMax k b) c) (natMax k (natMax b c))) (λ (k : ℕ) (ih : (b : ℕ) → (c : ℕ) → Path ℕ (natMax (natMax k b) c) (natMax k (natMax b c))) (b : ℕ) → fold (λ (j : ℕ) → (c : ℕ) → Path ℕ (natMax (natMax (natAdd k 1) j) c) (natMax (natAdd k 1) (natMax j c))) (λ (j : ℕ) (hj : (c : ℕ) → Path ℕ (natMax (natMax (natAdd k 1) j) c) (natMax (natAdd k 1) (natMax j c))) (c : ℕ) → fold (λ (i : ℕ) → Path ℕ (natMax (natMax (natAdd k 1) (natAdd j 1)) i) (natMax (natAdd k 1) (natMax (natAdd j 1) i))) (λ (i : ℕ) (hi : Path ℕ (natMax (natMax (natAdd k 1) (natAdd j 1)) i) (natMax (natAdd k 1) (natMax (natAdd j 1) i))) → cong (λ (x : ℕ) → natAdd x 1) (ih j i)) refl c) (λ (c : ℕ) → refl) b) (λ (b : ℕ) (c : ℕ) → refl) a

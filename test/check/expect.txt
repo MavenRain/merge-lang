@@ -52,3 +52,8 @@ codata-path-field.lang REFUSE_CELL the field loop must be the observation A
 codata-label-universe.lang REFUSE_CELL the label type of pick is in Type 1, above Type 0 of A
 codata-two-obs.lang REFUSE_CELL it has 2 observations
 hit-fold.lang DOMAIN_FAMILY
+natmax-neutral.lang TYPE_REFL
+nat-motive-domain.lang TYPE_MISMATCH
+nat-motive-sort.lang TYPE_MISMATCH the binder type ℕ differs from the expected type
+elim-motive-domain.lang TYPE_MISMATCH
+sumfin-open.lang TYPE_REFL

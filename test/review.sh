@@ -72,4 +72,53 @@ case "$(cat "$tmp/err")" in
   'langc: EVAL_PRINT:'*) ;;
   *) exit 1 ;;
 esac
+# A motive can be a named family or a family parameter, at any universe.
+cat >"$tmp/motive.lang" <<'EOF'
+M : ℕ → Type 0
+M k = ℕ
+
+value : ℕ → ℕ
+value n = fold M (λ (k : ℕ) (acc : ℕ) → natAdd acc k) 0 n
+
+induct : (P : ℕ → Type 0) → ((k : ℕ) → P k → P (natAdd k 1)) → P 0 → (n : ℕ) → P n
+induct P step base n = fold P step base n
+
+types : ℕ → Type 1
+types k = Type 0
+
+atType : ℕ → Type 0
+atType n = fold types (λ (k : ℕ) (a : Type 0) → a) ℕ n
+EOF
+test "$(build/langc eval "$tmp/motive.lang" value 5)" = 10
+build/langc check "$tmp/motive.lang" >"$tmp/got"
+
+# Neutral dependent eliminators must retain their motive when printed.
+cat >"$tmp/elim.lang" <<'EOF'
+boolProof : (b : Bool) → Path Bool b b
+boolProof b = elim (λ (x : Bool) → Path Bool x x) refl refl b
+
+optionProof : (o : Option ℕ) → Path (Option ℕ) o o
+optionProof o = elim (λ (x : Option ℕ) → Path (Option ℕ) x x) refl (λ (a : ℕ) → refl) o
+
+boolCompute : (b : Bool) → Path ℕ (elim (λ (x : Bool) → ℕ) 4 9 b) (flagIf b 4 9)
+boolCompute b = refl
+
+optionCompute : (o : Option ℕ) → Path ℕ (elim (λ (x : Option ℕ) → ℕ) 7 (λ (a : ℕ) → a) o) (option 7 (λ (a : ℕ) → a) o)
+optionCompute o = refl
+
+underBinder : Unit → (b : Bool) → Path Bool b b
+underBinder elim b = boolProof b
+EOF
+normal=$(build/langc eval "$tmp/elim.lang" boolProof)
+printf 'value : (b : Bool) → Path Bool b b\nvalue = %s\n' "$normal" >"$tmp/roundtrip.lang"
+build/langc check "$tmp/roundtrip.lang" >"$tmp/got"
+test "$(build/langc eval "$tmp/roundtrip.lang" value)" = "$normal"
+normal=$(build/langc eval "$tmp/elim.lang" optionProof)
+printf 'value : (o : Option ℕ) → Path (Option ℕ) o o\nvalue = %s\n' "$normal" >"$tmp/roundtrip.lang"
+build/langc check "$tmp/roundtrip.lang" >"$tmp/got"
+test "$(build/langc eval "$tmp/roundtrip.lang" value)" = "$normal"
+normal=$(build/langc eval "$tmp/elim.lang" underBinder)
+printf 'value : Unit → (b : Bool) → Path Bool b b\nvalue = %s\n' "$normal" >"$tmp/roundtrip.lang"
+build/langc check "$tmp/roundtrip.lang" >"$tmp/got"
+test "$(build/langc eval "$tmp/roundtrip.lang" value)" = "$normal"
 echo 'review regressions: passed'

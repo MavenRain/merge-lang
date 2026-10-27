@@ -64,8 +64,10 @@ Core names (`BUILTINS` in `src/front/check.c`): types `ℕ` (core name
 `Partial` and systems `[ φ ↦ u , ... ]`, the Kan operations `transp
 hcomp`, values `unit true false none some option pack
 witness payload pure map bind fold refl symm trans transport cong`, Nat
-operations `natAdd natSub natMul natEq natLe`, and the Bool eliminator
-`flagIf b yes no`. `Type 0 : Type 1` is the universe chain.
+operations `natAdd natSub natMul natEq natLe natMax`, the sum `sumFin n f`,
+the Bool eliminator `flagIf b yes no`, and the dependent eliminator
+`elim P yes no b` (Bool) or `elim P z s o` (Option). `Type 0 : Type 1` is
+the universe chain.
 `(x : A) × B` is a dependent pair and `A × B` is a pair. `pack a b` makes
 a pair, and `witness` and `payload` give its parts. `formers/tcc-wasm.md`
 gives the status of each former.
@@ -119,7 +121,7 @@ An entry is a top-level program definition whose declared type is `ℕ`,
 parameter and the result is an `i64`. Other definitions are not exported.
 
 `ℕ` is an unsigned 64-bit integer. `natAdd` and `natMul` trap on an
-overflow past 2^64 - 1. `natSub` stops at 0. `Bool` is 0 or 1.
+overflow past 2^64 - 1. `natSub` stops at 0. `natMax` never traps. `Bool` is 0 or 1.
 
 ## Compilation
 
@@ -137,7 +139,9 @@ programs with a HOST-LIMIT code (see `docs/host/CAPABILITY.md`):
 
 The lowering also refuses `REFUSE_RUNTIME_PATH` (not a HOST-LIMIT code):
 an interval point or a path value must exist at run time, for example in
-the state of a fold. A path is a proof, so it has no run-time form.
+the state of a fold. A path is a proof, so it has no run-time form. A
+`sumFin n f` at a variable `n` is refused the same way: its loop needs
+`pack k refl` at run time (`test/ir/sumfin-open.lang`).
 
 ## Lazy traps
 

@@ -19,6 +19,7 @@ static const char *const OP_NAMES[] = {
   [OP_FOLD_FAMILY] = "fold", [OP_WITNESS] = "witness", [OP_PAYLOAD] = "payload",
   [OP_NAT_ADD] = "natAdd", [OP_NAT_SUB] = "natSub",
   [OP_NAT_MUL] = "natMul", [OP_NAT_EQ] = "natEq", [OP_NAT_LE] = "natLe",
+  [OP_NAT_MAX] = "natMax", [OP_SUM_FIN] = "sumFin",
   [OP_FLAG_IF] = "flagIf", [OP_PROJ] = "?", [OP_SSET] = "SSet", [OP_I] = "I",
   [OP_I0] = "i0", [OP_I1] = "i1", [OP_PATHP] = "PathP", [OP_PLAM] = "?",
   [OP_PAPP] = "?", [OP_INEG] = "~", [OP_IMIN] = "∧", [OP_IMAX] = "∨",
@@ -35,10 +36,10 @@ static const unsigned char OP_ARITY[] = {
   [OP_FAMILY] = VARIES, [OP_UNIT_VAL] = 0, [OP_TRUE] = 0,
   [OP_FALSE] = 0, [OP_NONE] = 0, [OP_SOME] = 1,
   [OP_PACK] = 2, [OP_CTOR] = VARIES,
-  [OP_OPTION_ELIM] = 3, [OP_PURE] = 1, [OP_MAP] = 2, [OP_BIND] = 2,
-  [OP_FOLD_NAT] = 3, [OP_FOLD_FAMILY] = VARIES, [OP_WITNESS] = 1,
+  [OP_OPTION_ELIM] = VARIES, [OP_PURE] = 1, [OP_MAP] = 2, [OP_BIND] = 2,
+  [OP_FOLD_NAT] = VARIES, [OP_FOLD_FAMILY] = VARIES, [OP_WITNESS] = 1,
   [OP_PAYLOAD] = 1, [OP_NAT_ADD] = 2, [OP_NAT_SUB] = 2, [OP_NAT_MUL] = 2,
-  [OP_NAT_EQ] = 2, [OP_NAT_LE] = 2, [OP_FLAG_IF] = 3, [OP_PROJ] = 1,
+  [OP_NAT_EQ] = 2, [OP_NAT_LE] = 2, [OP_NAT_MAX] = 2, [OP_SUM_FIN] = 2, [OP_FLAG_IF] = VARIES, [OP_PROJ] = 1,
   [OP_SSET] = 0, [OP_I] = 0, [OP_I0] = 0, [OP_I1] = 0, [OP_PATHP] = 3,
   [OP_PLAM] = 1, [OP_PAPP] = 4, [OP_INEG] = 1, [OP_IMIN] = 2, [OP_IMAX] = 2,
   [OP_PARTIAL] = 2, [OP_SYSTEM] = 3, [OP_SYSNIL] = 0, [OP_FROMPARTIAL] = 1,
@@ -311,14 +312,15 @@ static const Value *reduce_part(Machine *m, Op op, const Value *const *a, uint32
   return a[0]->args[index];
 }
 
-static const Value *reduce_option(Machine *m, const Value *const *a, uint32_t n) {
+static const Value *reduce_option(Machine *m, uint32_t inst, const Value *const *a, uint32_t n) {
+  const Value *x = a[2u + inst];
   const Value *out;
-  if (blocked(m, a[2], OP_OPTION_ELIM, 0, 0, a, n, &out))
+  if (blocked(m, x, OP_OPTION_ELIM, inst, 0, a, n, &out))
     return out;
-  if (val_is(a[2], OP_NONE))
-    return a[0];
-  if (val_is(a[2], OP_SOME))
-    return apply_value(m, a[1], a[2]->args[0]);
+  if (val_is(x, OP_NONE))
+    return a[inst];
+  if (val_is(x, OP_SOME))
+    return apply_value(m, a[1u + inst], x->args[0]);
   return internal(m, "an option of a value that is not an Option");
 }
 
@@ -354,17 +356,25 @@ static const Value *reduce_bind(Machine *m, uint32_t inst, const Value *const *a
   return internal(m, "an unknown carrier");
 }
 
-/* fold step z n: step applied n times to z. */
-static const Value *reduce_fold_nat(Machine *m, const Value *const *a, uint32_t n) {
-  const Value *acc = a[1];
+/* STEP K ACC, the step of a fold with a motive. */
+static const Value *step_at(Machine *m, const Value *step, const Value *k, const Value *acc) {
+  const Value *f = k == NULL || acc == NULL ? NULL : apply_value(m, step, k);
+  return f == NULL ? NULL : apply_value(m, f, acc);
+}
+
+/* fold step z n: step applied n times to z. With a motive (INST 1),
+   fold M step z n gives the step the counter k first. */
+static const Value *reduce_fold_nat(Machine *m, uint32_t inst, const Value *const *a, uint32_t n) {
+  const Value *x = a[2u + inst];
+  const Value *acc = a[1u + inst];
   const Value *out;
   uint64_t k;
-  if (blocked(m, a[2], OP_FOLD_NAT, 0, 0, a, n, &out))
+  if (blocked(m, x, OP_FOLD_NAT, inst, 0, a, n, &out))
     return out;
-  if (a[2]->kind != VAL_NAT)
+  if (x->kind != VAL_NAT)
     return internal(m, "a fold of a value that is not a Nat");
-  for (k = 0; k < a[2]->nat && acc != NULL; k++)
-    acc = spend(m, 1) ? apply_value(m, a[0], acc) : NULL;
+  for (k = 0; k < x->nat && acc != NULL; k++)
+    acc = !spend(m, 1) ? NULL : inst == 0u ? apply_value(m, a[0], acc) : step_at(m, a[1], val_nat(m, k), acc);
   return acc;
 }
 
@@ -1128,6 +1138,8 @@ static const Value *transp_ctor(Machine *m, const Value *const *a, uint32_t n) {
   case OP_NAT_MUL:
   case OP_NAT_EQ:
   case OP_NAT_LE:
+  case OP_NAT_MAX:
+  case OP_SUM_FIN:
   case OP_FLAG_IF:
   case OP_PROJ:
   case OP_SSET:
@@ -1271,6 +1283,8 @@ static const Value *transp_op(Machine *m, const Value *h, const Value *const *a,
   case OP_NAT_MUL:
   case OP_NAT_EQ:
   case OP_NAT_LE:
+  case OP_NAT_MAX:
+  case OP_SUM_FIN:
   case OP_FLAG_IF:
   case OP_PROJ:
   case OP_SSET:
@@ -1442,6 +1456,8 @@ static const Value *hcomp_op(Machine *m, const Value *const *a, uint32_t n) {
   case OP_NAT_MUL:
   case OP_NAT_EQ:
   case OP_NAT_LE:
+  case OP_NAT_MAX:
+  case OP_SUM_FIN:
   case OP_FLAG_IF:
   case OP_PROJ:
   case OP_SSET:
@@ -1607,15 +1623,74 @@ static const Value *nat_test(Machine *m, Op op, const Value *const *a, uint32_t 
   return flag(m, op == OP_NAT_EQ ? x == y : x <= y);
 }
 
-static const Value *reduce_flag_if(Machine *m, const Value *const *a, uint32_t n) {
+static const Value *reduce_flag_if(Machine *m, uint32_t inst, const Value *const *a, uint32_t n) {
+  const Value *x = a[inst == 0u ? 0u : 3u];
   const Value *out;
-  if (blocked(m, a[0], OP_FLAG_IF, 0, 0, a, n, &out))
+  if (blocked(m, x, OP_FLAG_IF, inst, 0, a, n, &out))
     return out;
-  if (val_is(a[0], OP_TRUE))
+  if (val_is(x, OP_TRUE))
     return a[1];
-  if (val_is(a[0], OP_FALSE))
+  if (val_is(x, OP_FALSE))
     return a[2];
   return internal(m, "a flagIf of a value that is not a Bool");
+}
+
+static int nat_zero(const Value *v) {
+  return v->kind == VAL_NAT && v->nat == 0u;
+}
+
+/* 1 when V is the neutral successor natAdd x 1. */
+static int nat_succ(const Value *v) {
+  return v->kind == VAL_STUCK && v->op == OP_NAT_ADD && v->argc == 2u && v->args[1]->kind == VAL_NAT && v->args[1]->nat == 1u;
+}
+
+/* natMax a b. With a neutral argument, natMax a 0 is a, natMax 0 b is b
+   and natMax (natAdd a 1) (natAdd b 1) is natAdd (natMax a b) 1. Two
+   numbers give the larger. */
+static const Value *nat_max(Machine *m, const Value *const *a, uint32_t n) {
+  const Value *pair[2];
+  const Value *out;
+  uint64_t x = 0;
+  uint64_t y = 0;
+  if (nat_zero(a[1]) && scrut_of(a[0]) == SCRUT_NEUTRAL)
+    return a[0];
+  if (nat_zero(a[0]) && scrut_of(a[1]) == SCRUT_NEUTRAL)
+    return a[1];
+  if (nat_succ(a[0]) && nat_succ(a[1])) {
+    pair[0] = a[0]->args[0];
+    pair[1] = a[1]->args[0];
+    pair[0] = nat_max(m, pair, 2u);
+    pair[1] = a[0]->args[1];
+    return pair[0] == NULL ? NULL : nat_add(m, pair, 2u);
+  }
+  if (!nat_args(m, OP_NAT_MAX, a, n, &x, &y, &out))
+    return out;
+  return val_nat(m, x < y ? y : x);
+}
+
+/* sumFin n f = f (pack 0 refl) + ... + f (pack (n - 1) refl) at a
+   numeral n (auction-lang reduce_sum_rat), natAdd from the left;
+   sumFin 0 f = 0. A neutral n gives the stuck sumFin. The bound is the
+   one test k < n. */
+static const Value *reduce_sum_fin(Machine *m, const Value *const *a, uint32_t n) {
+  const Core *fin = tmpl_op(m, OP_PACK, 0, 2u, tmpl_var(m, 0), tmpl_op(m, OP_PLAM, 0, 1u, tmpl_lam(m, "i", tmpl_op(m, OP_TRUE, 0, 0u, NULL, NULL, NULL)), NULL, NULL), NULL);
+  const Value *pair[2];
+  const Value *kv;
+  const Value *x;
+  const Value *out;
+  uint64_t k;
+  if (blocked(m, a[0], OP_SUM_FIN, 0, 0, a, n, &out))
+    return out;
+  if (a[0]->kind != VAL_NAT)
+    return internal(m, "a sumFin with a size that is not a Nat");
+  pair[0] = val_nat(m, 0u);
+  for (k = 0; k < a[0]->nat && pair[0] != NULL; k++) {
+    kv = val_nat(m, k);
+    x = spend(m, 1) ? tmpl_run(m, fin, &kv, 1u) : NULL;
+    pair[1] = x == NULL ? NULL : apply_value(m, a[1], x);
+    pair[0] = pair[1] == NULL ? NULL : k == 0u ? pair[1] : nat_add(m, pair, 2u);
+  }
+  return pair[0];
 }
 
 static const Value *reduce_proj(Machine *m, uint32_t inst, uint32_t field, const Value *const *a, uint32_t n) {
@@ -1639,6 +1714,8 @@ static uint32_t varied_arity(const Machine *m, Op op, uint32_t inst) {
     return m->families[c->family].param_count + c->field_count + c->depth;
   if (op == OP_FAMILY && f != NULL)
     return f->param_count + f->index_count;
+  if ((op == OP_FOLD_NAT || op == OP_FLAG_IF || op == OP_OPTION_ELIM) && inst < 2u)
+    return 3u + inst;
   if (op == OP_FOLD_FAMILY && f != NULL)
     return f->ctor_count + 1u;
   return UINT32_MAX;
@@ -1721,7 +1798,7 @@ static const Value *reduce_op(Machine *m, Op op, uint32_t inst, uint32_t field, 
   case OP_PAYLOAD:
     return reduce_part(m, op, a, n, OP_PACK, 1);
   case OP_OPTION_ELIM:
-    return reduce_option(m, a, n);
+    return reduce_option(m, inst, a, n);
   case OP_PURE:
     return reduce_pure(m, inst, a[0]);
   case OP_MAP:
@@ -1729,7 +1806,7 @@ static const Value *reduce_op(Machine *m, Op op, uint32_t inst, uint32_t field, 
   case OP_BIND:
     return reduce_bind(m, inst, a, n);
   case OP_FOLD_NAT:
-    return reduce_fold_nat(m, a, n);
+    return reduce_fold_nat(m, inst, a, n);
   case OP_FOLD_FAMILY:
     return fold_family(m, inst, a, n - 1u, a[n - 1u]);
   case OP_NAT_ADD:
@@ -1741,8 +1818,12 @@ static const Value *reduce_op(Machine *m, Op op, uint32_t inst, uint32_t field, 
   case OP_NAT_EQ:
   case OP_NAT_LE:
     return nat_test(m, op, a, n);
+  case OP_NAT_MAX:
+    return nat_max(m, a, n);
+  case OP_SUM_FIN:
+    return reduce_sum_fin(m, a, n);
   case OP_FLAG_IF:
-    return reduce_flag_if(m, a, n);
+    return reduce_flag_if(m, inst, a, n);
   case OP_PROJ:
     return reduce_proj(m, inst, field, a, n);
   }
@@ -1856,6 +1937,21 @@ static int conv_loop(Machine *m, uint32_t level, const Value *a, const Value *b)
         return 0;
       a = a->args[1];
       b = b->args[1];
+      continue;
+    }
+    if (a->kind == VAL_STUCK && b->kind == VAL_STUCK && a->op == b->op &&
+        (a->op == OP_FLAG_IF || a->op == OP_OPTION_ELIM)) {
+      /* The motive is retained for printing, not for conversion. Keep
+         the computational equality with flagIf and option. */
+      uint32_t ay = a->op == OP_FLAG_IF ? 1u : a->inst;
+      uint32_t by = b->op == OP_FLAG_IF ? 1u : b->inst;
+      uint32_t ax = a->op == OP_FLAG_IF ? (a->inst == 0u ? 0u : 3u) : 2u + a->inst;
+      uint32_t bx = b->op == OP_FLAG_IF ? (b->inst == 0u ? 0u : 3u) : 2u + b->inst;
+      if (!conv_values(m, level, a->args[ay], b->args[by]) ||
+          !conv_values(m, level, a->args[ay + 1u], b->args[by + 1u]))
+        return 0;
+      a = a->args[ax];
+      b = b->args[bx];
       continue;
     }
     if (a->kind != b->kind)
@@ -2022,6 +2118,8 @@ const Core *quote_value(Machine *m, uint32_t level, const Value *v) {
 }
 
 const char *op_name(const Machine *m, Op op, uint32_t inst, uint32_t field) {
+  if ((op == OP_FLAG_IF || op == OP_OPTION_ELIM) && inst == 1u)
+    return "elim";
   if (op == OP_FAMILY)
     return inst < m->family_count ? m->families[inst].name : "?";
   if (op == OP_CTOR || op == OP_PCTOR)
@@ -2089,6 +2187,8 @@ static int name_used(const Printer *p, const char *name) {
   for (i = 0; i < sizeof OP_NAMES / sizeof OP_NAMES[0]; i++)
     if (strcmp(name, OP_NAMES[i]) == 0)
       return 1;
+  if (strcmp(name, "elim") == 0)
+    return 1; /* the motive-tagged Bool and Option operations */
   if (strcmp(name, "Nat") == 0)
     return 1; /* the lexer reads `ℕ` as Nat (tok_core_text) */
   for (i = 0; i < p->m->def_count; i++)

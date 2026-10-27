@@ -26,7 +26,8 @@ on 2026-10-08 on AArch64 Darwin.
 
 - `Nat` is an unsigned 64-bit integer. The lexer refuses a literal larger
   than 18446744073709551615 (`test/parse/nat-range.lang`).
-- `natAdd` and `natMul` trap on overflow. `natSub` stops at 0. A trap is
+- `natAdd` and `natMul` trap on overflow. `natSub` stops at 0. `natMax` never traps.
+  `sumFin n f` traps when one of its `natAdd` steps overflows. A trap is
   lazy: it stops a computation only when the computation needs it.
   `README.md` gives the rule and the reason.
 - There is no text type. The lexer refuses `"` (`test/parse/string.lang`).

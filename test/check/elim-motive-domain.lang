@@ -1,0 +1,3 @@
+-- The motive of elim over Bool takes a Bool, not a ℕ.
+bad : (b : Bool) → Path Bool b b
+bad b = elim (λ (n : ℕ) → Path Bool b b) refl refl b

@@ -10,11 +10,14 @@ resource allocation rule. The host is TinyCC. The v1 targets are a Wasm
 merge engine, a deterministic replica simulator (`langc sim`) and a JSON
 coordination report.
 
-S1 status: the tcc-wasm kit seed of lang-template, `design/DESIGN.md`, this
-plan, `README.md`, `AGENTS.md`, `docs/COMPARISON.md` and slice S1 exist. S1
-is the port of evolve-lang 1f87a5a (section 8): the surface, `langc fmt`,
-`W_NONCANON`, `check --json` and the cubical kernel. No merge-lang domain is
-built yet (O4). O12 is the first unit of S2. Section 9 gives the slices.
+S1b status: the tcc-wasm kit seed of lang-template, `design/DESIGN.md`, this
+plan, `README.md`, `AGENTS.md`, `docs/COMPARISON.md` and slices S1 and S1b
+exist. S1 is the port of evolve-lang 1f87a5a (section 8): the surface,
+`langc fmt`, `W_NONCANON`, `check --json` and the cubical kernel. S1b adds
+induction to the kernel (O15): the builtin `natMax` with its rules on open
+arguments, a `fold` over ℕ with a motive, the dependent `elim` for Bool and
+`Option`, and the builtin `sumFin`. No merge-lang domain is built yet (O4).
+The O12 replan is DONE (S2 unit 1, 2026-10-27). Section 9 gives the slices.
 
 merge-lang does not prove facts about the network. It assumes that each
 replica state that is sent arrives some time, and it does not model loss,
@@ -70,7 +73,8 @@ Readings RULED by the USER on 2026-10-27 (section 11 has the marks):
 - Formers admitted by the USER beyond the recommendation: `FMSet` in
   generator form (Q14 (b)), the free CM of operations `Ops A` (Q15 (b)),
   and a `Replica` cofamily, a Moore machine (Q16 (b)). Section 2.2 marks
-  them. Their design and slices are O12.
+  them. The O12 replan (Q22 to Q25 (a)) puts ℤ in S2b, `FMSet` in S2c,
+  `Ops A` in S3b and `Replica` in S4.
 
 ## 2. The reading of R1
 
@@ -127,13 +131,13 @@ Classification rules of the precedent, kept:
 | `Read n` | the read of an `MVReg`: `empty`, `one x`, `conflict s` with a proof that `s` has 2 or more members | base, indexed (R2) | no type parameter (Q11) |
 | `Op` of a program | the operations of a declaration, with their arguments | base (R2) | a closed sum that the declaration generates |
 | `Option A` | the result of `apply`: `none` when the local precondition fails | CM | one 0-cell `none`, generator `some` |
-| op sequences | the changes of one replica in a schedule | ambient | `Fin m → Op`, a vector; `Ops A` is also admitted (Q15 (b), O12) |
+| op sequences | the changes of one replica in a schedule | ambient | `Fin m → Op`, a vector; an `op` body can be an `Ops` script (S3b, Q24 (a)) |
 | schedules, traces | none in the guest | not admitted | the simulator enumerates them in C (Q16) |
 | causal context | the `MVReg` context `Fin r → ℕ` | ambient | a version vector; no new former |
-| `FMSet A` | to be set by O12 | CM, ADMITTED (Q14 (b)) | generator form with unit, associativity, commutativity and set truncation cells (quorum-lang PLAN 2) |
+| `FMSet A` | the multiset of states that a replica merged; `mergeAll : FMSet S → S` states L5 (S2c, Q23 (a)); not a state part: its union is not idempotent | CM, ADMITTED (Q14 (b)) | generator form with unit, associativity, commutativity and set truncation cells (quorum-lang PLAN 2); the truncation cell has dimension 2 (S2c kernel port) |
 | `Pfin⁺ A`, the free join-semilattice | none in v1 | not admitted | the reading of `Read` as the free join-semilattice needs set truncation, a 2-cell (Q11) |
-| free CM of operations `Ops A` (mandate-lang 4.6) | scripts whose later operations read earlier responses; use set by O12 | CM, ADMITTED (Q15 (b)) | the mandate-lang 4.6 form |
-| `Replica A` cofamily, a Moore machine (mandate-lang 4.7) | convergence as a statement about guest replicas; use set by O12 | CC, ADMITTED (Q16 (b)) | the mandate-lang 4.7 `Machine` form |
+| free CM of operations `Ops A` (mandate-lang 4.6) | `op` bodies: scripts whose later part operations read earlier part reads (S3b, Q24 (a)) | CM, ADMITTED (Q15 (b)) | the mandate-lang 4.6 `IO` form as built in its S6 s2: one constructor per part read, each with a field `E → Ops A`, `E` closed; the S1 CM test refuses that field, S3b changes it |
+| `Replica A` cofamily, a Moore machine (mandate-lang 4.7) | L5r: convergence as a statement about guest replicas (S4, Q25 (a)) | CC, ADMITTED (Q16 (b)) | the mandate-lang 4.7 `Machine` form: `eps : A`, `step : Event → Replica A`, `Event` closed; the S1 codata test admits it |
 | `Trunc A` | none in v1 | not admitted | the laws are Pi types into `Path` of sets; no law needs proof irrelevance |
 | `Stream A` | none | not admitted | schedules are finite |
 | cons `List A`, cons `FMSet A` | none | REFUSED | `REFUSE_CELL`: `A` occurs outside the generator |
@@ -176,16 +180,20 @@ numbered for the admission table:
 | Name | Kind | Serves | Slice |
 |---|---|---|---|
 | `Bool`, `true`, `false`, `and`, `or`, `not` | base type, ops | D2 (an invariant is a predicate), D6 | S1 (kernel) |
-| `ℕ`, `natAdd`, `natLe`, `natMax`, `natEq` | base type, ops | D5 (stock, decrements, rights), D4 (version counters) | S1 (kernel), S2 (`natMax`) |
+| `ℕ`, `natAdd`, `natLe`, `natMax`, `natEq` | base type, ops | D5 (stock, decrements, rights), D4 (version counters) | S1 (kernel), S1b (`natMax` and its rules on open arguments, Q26 (a), Q27 (a)) |
 | `Fin n`, `finEq` | base type, op | D3, D4 (atom names), D8 (replica names) | S1 (kernel) |
-| `sumFin : (Fin n → ℕ) → ℕ` | op | D5 (total decrements, total rights) | S2 |
+| `sumFin : (n : ℕ) → (Fin n → ℕ) → ℕ` | op (builtin: it unrolls at a numeral `n`, it is stuck at an open `n`; Q28 (a)) | D5 (total decrements, total rights) | S1b |
 | `atoms NAME := a ∣ b ∣ ...` | form | D3 (tags), D4 (owners): a finite domain of opaque names | S3 |
 | `replicas A B ...` | form | D8 ("two disconnected replicas"); `Replica = Fin r` | S3 |
 | `GSet n`, `add`, `has`, `merge` | base type, ops | D3: two concurrent `add` both survive the join | S2 |
 | `MVReg n r`, `write`, `read`, `merge` | base type, ops | D4: concurrent writes keep each value | S2 |
 | `Read n`, `empty`, `one`, `conflict` | base type, constructors | D4: the conflict is a value of the read type, so a program cannot take a winner in silence | S2 |
-| `Counter r` (an initial stock and a decrement vector), `dec`, `stock`, `nonneg` | base type, ops | D5: an offline decrement; "stock must never become negative" | S2 |
-| `Escrow r` (initial split, rights matrix, decrement vector), `dec`, `transfer`, `rights` | base type, ops | D5: "a resource allocation rule" (bounded counter, Balegas et al.) | S2 |
+| `Counter r` (an initial stock, an increment vector and a decrement vector), `dec`, `restock`, `nonneg` | base type, ops | D5: an offline decrement; "stock must never become negative"; `restock` (Q12 (b)) | S2 |
+| `Escrow r` (initial split, rights matrix, decrement vector), `dec`, `transfer`, `restock`, `rights` | base type, ops | D5: "a resource allocation rule" (bounded counter, Balegas et al.); `restock` is `R i i` (Q12 (b)) | S2 |
+| `ℤ`, `pos`, `negsuc`, `natDiff`, `intLe`; the `stock` read of `Counter` and `Escrow` | base type, ops | D5: the stock that "must never become negative" is a signed value (Q13 (b), Q22 (a)) | S2b |
+| `FMSet A` (`eta`, `[]`, `m`, `munit`, `massoc`, `mcomm`, `trunc`), `mergeAll` | CM, op | D8: replicas that reconnect converge (L5, Q14 (b), Q23 (a)) | S2c |
+| `Ops A` (`opPure` and one constructor per part read) | CM | D2 "permitted operations": an `op` body as a script (Q15 (b), Q24 (a)) | S3b |
+| `Replica A` (`eps`, `step`), `Event` (`local`, `recv`) | CC, base type | D8 "two disconnected replicas" as guest values (L5r, Q16 (b), Q25 (a)) | S4 |
 | `Option`, `none`, `some` | CM | D2 ("permitted operations"): `apply` gives `none` when the local precondition fails | S1 (kernel) |
 | `replicated`, `state`, `op`, `invariant`, `allocate` | forms | D2 (state, operations, merge, invariants), D5 (`allocate`) | S3 |
 | merge laws L1 to L4 | guest terms | D6 "express merge laws" | S2 |
@@ -212,7 +220,8 @@ numbered for the admission table:
 
 The S0 plan refused increments (`restock`), `ℤ`, `FMSet`, the free CM of
 operations and a replica cofamily. The USER ruled Q12 to Q16 (b) on
-2026-10-27: all five are admitted. O12 gives their design and slices.
+2026-10-27: all five are admitted. The O12 replan puts them in 3.2 and
+section 9.
 
 ## 4. The merge model
 
@@ -227,7 +236,9 @@ operations and a replica cofamily. The USER ruled Q12 to Q16 (b) on
 - An operation `o` with arguments `x` runs at a replica `i`:
   `apply : Replica → Op → State → Option State`. It gives `none` when the
   local precondition fails at `i`. An operation is a composition of part
-  operations, so it is inflationary (L4).
+  operations, or an `Ops` script of part reads and part operations that
+  runs at one replica with no merge between its steps (S3b). So it is
+  inflationary (L4).
 - An invariant is a predicate `I : State → Bool`. A program can declare
   several. `inv` is their conjunction.
 - The initial state is `⊥` with the declared initial values (the initial
@@ -239,12 +250,14 @@ operations and a replica cofamily. The USER ruled Q12 to Q16 (b) on
 |---|---|---|---|---|
 | `GSet n` | `Fin n → Bool` | `add x`: set bit `x` | pointwise `or` | `has x` |
 | `MVReg n r` | slots `Fin r → Option (Fin n × ℕ)`, context `Fin r → ℕ` | `write x`: `c := ctx i + 1`; clear each slot; slot `i := some (x, c)`; `ctx i := c` | each slot keeps the entry with the larger counter if the other context does not cover it; context = pointwise `natMax` | `read : MVReg n r → Read n` |
-| `Counter r` | initial stock `s0 : ℕ` (declared), decrements `Fin r → ℕ` | `dec k`: precondition `local stock ≥ k`; `d i += k` | decrements by pointwise `natMax` | `stock = s0 - sumFin d` (printed signed); `nonneg = natLe (sumFin d) s0` |
-| `Escrow r` | initial split `Fin r → ℕ` (declared), rights matrix `R : Fin r → Fin r → ℕ`, decrements `U : Fin r → ℕ` | `dec k`: precondition `rights i ≥ k`; `U i += k`. `transfer j k`: precondition `rights i ≥ k`; `R i j += k` | `R` and `U` by pointwise `natMax` | `rights i = split i + Σ_j R j i - Σ_j R i j - U i` (compared in ℕ, no subtraction); `stock`, `nonneg` as `Counter` |
+| `Counter r` | initial stock `s0 : ℕ` (declared), increments `p : Fin r → ℕ`, decrements `d : Fin r → ℕ` | `dec k`: precondition `local stock ≥ k`; `d i += k`. `restock k`: no precondition; `p i += k` | `p` and `d` by pointwise `natMax` | `nonneg = natLe (sumFin d) (s0 + sumFin p)` (S2); `stock = natDiff (s0 + sumFin p) (sumFin d) : ℤ` (S2b) |
+| `Escrow r` | initial split `Fin r → ℕ` (declared), rights matrix `R : Fin r → Fin r → ℕ`, decrements `U : Fin r → ℕ` | `dec k`: precondition `rights i ≥ k`; `U i += k`. `transfer j k` (`j ≠ i`): precondition `rights i ≥ k`; `R i j += k`. `restock k`: no precondition; `R i i += k` (Balegas `R[i][i]`) | `R` and `U` by pointwise `natMax` | `rights i = split i + R i i + Σ_{j ≠ i} R j i - Σ_{j ≠ i} R i j - U i` (compared in ℕ, no subtraction; the diagonal counts once, O14); `stock = s0 + Σ_i R i i - Σ_i U i`; `nonneg`, `stock` as `Counter` |
 
 Single writer: replica `i` writes only its own slot and counter of
 `MVReg`, its own entry of a decrement vector, and its own row of `R`. So
-pointwise `natMax` is a join and it loses no write.
+pointwise `natMax` is a join and it loses no write. `restock` writes only
+the entry of `i` too. An `Ops` script (S3b) and a guest `Replica` (S4) use
+these parts and add no part.
 
 ### 4.3 Judgements
 
@@ -298,7 +311,8 @@ pointwise `natMax` is a join and it loses no write.
   is false. With `allocate stock by escrow (A ↦ 1, B ↦ 0)`, B's `sell 1`
   fails locally (rights 0 < 1). The coordination it needs is `transfer B
   1` at A. Every schedule keeps `nonneg stock` (bounded), and L7 proves
-  it (proved).
+  it (proved). `restock ∥ sell` and `restock ∥ restock` are independent
+  for `nonneg stock`: a restock only adds stock (Q12 (b)).
 
 Surface sketch (Q7 fixes the surface; S3 fixes the grammar):
 
@@ -360,7 +374,9 @@ Engine ABI (Q4 (a)):
 - `encode(state) -> ptr` and `decode(ptr) -> ptr`: the canonical layout is
   the words of the parts in declaration order (vectors in index order);
   `decode` gives 0 for a layout that is not canonical;
-- no imports, no floats, no clock, no randomness.
+- no imports, no floats, no clock, no randomness;
+- the `stock` read (ℤ, S2b) is a signed `i64`; an `Ops` op body (S3b) is
+  one `apply` call.
 
 The writer changes: an engine entry does not reset the heap pointer, and
 the module exports `memory`, `alloc` and `reset`. The kit entries keep
@@ -381,7 +397,8 @@ module. A wasmtime leg is O3.
   There is no third implementation of the parts.
 - Schedule shape: a synced prefix, then a partition (each replica runs its
   own sequence), then a reconnect (merge in both directions). This is the
-  I-confluence shape of J5.
+  I-confluence shape of J5. An `Ops` op body (S3b) is one step. The
+  transcript prints `stock` as ℤ (S2b).
 - Order: by the total number of operations, then by replica, operation
   index and argument index, in declaration order. No seed, no clock, no
   host randomness, no floats.
@@ -436,11 +453,12 @@ reports are compared byte for byte.
 | L1 | `merge a b ≡ merge b a` for each part and the product | proved (library) | S2 |
 | L2 | `merge (merge a b) c ≡ merge a (merge b c)` | proved (library) | S2 |
 | L3 | `merge a a ≡ a` | proved (library) | S2 |
-| L4 | `apply i o s ≡ some t → le s t` (inflation) | proved (library, per part operation) | S2 |
-| L5 | convergence: two replicas that merged the same set of states are equal (a corollary of L1 to L3) | proved (library); the simulator also checks each delivery order (bounded) | S4 |
+| L4 | `apply i o s ≡ some t → le s t` (inflation) | proved (library, per part operation; per `Ops` script by composition, S3b) | S2 |
+| L5 | convergence: the state of a replica is `mergeAll` of the `FMSet` of states it merged (S2c), so two replicas that merged the same multiset are equal (from L1 to L3) | proved (library); the simulator also checks each delivery order (bounded) | S4 |
+| L5r | guest replicas: two `Replica S` values (S4) that got the same multiset of `recv` events after their last `local` event observe equal `eps` | proved when its guest term type-checks; else bounded (the simulator, each delivery order); a bounded run never gives proved | S4 |
 | L6a | `GSet`: `has (merge (add x a) (add y b)) x` and the same for `y` (D3) | proved (library) | S4 |
 | L6b | `MVReg`: concurrent `write x` and `write y` with `x ≠ y` read as `conflict {x, y}` (D4) | proved (library) | S4 |
-| L7 | `Escrow`: in each reachable state, `rights i ≥ 0` for each `i` and the sum of the rights is `stock`, so `nonneg` holds (D5) | proved (library) | S4 |
+| L7 | `Escrow`: in each reachable state, `rights i ≥ 0` for each `i` and the sum of the rights is `stock`, so `nonneg` holds (D5); with `restock` as `R i i` (O14) | proved (library) | S4 |
 | L8 | a program invariant under an independent pair | proved with a user term, else bounded | S4 |
 
 Why L7 holds: replica `i` writes only its row of `R` and `U i`, and it
@@ -507,9 +525,13 @@ on the new checks, docs, close (stage, commit message, next prompt).
 |---|---|---|
 | S0 | kit seed, `design/DESIGN.md`, this plan, README, `AGENTS.md`, `docs/COMPARISON.md` | `make check` EXIT 0: examples 10 checked, 0 failed; parse refusals 9; check refusals 19; evals 32; ir 10 lowered; wasm 13 modules valid; differential 813 cases, 0 mismatches; gate 0 failures; review and domain regressions passed |
 | S1 | one port of evolve-lang 1f87a5a (section 8): surface (Q7), `langc fmt`, `W_NONCANON`, `check --json` with `parsed` and `typed` counts, the S2a to S2d kernel; the kit sample domain stays (O4) | `make check` EXIT 0 with the evolve-lang 1f87a5a counts (its PLAN 9 S2d row: examples 10; parse refusals 10; check refusals 54; evals 62; ir 10; wasm 13; differential 773 cases, 0 mismatches; fmt 101 canonical, 6 non-canonical pairs; json 26 fixtures, diagnostics 38 codes; cubical 36 checks, 22 round trips), re-measured at S1 STEP 0 on evolve-lang 1f87a5a; mutants: the `REFUSE_CELL` CM test, the `Fin` bound, the `W_NONCANON` test. DONE 2026-10-27: `make check` EXIT 0 with these counts (also: diagnostics 24 codes with a fixture, 14 with no fixture; gate 0 failures; review, domain and diagnostic edit regressions passed); the three mutants KILLED. Review adds seven C classification cases (43 checks total); the upstream counts above remain the port baseline |
-| S2 | first the O12 replan (Q12 to Q16 (b)); then domain: `natMax`, `sumFin`, `GSet`, `MVReg`, `Read`, `Counter`, `Escrow`, the product join; L1 to L4 as library guest terms; replace the kit sample domain | one eval test per part operation and merge; L1 to L4 type-check; mutants on each merge (swap `natMax` for `natAdd`, drop the context test of `MVReg`) |
+| S1b | kernel (Q26 to Q28 (a), O15): the builtin `natMax` with its rules on open arguments (`natMax a 0 = a`, `natMax 0 b = b`, `natMax (a+1) (b+1) = natMax a b + 1`) and a `fold` over ℕ with a motive (port of zkml-lang af57c42); a dependent `elim` for Bool (port of quorum-lang 351cbf4 rule_elim and motive_check) and for `Option`; the builtin `sumFin` (as auction-lang sumRat: it unrolls at a numeral `n`, it is stuck at an open `n`) | one eval test per new op and per new rule; one accepted fixture per eliminator with a `Path` motive (`natMax` comm by induction, `or` comm by cases); a refused fixture for a bad motive; `natMax n n` with an open `n` stays stuck; mutants: drop the `natMax (a+1) (b+1)` rule, the motive check, the `sumFin` bound. DONE 2026-10-27: `make check` EXIT 0: examples 13 checked, 0 failed; parse refusals 10; check refusals 59; evals 81; ir 13 lowered, and `test/ir/sumfin-open.lang` gets REFUSE_RUNTIME_PATH; wasm 16 modules valid; differential 1233 cases, 0 mismatches; fmt 110 canonical, 6 non-canonical pairs; json 26 fixtures, diagnostics 38 codes (24 with a fixture, 14 with no fixture); gate 0 failures; review, domain and diagnostic edit regressions passed; cubical 43 checks, 22 round trips. The three mutants KILLED; the gate kills the motive check mutant by the message text that `test/check/expect.txt` pins for `nat-motive-sort.lang` |
+| S2 | first the O12 replan (Q12 to Q16 (b)), DONE 2026-10-27 (Q22 to Q25 (a)); then domain on the S1b kernel: `GSet`, `MVReg`, `Read`, `Counter` and `Escrow` with `restock` (Q12 (b)), the product join; `nonneg` compares in ℕ; L1 to L4 as library guest terms; replace the kit sample domain (O4) | one eval test per part operation (`restock` too) and merge; L1 to L4 type-check; mutants on each merge (swap `natMax` for `natAdd`, drop the context test of `MVReg`) |
+| S2b | ℤ (Q13 (b), Q22 (a)), no kernel work: the lexer token `ℤ`; base data `ℤ` (`pos`, `negsuc`) in `domain/domain.lang`; `natDiff`, `intLe`; the `stock` read of `Counter` and `Escrow` | one eval test per ℤ operation; `stock` below zero prints a negative value; `LEX_CHAR` still refuses another non-ASCII character; mutant: swap the sign in `natDiff` |
+| S2c | kernel: path constructors of dimension 2 (port of quorum-lang 09f7f59 S3, its O37 to O56; O13); library `FMSet` in generator form (Q14 (b)); `mergeAll : FMSet S → S` by `FMSet` recursion into `⊥` and `merge` of each part (Q23 (a)) | `test/check/cell-path-dim.lang` moves to accepted at dimension 2, a new dimension 3 fixture gets `REFUSE_CELL`; the cons form still gets `REFUSE_CELL`; one eval test of `mergeAll` per part; mutants: the dimension bound, the `mcomm` case of `mergeAll` |
 | S3 | forms: `replicas`, `atoms`, `replicated`, `state`, `op`, `invariant`, `allocate`, elaborated to guest terms (Q9); `REFUSE_NO_MERGE`, `REFUSE_OP_INFINITE_ARG`, `REFUSE_RAW_WRITE`, `REFUSE_ALLOC_SUM`; `examples/tags.merge`, `owner.merge`, `inventory.merge`, `inventory-escrow.merge` parse and type | one fixture per code; `fmt` round trip on the forms; mutants on each J1 and J2 test |
-| S4 | the checker: J4 to J6, the bounded search core in C (shared with S5), `REFUSE_NEEDS_COORDINATION`, `REFUSE_RULE_MISMATCH`, `REFUSE_READ_WINNER`, `W_BOUNDED`; L5, L6a, L6b, L7, L8; `laws` and `pairs` counts in `check --json` | one test per code with its JSON shape; `inventory.merge` refused, `inventory-escrow.merge` GREEN with L7 proved; mutants on each class test and on L7 |
+| S3b | kernel: the CM test admits a field `E → T A` with `E` closed data (the mandate-lang 4.6 R1 rule, its domain.lang `IO`); library `Ops A`; an `op` body can be an `Ops` script of part reads and part operations, one step at one replica (Q15 (b), Q24 (a)); L4 for scripts by composition | a fixture for the new field rule and a refused fixture where `E` mentions `A`; an eval test of a script that reads, then writes; mutants on the closed test of `E` and on the script step order |
+| S4 | the checker: J4 to J6, the bounded search core in C (shared with S5), `REFUSE_NEEDS_COORDINATION`, `REFUSE_RULE_MISMATCH`, `REFUSE_READ_WINNER`, `W_BOUNDED`; L5, L5r, L6a, L6b, L7, L8; the `Replica S` cofamily with `Event = local Op ∣ recv S` (Q16 (b), Q25 (a)); `laws` and `pairs` counts in `check --json` | one test per code with its JSON shape; `inventory.merge` refused, `inventory-escrow.merge` GREEN with L7 proved; L5r proved or bounded, never proved by a bounded run; mutants on each class test and on L7 |
 | S5 | `langc sim`: schedules, order, reduction, transcript; golden `test/sim/*.out` (the demo); determinism gate | the demo transcript equals its golden file; two runs byte-identical; mutants on the order and on the minimality test |
 | S6 | JSON report: port of `json.c`, `NAME.report.json`, the 5.3 schema shared with `check --json` | golden reports; mutants on the class map |
 | S7 | Wasm engine: the writer changes of 5.1, part templates, lowered invariants, the engine ABI | `wasm-validate`; differential gate on every simulator schedule; mutants on one template per part |
@@ -547,11 +569,25 @@ on the new checks, docs, close (stage, commit message, next prompt).
 - O11 the MVReg merge with one slot per replica (4.2) is correct only
   under the single-writer rule. S2 proves L1 to L3 for it; if the proof
   fails, S2 falls back to the dotted set form and records it.
-- O12 the USER ruled Q12 to Q16 (b) on 2026-10-27: `restock`, ℤ,
-  `FMSet`, `Ops A` and a `Replica` cofamily are admitted. Sections 3 to
-  6 and 9 still show the S0 design (`sell` only, ℕ only, vectors for
-  sets, no guest replica). The S2 kickoff replans them and asks the new
-  Q items before the S2 build.
+- O12 DONE 2026-10-27 (S2 unit 1). The USER ruled Q12 to Q16 (b):
+  `restock`, ℤ, `FMSet`, `Ops A` and a `Replica` cofamily are admitted.
+  The replan changed sections 1 to 6, 9 and 10, and the USER ruled Q22
+  to Q25 (a): `restock` in S2, ℤ in S2b, `FMSet` in S2c, `Ops A` in S3b,
+  `Replica` in S4.
+- O13 the S2c port of dimension 2 path constructors (quorum-lang S3)
+  keeps its O52: a fold at the 2-cell `trunc` stays stuck. `mergeAll` on
+  a closed multiset never meets `trunc`.
+- O14 the S0 rights formula of `Escrow` counted `R i i` in both sums.
+  With `restock` as `R i i` (Q12 (b)), the diagonal counts once (4.2).
+  The L7 proof (S4) must cover it.
+
+- O15 DONE 2026-10-27 (S1b). The S1 kernel had only eliminators with a
+  fixed result type (`fold`, `flagIf`, `option`), and the builtins were
+  stuck at open arguments. So no guest term proved L1 to L3 at open
+  states, and no guest `sumFin` built `pack k refl` at an open `k`. S1b
+  (Q26 to Q28 (a)) added induction, the `natMax` rules and the builtin
+  `sumFin`. At an open `n`, `sumFin` stays stuck in the checker, and the
+  lowering refuses it with REFUSE_RUNTIME_PATH.
 
 ## 11. Questions for the USER
 
@@ -623,3 +659,31 @@ RULED (letter) is a USER ruling.
   lowered through the kit IR; the differential gate checks the module
   against `langc eval` of the guest terms. (b) lower the guest terms of
   the parts directly (the IR then needs finite vectors as arrays).
+- Q22 ℤ (S2 O12 replan). RULED (a). (a) a new slice S2b after S2, no
+  kernel work: the lexer token `ℤ`, base data `ℤ` (`pos`, `negsuc`),
+  `natDiff`, `intLe`, the `stock` read in ℤ; S2 `nonneg` compares in ℕ.
+  (b) ℤ inside S2.
+- Q23 `FMSet` use. RULED (a). (a) slice S2c: port the dimension 2 path
+  constructors of quorum-lang S3; `mergeAll : FMSet S → S`; L5 says the
+  state of a replica is `mergeAll` of its merged multiset; `GSet` stays a
+  vector (`FMSet` union is not idempotent). (b) S2c, and `FMSet` holds the
+  operations of each replica in J5; L5 keeps the S0 statement.
+- Q24 `Ops A` use. RULED (a). (a) slice S3b after S3: the CM test admits
+  `E → T A` with `E` closed; an `op` body can be an `Ops` script, one step
+  at one replica. (b) slice S4b: the replica sequence of J5 and the
+  simulator is an `Ops` term; `op` bodies stay compositions.
+- Q25 `Replica` use. RULED (a). (a) S4, no kernel work: `Event = local Op
+  ∣ recv S`; L5r about guest replicas, proved only by a guest term, else
+  bounded. (b) S5: the simulator step runs a guest `Replica`; L5 keeps
+  the S0 statement.
+- Q26 L1 to L3 proof route (S2 session 2). RULED (a). (a) port the ℕ
+  motive fold and the `natMax` rules on open arguments (zkml-lang
+  af57c42) and a dependent `elim` for Bool and `Option` (quorum-lang
+  351cbf4); L1 to L3 are guest proofs, the mark stays proved. (b)
+  trusted kernel rules (auction-lang `rule`). (c) `postulate` in
+  domain.lang. (d) closed instances by refl only.
+- Q27 kernel slice. RULED (a). (a) a new slice S1b before S2, with its
+  own commit. (b) inside S2.
+- Q28 `sumFin`. RULED (a). (a) a builtin that unrolls at a numeral `n`
+  (as auction-lang sumRat); `r` is always a numeral in a program. (b) a
+  guest term on the S1b fold, else (a). (c) parts over `ℕ → ℕ`.
