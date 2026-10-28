@@ -1,0 +1,33 @@
+-- The S2 product join: instances of the pair laws on parts, and one eval of `pairMerge`.
+cmMerge : (n : ℕ) → (r : ℕ) → (a : Counter r × MVReg n r) → (b : Counter r × MVReg n r) → Counter r × MVReg n r
+cmMerge n r a b = pairMerge (Counter r) (MVReg n r) (counterMerge r) (mvregMerge n r) a b
+
+cmComm : (n : ℕ) → (r : ℕ) → (a : Counter r × MVReg n r) → (b : Counter r × MVReg n r) → Path (Counter r × MVReg n r) (cmMerge n r a b) (cmMerge n r b a)
+cmComm n r a b = pairComm (Counter r) (MVReg n r) (counterMerge r) (mvregMerge n r) (counterComm r) (mvregComm n r) a b
+
+fullComm : (n : ℕ) → (r : ℕ) → (a : GSet n × Counter r × MVReg n r) → (b : GSet n × Counter r × MVReg n r) → Path (GSet n × Counter r × MVReg n r) (pairMerge (GSet n) (Counter r × MVReg n r) (gsetMerge n) (cmMerge n r) a b) (pairMerge (GSet n) (Counter r × MVReg n r) (gsetMerge n) (cmMerge n r) b a)
+fullComm n r a b = pairComm (GSet n) (Counter r × MVReg n r) (gsetMerge n) (cmMerge n r) (gsetComm n) (cmComm n r) a b
+
+fullAssoc : (n : ℕ) → (r : ℕ) → (a : GSet n × Escrow r) → (b : GSet n × Escrow r) → (c : GSet n × Escrow r) → Path (GSet n × Escrow r) (pairMerge (GSet n) (Escrow r) (gsetMerge n) (escrowMerge r) (pairMerge (GSet n) (Escrow r) (gsetMerge n) (escrowMerge r) a b) c) (pairMerge (GSet n) (Escrow r) (gsetMerge n) (escrowMerge r) a (pairMerge (GSet n) (Escrow r) (gsetMerge n) (escrowMerge r) b c))
+fullAssoc n r a b c = pairAssoc (GSet n) (Escrow r) (gsetMerge n) (escrowMerge r) (gsetAssoc n) (escrowAssoc r) a b c
+
+fullIdem : (n : ℕ) → (r : ℕ) → (a : GSet n × MVReg n r) → Path (GSet n × MVReg n r) (pairMerge (GSet n) (MVReg n r) (gsetMerge n) (mvregMerge n r) a a) a
+fullIdem n r a = pairIdem (GSet n) (MVReg n r) (gsetMerge n) (mvregMerge n r) (gsetIdem n) (mvregIdem n r) a
+
+gA : GSet 3
+gA = gsetAdd 3 (pack 0 refl) (λ (x : Fin 3) → false)
+
+gB : GSet 3
+gB = gsetAdd 3 (pack 2 refl) gA
+
+cA : Counter 2
+cA = counterRestock 2 (pack 0 refl) 3 (pack (λ (j : Fin 2) → 0) (λ (j : Fin 2) → 0))
+
+cB : Counter 2
+cB = counterRestock 2 (pack 1 refl) 2 cA
+
+pairCount : (m : GSet 3 × Counter 2) → ℕ
+pairCount m = natAdd (gsetCount 3 (witness m)) (sumFin 2 (witness (payload m)))
+
+pairRead : ℕ
+pairRead = pairCount (pairMerge (GSet 3) (Counter 2) (gsetMerge 3) (counterMerge 2) (pack gA cA) (pack gB cB))

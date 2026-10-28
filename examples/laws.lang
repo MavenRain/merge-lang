@@ -29,5 +29,5 @@ subFloor = refl
 flagTrue : Path ℕ (flagIf (natLe 2 3) 1 0) 1
 flagTrue = refl
 
-lotLaw : Path ℕ (lotPrice (makeLot 3 250)) 250
-lotLaw = refl
+stepLaw : Path ℕ (stepFrom (bump 4)) 4
+stepLaw = refl

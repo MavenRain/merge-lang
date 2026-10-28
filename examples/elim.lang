@@ -1,21 +1,13 @@
 -- Dependent elim over Bool and Option: elim P yes no b and elim P z s o.
-or : (x : Bool) → (y : Bool) → Bool
-or x y = flagIf x true y
-
+-- `or` and orIdem, orComm, orAssoc are library terms in domain/domain.lang.
 pickE : (f : Bool) → (a : ℕ) → (b : ℕ) → ℕ
 pickE f a b = elim (λ (x : Bool) → ℕ) a b f
 
 someE : (f : Bool) → (a : ℕ) → ℕ
 someE f a = elim (λ (o : Option ℕ) → ℕ) 7 (λ (x : ℕ) → natAdd x 1) (flagIf f (some a) none)
 
-orIdem : (x : Bool) → Path Bool (or x x) x
-orIdem x = elim (λ (b : Bool) → Path Bool (or b b) b) refl refl x
-
-orComm : (x : Bool) → (y : Bool) → Path Bool (or x y) (or y x)
-orComm x y = elim (λ (a : Bool) → Path Bool (or a y) (or y a)) (elim (λ (b : Bool) → Path Bool (or true b) (or b true)) refl refl y) (elim (λ (b : Bool) → Path Bool (or false b) (or b false)) refl refl y) x
-
-orAssoc : (x : Bool) → (y : Bool) → (z : Bool) → Path Bool (or (or x y) z) (or x (or y z))
-orAssoc x y z = elim (λ (a : Bool) → Path Bool (or (or a y) z) (or a (or y z))) refl refl x
+orIdemTrue : Path Bool (or true true) true
+orIdemTrue = orIdem true
 
 optionEta : (o : Option ℕ) → Path (Option ℕ) (option none (λ (a : ℕ) → some a) o) o
 optionEta o = elim (λ (p : Option ℕ) → Path (Option ℕ) (option none (λ (a : ℕ) → some a) p) p) refl (λ (a : ℕ) → refl) o

@@ -45,8 +45,8 @@ name x = t
 
 postulate name : T
 
-data Lot (size : ℕ) : Type where
-  makeLot : (lotPrice : ℕ) → Lot size
+data Read (n : ℕ) : Type where
+  readEmpty : Read n
 ```
 
 - `rec` before a signature marks a recursive definition.

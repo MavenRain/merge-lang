@@ -1,5 +1,5 @@
 == DOMAIN_FAMILY.lang exit 1
-{"code":"DOMAIN_FAMILY","severity":"error","span":{"file":"test/json/DOMAIN_FAMILY.lang","line":1,"col":1,"end_line":2,"end_col":33},"expected":null,"found":null,"fix":null,"retry":true,"message":"fold over Hop is not in S2: a fold over an indexed family needs a dependent eliminator (S3)"}
+{"code":"DOMAIN_FAMILY","severity":"error","span":{"file":"test/json/DOMAIN_FAMILY.lang","line":1,"col":1,"end_line":2,"end_col":33},"expected":null,"found":null,"fix":null,"retry":true,"message":"fold over Step is not in S2: a fold over an indexed family needs a dependent eliminator (S3)"}
 {"parsed":"1 of 1","typed":"0 of 1","affine":"0 of 0","laws":"0 of 0"}
 == LEX_CHAR.lang exit 1
 {"code":"LEX_CHAR","severity":"error","span":{"file":"test/json/LEX_CHAR.lang","line":2,"col":14,"end_line":2,"end_col":15},"expected":"a symbol of the language","found":"+","fix":null,"retry":true,"message":"test/json/LEX_CHAR.lang:2:14: unexpected byte 0x2b"}

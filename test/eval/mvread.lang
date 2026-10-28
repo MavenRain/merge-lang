@@ -1,0 +1,51 @@
+-- The S2 MVReg ops and the `Read n` read at numerals; `readTag` reads a `Read n` value by `fold`.
+readTag : (n : ℕ) → (v : Read n) → ℕ
+readTag n v = fold 0 (λ (x : Fin n) → natAdd (witness x) 1) (λ (c : (s : GSet n) × Path Bool (natLe 2 (gsetCount n s)) true) → 100) v
+
+mv0 : MVReg 3 2
+mv0 = pack (λ (j : Fin 2) (y : Fin 3) → 0) (λ (j : Fin 2) → 0)
+
+mvA : MVReg 3 2
+mvA = mvregWrite 3 2 (pack 0 refl) (pack 1 refl) mv0
+
+mvB : MVReg 3 2
+mvB = mvregWrite 3 2 (pack 1 refl) (pack 2 refl) mv0
+
+mvAB : MVReg 3 2
+mvAB = mvregMerge 3 2 mvA mvB
+
+mvC : MVReg 3 2
+mvC = mvregWrite 3 2 (pack 0 refl) (pack 0 refl) mvAB
+
+mvWrite : ℕ
+mvWrite = mvregCount 3 2 mvA
+
+mvMerge : ℕ
+mvMerge = mvregCount 3 2 mvAB
+
+mvLater : ℕ
+mvLater = mvregCount 3 2 mvC
+
+mvHas : ℕ
+mvHas = flagIf (mvregHas 3 2 mvC (pack 0 refl)) 1 0
+
+rdMv0 : ℕ
+rdMv0 = readTag 3 (mvregRead 3 2 mv0)
+
+rdMvA : ℕ
+rdMvA = readTag 3 (mvregRead 3 2 mvA)
+
+rdMvAB : ℕ
+rdMvAB = readTag 3 (mvregRead 3 2 mvAB)
+
+rdMvC : ℕ
+rdMvC = readTag 3 (mvregRead 3 2 mvC)
+
+tagNone : ℕ
+tagNone = readTag 3 (gsetRead 3 (λ (x : Fin 3) → false))
+
+tagTwo : ℕ
+tagTwo = readTag 3 (gsetRead 3 (λ (x : Fin 3) → finEq 3 x (pack 2 refl)))
+
+tagBoth : ℕ
+tagBoth = readTag 3 (gsetRead 3 (λ (x : Fin 3) → natLe 1 (witness x)))

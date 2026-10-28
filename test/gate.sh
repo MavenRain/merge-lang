@@ -132,7 +132,7 @@ ir_refused closure REFUSE_RUNTIME_CLOSURE
 got=$(build/langc eval test/ir/lazy.lang lazy 3 2>&1) || true
 [ "$got" = "3" ] || { echo "FAIL lazy.lang: want 3, got $got"; fail=$((fail + 1)); }
 build/langc ir test/ir/lazy.lang > /dev/null || { echo "FAIL lazy.lang: ir"; fail=$((fail + 1)); }
-for want in "stackSum 3:15" "stackTrap 0:7" "stackTrap 2:5" "stackDemand 0:trap" "stackDemand 2:trap"; do
+for want in "logSum 3:15" "logTrap 0:7" "logTrap 2:5" "logDemand 0:trap" "logDemand 2:trap"; do
   call=${want%%:*}
   got=$(build/langc eval test/ir/spine.lang ${call% *} ${call#* } 2>"$tmp/err") || true
   want_err=""

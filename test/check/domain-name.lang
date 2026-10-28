@@ -1,2 +1,2 @@
-depth : ℕ
-depth = 1
+gsetCount : ℕ
+gsetCount = 1

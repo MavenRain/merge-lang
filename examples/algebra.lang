@@ -2,5 +2,5 @@
 square : (n : ℕ) → ℕ
 square n = fold (λ (acc : ℕ) → natAdd acc n) 0 n
 
-colorCode : (c : Color) → ℕ
-colorCode c = fold 1 2 3 c
+verdictCode : (v : Verdict) → ℕ
+verdictCode v = fold 1 2 3 v

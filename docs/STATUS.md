@@ -1,11 +1,54 @@
 # merge-lang status
 
-The build implements slices S1 and S1b of `docs/PLAN.md` section 9: the
-port of the evolve-lang 1f87a5a surface and cubical kernel (S1), and
-induction in the kernel (S1b). It does not complete M0. No merge-lang
-domain is built yet: the kit sample domain stays (PLAN O4), and S2
-replaces it. There is no merge engine, no replica simulator and no
-coordination report yet.
+The build implements slices S1, S1b and S2 of `docs/PLAN.md` section 9:
+the port of the evolve-lang 1f87a5a surface and cubical kernel (S1),
+induction in the kernel (S1b), and the merge-lang domain with the laws
+L1 to L4 as guest terms (S2). It does not complete M0. There is no merge
+engine, no replica simulator and no coordination report yet.
+
+## S2 (2026-10-27)
+
+- Scope (`docs/PLAN.md` section 9, the S2 row): the O12 replan (unit 1),
+  then the domain on the S1b kernel in `domain/domain.lang`. No kernel
+  edit.
+- Head data (O4 DONE): `Verdict`, `Log`, `Hist`, `Step : ℕ → ℕ → Type`
+  and `Read n` replace the kit sample domain. 14 fixtures moved to these
+  names (`domain/README.md` gives the list).
+- Library: `or`, `and`, `not`, `finEq`; `orIdem`, `orComm`, `orAssoc`,
+  `natMaxIdem`, `natMaxComm`, `natMaxAssoc`; `vecMax` and `matMax`
+  (pointwise `natMax`) with their laws by function extensionality.
+- Parts: `GSet n = Fin n → Bool`; `Counter r` = (p, d) vectors;
+  `Escrow r` = (R, U); `MVReg n r` = (m, ctx) in the dotted lex form
+  (O11 TRIGGERED: the slot form has no commutative merge at a tie). Each
+  part has `<part>Merge`, `<part>Idem`, `<part>Comm`, `<part>Assoc` and
+  `<part>L4`. Each op is `merge s (delta s)`, so L4 follows from L2 and
+  L3. An op with a precondition (`counterDec`, `escrowDec`,
+  `escrowTransfer`) gives an `Option`.
+- Reads: `gsetCount`, `gsetRead`, `mvregRead : MVReg n r → Read n`.
+  `Read n` has `readEmpty`, `readOne` and `readConflict` (a set with a
+  proof of 2 or more members). A program reads domain data with the
+  non-dependent `fold`; `elim` takes only Bool or `Option`.
+- Product join: `pairMerge` with `pairIdem`, `pairComm`, `pairAssoc`,
+  one generic lemma for each law.
+- Tests: `test/eval/parts.lang`, `test/eval/mvread.lang` and
+  `test/eval/pair.lang` (33 evals: each part op and merge, the `MVReg`
+  read, the product join, and three self-transfer regressions).
+- Gate: `make check` EXIT 0. Examples 13; parse refusals 10; check
+  refusals 59; evals 115; ir 13 lowered; wasm 16; differential 1230
+  cases, 0 mismatches; fmt 113 canonical, 6 non-canonical pairs; json 26
+  fixtures, diagnostics 38 codes (24 with a fixture, 14 with no fixture);
+  gate 0 failures; review, domain and diagnostic edit regressions passed;
+  cubical 43 checks, 22 round trips.
+- Count changes from S1b: evals +34 (the 33 new evals and `inventory
+  added`); differential -3 (`examples/elim.lang` and
+  `examples/natmax.lang` use the domain laws, `inventory` has one more
+  closed entry); fmt +3 canonical. The other counts are the same.
+- Mutants KILLED (7): `natAdd` in `vecMax` and in `matMax`, `and` in
+  `gsetMerge` (TYPE_ENDPOINT at load); the `MVReg` clear set to 0 and
+  `mvregLive` without `natLe 1 (ctx j)` (evals); `gsetRead` threshold 3
+  and `pairMerge` with `ma` twice (TYPE_MISMATCH at load).
+- Review fix: `escrowTransfer` refuses equal sender and recipient replicas,
+  including zero transfers, so a transfer cannot mint diagonal restock.
 
 ## S1 (2026-10-27)
 
@@ -85,13 +128,13 @@ coordination report yet.
 - `Fin n` as the Sigma of `docs/PLAN.md` section 2.2.
 - Induction (S1b): `natMax` with its rules on open arguments, a `fold`
   over ℕ with a motive, `elim` for Bool and `Option`, and `sumFin`.
+- The domain (S2): `GSet`, `Counter`, `Escrow`, `MVReg`, `Read n`, the
+  product join and the laws L1 to L4 as guest terms.
 
 ## Remaining M0 work
 
-1. S2: the domain on the S1b kernel (`GSet`, `MVReg`, `Read`, `Counter`,
-   `Escrow` with `restock`, the product join) and the laws L1 to L4 as
-   library guest terms. It needs the USER S1b commit. The O12 replan (S2
-   unit 1) is DONE.
+1. S2b: ℤ (`pos`, `negsuc`, `natDiff`, `intLe`) and the `stock` read of
+   `Counter` and `Escrow`. It needs the USER S2 commit.
 2. The later slices of `docs/PLAN.md` section 9. Each needs the slice
    before it.
 
@@ -105,7 +148,9 @@ coordination report yet.
   `REFUSE_RUNTIME_PATH`.
 - The kit names `List`, `nil` and `cons` are dropped. Use a vector
   `Fin n → A`.
-- `domain/` holds the kit sample domain (O4) until S2.
+- A constructor field is not dependent: `readConflict` takes one Sigma
+  field (the set and the proof).
+- `nonneg` compares in ℕ. The signed `stock` read waits for ℤ (S2b).
 
 ## Internal boundaries
 

@@ -1,0 +1,74 @@
+-- The S2 parts at numerals: one eval for each GSet, Counter and Escrow op and each merge.
+g0 : GSet 3
+g0 = λ (x : Fin 3) → false
+
+gsAdd : ℕ
+gsAdd = gsetCount 3 (gsetAdd 3 (pack 0 refl) (gsetAdd 3 (pack 2 refl) (gsetAdd 3 (pack 0 refl) g0)))
+
+gsMerge : ℕ
+gsMerge = gsetCount 3 (gsetMerge 3 (gsetAdd 3 (pack 0 refl) g0) (gsetAdd 3 (pack 2 refl) (gsetAdd 3 (pack 0 refl) g0)))
+
+ct0 : Counter 2
+ct0 = pack (λ (j : Fin 2) → 0) (λ (j : Fin 2) → 0)
+
+ctA : Counter 2
+ctA = counterRestock 2 (pack 0 refl) 3 ct0
+
+ctB : Counter 2
+ctB = counterRestock 2 (pack 1 refl) 2 ctA
+
+ctRestock : ℕ
+ctRestock = sumFin 2 (witness ctA)
+
+ctDec : (k : ℕ) → ℕ
+ctDec k = elim (λ (o : Option (Counter 2)) → ℕ) 0 (λ (c : Counter 2) → sumFin 2 (payload c)) (counterDec 2 5 (pack 1 refl) k ctA)
+
+ctMerge : ℕ
+ctMerge = sumFin 2 (witness (counterMerge 2 ctA ctB))
+
+esSplit : Fin 2 → ℕ
+esSplit = λ (j : Fin 2) → 5
+
+es0 : Escrow 2
+es0 = pack (λ (i : Fin 2) (j : Fin 2) → 0) (λ (j : Fin 2) → 0)
+
+esUsed : (o : Option (Escrow 2)) → ℕ
+esUsed o = elim (λ (p : Option (Escrow 2)) → ℕ) 0 (λ (e : Escrow 2) → sumFin 2 (payload e)) o
+
+esDec : (k : ℕ) → ℕ
+esDec k = esUsed (escrowDec 2 esSplit (pack 0 refl) k es0)
+
+esRestock : (k : ℕ) → ℕ
+esRestock k = esUsed (escrowDec 2 esSplit (pack 0 refl) k (escrowRestock 2 (pack 0 refl) 3 es0))
+
+esMoved : (k : ℕ) → ℕ
+esMoved k = elim (λ (p : Option (Escrow 2)) → ℕ) 0 (λ (e : Escrow 2) → escrowIn 2 e (pack 1 refl)) (escrowTransfer 2 esSplit (pack 0 refl) (pack 1 refl) k es0)
+
+esT : Escrow 2
+esT = elim (λ (p : Option (Escrow 2)) → Escrow 2) es0 (λ (e : Escrow 2) → e) (escrowTransfer 2 esSplit (pack 0 refl) (pack 1 refl) 2 es0)
+
+esAfter : (k : ℕ) → ℕ
+esAfter k = esUsed (escrowDec 2 esSplit (pack 1 refl) k esT)
+
+esLeft : (k : ℕ) → ℕ
+esLeft k = esUsed (escrowDec 2 esSplit (pack 0 refl) k esT)
+
+esA : Escrow 2
+esA = escrowRestock 2 (pack 0 refl) 3 es0
+
+esB : Escrow 2
+esB = escrowRestock 2 (pack 1 refl) 4 esA
+
+esDiag : (e : Escrow 2) → ℕ
+esDiag e = natAdd (witness e (pack 0 refl) (pack 0 refl)) (witness e (pack 1 refl) (pack 1 refl))
+
+esMerge : ℕ
+esMerge = esDiag (escrowMerge 2 esA esB)
+
+-- A transfer to the sender must be refused, including a zero transfer.
+esSelf : (k : ℕ) → ℕ
+esSelf k = elim (λ (p : Option (Escrow 2)) → ℕ) 0 (λ (e : Escrow 2) → 1) (escrowTransfer 2 esSplit (pack 0 refl) (pack 0 refl) k es0)
+
+-- A self transfer must not mint diagonal restock rights for another sale.
+esSelfSpend : ℕ
+esSelfSpend = elim (λ (p : Option (Escrow 2)) → ℕ) 0 (λ (e : Escrow 2) → esUsed (escrowDec 2 esSplit (pack 0 refl) 7 e)) (escrowTransfer 2 esSplit (pack 0 refl) (pack 0 refl) 2 es0)

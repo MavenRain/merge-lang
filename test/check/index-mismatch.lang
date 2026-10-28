@@ -1,3 +1,3 @@
 -- An index that is not the constructor result index (S2b U1).
-bad : Hop 0 2
-bad = up 0
+bad : Step 0 2
+bad = bump 0

@@ -17,14 +17,14 @@ test "$(build/langc eval "$tmp/roundtrip.lang" answer)" = 4
 
 # Reducing a closure can expose a constructor with the binder's old name.
 cat >"$tmp/constructor.lang" <<'EOF'
-constant : Unit → Color
-constant u = red
+constant : Unit → Verdict
+constant u = independent
 
-value : Unit → Color
-value red = constant red
+value : Unit → Verdict
+value independent = constant independent
 EOF
 normal=$(build/langc eval "$tmp/constructor.lang" value)
-printf 'value : Unit → Color\nvalue = %s\n\nanswer : ℕ\nanswer = fold 1 2 3 (value unit)\n' "$normal" >"$tmp/roundtrip.lang"
+printf 'value : Unit → Verdict\nvalue = %s\n\nanswer : ℕ\nanswer = fold 1 2 3 (value unit)\n' "$normal" >"$tmp/roundtrip.lang"
 test "$(build/langc eval "$tmp/roundtrip.lang" answer)" = 1
 
 # A generated eta binder must also print as a source identifier.
@@ -63,7 +63,7 @@ EOF
 test "$(build/langc eval "$tmp/option.lang" output)" = 'none'
 test "$(build/langc eval "$tmp/option.lang" mapped)" = 'some true'
 # A truncated normal form must not be reported as successful evaluation.
-printf 'value : Stack\nvalue = fold (λ (s : Stack) → push 0 s) bottom 10000\n' >"$tmp/large.lang"
+printf 'value : Log\nvalue = fold (λ (s : Log) → logCons 0 s) logNil 10000\n' >"$tmp/large.lang"
 status=0
 build/langc eval "$tmp/large.lang" value >"$tmp/got" 2>"$tmp/err" || status=$?
 test "$status" = 1

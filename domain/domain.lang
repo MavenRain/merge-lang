@@ -1,36 +1,287 @@
--- Sample domain. Replace it with your design. See domain/README.md.
--- Each data type, constructor, field and definition name here becomes a
--- core name (rule R4). Only this file can declare base data (rule R2).
-data Color : Type where
-  red : Color
-  green : Color
-  blue : Color
+-- The merge-lang domain (PLAN sec 4): the parts, their merges and laws, the
+-- reads and the library base. Each data type, constructor, field and
+-- definition name here becomes a core name (rule R4). Only this file can
+-- declare base data (rule R2). A verdict of the concurrency analysis (PLAN
+-- 5.3) is an enum.
+data Verdict : Type where
+  independent : Verdict
+  explicitConflict : Verdict
+  needsCoordination : Verdict
 
-data Item : Type where
-  makeItem : (itemColor : Color) → (itemPrice : ℕ) → (itemCount : ℕ) → Item
+-- An operation log: one recursive field (a run-time fold walks its spine).
+data Log : Type where
+  logNil : Log
+  logCons : (entry : ℕ) → (rest : Log) → Log
 
-data Stack : Type where
-  bottom : Stack
-  push : (top : ℕ) → (rest : Stack) → Stack
+-- A merge history: a fold over a history that exists at run time is a
+-- HOST-LIMIT.
+data Hist : Type where
+  leaf : Hist
+  join : (histLeft : Hist) → (histRight : Hist) → Hist
 
--- A tree: a fold over a tree that exists at run time is a HOST-LIMIT.
-data Tree : Type where
-  tip : Tree
-  fork : (forkLeft : Tree) → (forkRight : Tree) → Tree
+-- An indexed family (S2b): `Step m n` is one step from m to n.
+data Step : ℕ → ℕ → Type where
+  bump : (stepFrom : ℕ) → Step stepFrom (natAdd stepFrom 1)
 
--- An indexed data type (former F15): `Lot 3` is a lot of size 3.
-data Lot (size : ℕ) : Type where
-  makeLot : (lotPrice : ℕ) → Lot size
+-- Library base: Bool connectives, the Fin test, and the semilattice laws of
+-- `or` and `natMax`. The merge of each part uses them pointwise.
+or : (x : Bool) → (y : Bool) → Bool
+or x y = flagIf x true y
 
--- An indexed family (S2b): `Hop m n` is one step from m to n.
-data Hop : ℕ → ℕ → Type where
-  up : (hopFrom : ℕ) → Hop hopFrom (natAdd hopFrom 1)
+and : (x : Bool) → (y : Bool) → Bool
+and x y = flagIf x y false
 
-lineTotal : (item : Item) → ℕ
-lineTotal item = natMul (itemPrice item) (itemCount item)
+not : (x : Bool) → Bool
+not x = flagIf x false true
 
-isRed : (color : Color) → Bool
-isRed color = fold true false false color
+finEq : (n : ℕ) → (a : Fin n) → (b : Fin n) → Bool
+finEq n a b = natEq (witness a) (witness b)
 
-depth : (s : Stack) → ℕ
-depth s = fold 0 (λ (top : ℕ) (rest : ℕ) → natAdd rest 1) s
+orIdem : (x : Bool) → Path Bool (or x x) x
+orIdem x = elim (λ (b : Bool) → Path Bool (or b b) b) refl refl x
+
+orComm : (x : Bool) → (y : Bool) → Path Bool (or x y) (or y x)
+orComm x y = elim (λ (a : Bool) → Path Bool (or a y) (or y a)) (elim (λ (b : Bool) → Path Bool (or true b) (or b true)) refl refl y) (elim (λ (b : Bool) → Path Bool (or false b) (or b false)) refl refl y) x
+
+orAssoc : (x : Bool) → (y : Bool) → (z : Bool) → Path Bool (or (or x y) z) (or x (or y z))
+orAssoc x y z = elim (λ (a : Bool) → Path Bool (or (or a y) z) (or a (or y z))) refl refl x
+
+natMaxIdem : (n : ℕ) → Path ℕ (natMax n n) n
+natMaxIdem n = fold (λ (k : ℕ) → Path ℕ (natMax k k) k) (λ (k : ℕ) (ih : Path ℕ (natMax k k) k) → cong (λ (x : ℕ) → natAdd x 1) ih) refl n
+
+natMaxComm : (a : ℕ) → (b : ℕ) → Path ℕ (natMax a b) (natMax b a)
+natMaxComm a = fold (λ (k : ℕ) → (b : ℕ) → Path ℕ (natMax k b) (natMax b k)) (λ (k : ℕ) (ih : (b : ℕ) → Path ℕ (natMax k b) (natMax b k)) (b : ℕ) → fold (λ (j : ℕ) → Path ℕ (natMax (natAdd k 1) j) (natMax j (natAdd k 1))) (λ (j : ℕ) (h : Path ℕ (natMax (natAdd k 1) j) (natMax j (natAdd k 1))) → cong (λ (x : ℕ) → natAdd x 1) (ih j)) refl b) (λ (b : ℕ) → refl) a
+
+natMaxAssoc : (a : ℕ) → (b : ℕ) → (c : ℕ) → Path ℕ (natMax (natMax a b) c) (natMax a (natMax b c))
+natMaxAssoc a = fold (λ (k : ℕ) → (b : ℕ) → (c : ℕ) → Path ℕ (natMax (natMax k b) c) (natMax k (natMax b c))) (λ (k : ℕ) (ih : (b : ℕ) → (c : ℕ) → Path ℕ (natMax (natMax k b) c) (natMax k (natMax b c))) (b : ℕ) → fold (λ (j : ℕ) → (c : ℕ) → Path ℕ (natMax (natMax (natAdd k 1) j) c) (natMax (natAdd k 1) (natMax j c))) (λ (j : ℕ) (hj : (c : ℕ) → Path ℕ (natMax (natMax (natAdd k 1) j) c) (natMax (natAdd k 1) (natMax j c))) (c : ℕ) → fold (λ (i : ℕ) → Path ℕ (natMax (natMax (natAdd k 1) (natAdd j 1)) i) (natMax (natAdd k 1) (natMax (natAdd j 1) i))) (λ (i : ℕ) (hi : Path ℕ (natMax (natMax (natAdd k 1) (natAdd j 1)) i) (natMax (natAdd k 1) (natMax (natAdd j 1) i))) → cong (λ (x : ℕ) → natAdd x 1) (ih j i)) refl c) (λ (c : ℕ) → refl) b) (λ (b : ℕ) (c : ℕ) → refl) a
+
+-- Pointwise joins by natMax: a vector over Fin r and a matrix over Fin r and
+-- Fin n. L1 to L3 hold pointwise (funext by a path abstraction).
+vecMax : (r : ℕ) → (a : Fin r → ℕ) → (b : Fin r → ℕ) → Fin r → ℕ
+vecMax r a b = λ (x : Fin r) → natMax (a x) (b x)
+
+vecMaxIdem : (r : ℕ) → (a : Fin r → ℕ) → Path (Fin r → ℕ) (vecMax r a a) a
+vecMaxIdem r a i = λ (x : Fin r) → natMaxIdem (a x) i
+
+vecMaxComm : (r : ℕ) → (a : Fin r → ℕ) → (b : Fin r → ℕ) → Path (Fin r → ℕ) (vecMax r a b) (vecMax r b a)
+vecMaxComm r a b i = λ (x : Fin r) → natMaxComm (a x) (b x) i
+
+vecMaxAssoc : (r : ℕ) → (a : Fin r → ℕ) → (b : Fin r → ℕ) → (c : Fin r → ℕ) → Path (Fin r → ℕ) (vecMax r (vecMax r a b) c) (vecMax r a (vecMax r b c))
+vecMaxAssoc r a b c i = λ (x : Fin r) → natMaxAssoc (a x) (b x) (c x) i
+
+matMax : (r : ℕ) → (n : ℕ) → (a : Fin r → Fin n → ℕ) → (b : Fin r → Fin n → ℕ) → Fin r → Fin n → ℕ
+matMax r n a b = λ (x : Fin r) (y : Fin n) → natMax (a x y) (b x y)
+
+matMaxIdem : (r : ℕ) → (n : ℕ) → (a : Fin r → Fin n → ℕ) → Path (Fin r → Fin n → ℕ) (matMax r n a a) a
+matMaxIdem r n a i = λ (x : Fin r) (y : Fin n) → natMaxIdem (a x y) i
+
+matMaxComm : (r : ℕ) → (n : ℕ) → (a : Fin r → Fin n → ℕ) → (b : Fin r → Fin n → ℕ) → Path (Fin r → Fin n → ℕ) (matMax r n a b) (matMax r n b a)
+matMaxComm r n a b i = λ (x : Fin r) (y : Fin n) → natMaxComm (a x y) (b x y) i
+
+matMaxAssoc : (r : ℕ) → (n : ℕ) → (a : Fin r → Fin n → ℕ) → (b : Fin r → Fin n → ℕ) → (c : Fin r → Fin n → ℕ) → Path (Fin r → Fin n → ℕ) (matMax r n (matMax r n a b) c) (matMax r n a (matMax r n b c))
+matMaxAssoc r n a b c i = λ (x : Fin r) (y : Fin n) → natMaxAssoc (a x y) (b x y) (c x y) i
+
+-- GSet n: a grow-only set over Fin n. The merge is pointwise `or`.
+GSet : ℕ → Type 0
+GSet n = Fin n → Bool
+
+gsetMerge : (n : ℕ) → (a : GSet n) → (b : GSet n) → GSet n
+gsetMerge n a b = λ (x : Fin n) → or (a x) (b x)
+
+gsetIdem : (n : ℕ) → (a : GSet n) → Path (GSet n) (gsetMerge n a a) a
+gsetIdem n a i = λ (x : Fin n) → orIdem (a x) i
+
+gsetComm : (n : ℕ) → (a : GSet n) → (b : GSet n) → Path (GSet n) (gsetMerge n a b) (gsetMerge n b a)
+gsetComm n a b i = λ (x : Fin n) → orComm (a x) (b x) i
+
+gsetAssoc : (n : ℕ) → (a : GSet n) → (b : GSet n) → (c : GSet n) → Path (GSet n) (gsetMerge n (gsetMerge n a b) c) (gsetMerge n a (gsetMerge n b c))
+gsetAssoc n a b c i = λ (x : Fin n) → orAssoc (a x) (b x) (c x) i
+
+-- Counter r: the increments p and the decrements d of r replicas. The start
+-- stock s0 is a parameter of the operations, not a part of the state.
+Counter : ℕ → Type 0
+Counter r = (Fin r → ℕ) × (Fin r → ℕ)
+
+counterMerge : (r : ℕ) → (a : Counter r) → (b : Counter r) → Counter r
+counterMerge r a b = pack (vecMax r (witness a) (witness b)) (vecMax r (payload a) (payload b))
+
+counterIdem : (r : ℕ) → (a : Counter r) → Path (Counter r) (counterMerge r a a) a
+counterIdem r a i = pack (vecMaxIdem r (witness a) i) (vecMaxIdem r (payload a) i)
+
+counterComm : (r : ℕ) → (a : Counter r) → (b : Counter r) → Path (Counter r) (counterMerge r a b) (counterMerge r b a)
+counterComm r a b i = pack (vecMaxComm r (witness a) (witness b) i) (vecMaxComm r (payload a) (payload b) i)
+
+counterAssoc : (r : ℕ) → (a : Counter r) → (b : Counter r) → (c : Counter r) → Path (Counter r) (counterMerge r (counterMerge r a b) c) (counterMerge r a (counterMerge r b c))
+counterAssoc r a b c i = pack (vecMaxAssoc r (witness a) (witness b) (witness c) i) (vecMaxAssoc r (payload a) (payload b) (payload c) i)
+
+-- Escrow r: the rights matrix R and the uses vector U. R i j is the rights
+-- that replica i gave to replica j; R i i is the local restock of i.
+Escrow : ℕ → Type 0
+Escrow r = (Fin r → Fin r → ℕ) × (Fin r → ℕ)
+
+escrowMerge : (r : ℕ) → (a : Escrow r) → (b : Escrow r) → Escrow r
+escrowMerge r a b = pack (matMax r r (witness a) (witness b)) (vecMax r (payload a) (payload b))
+
+escrowIdem : (r : ℕ) → (a : Escrow r) → Path (Escrow r) (escrowMerge r a a) a
+escrowIdem r a i = pack (matMaxIdem r r (witness a) i) (vecMaxIdem r (payload a) i)
+
+escrowComm : (r : ℕ) → (a : Escrow r) → (b : Escrow r) → Path (Escrow r) (escrowMerge r a b) (escrowMerge r b a)
+escrowComm r a b i = pack (matMaxComm r r (witness a) (witness b) i) (vecMaxComm r (payload a) (payload b) i)
+
+escrowAssoc : (r : ℕ) → (a : Escrow r) → (b : Escrow r) → (c : Escrow r) → Path (Escrow r) (escrowMerge r (escrowMerge r a b) c) (escrowMerge r a (escrowMerge r b c))
+escrowAssoc r a b c i = pack (matMaxAssoc r r (witness a) (witness b) (witness c) i) (vecMaxAssoc r (payload a) (payload b) (payload c) i)
+
+-- MVReg n r: the dotted form in the lex encoding (O11). m j x is 2c when the
+-- value x is present at the dot (j, c) and 2c + 1 when it is absent; ctx j
+-- is the last counter of replica j. The merge is pointwise natMax.
+MVReg : ℕ → ℕ → Type 0
+MVReg n r = (Fin r → Fin n → ℕ) × (Fin r → ℕ)
+
+mvregMerge : (n : ℕ) → (r : ℕ) → (a : MVReg n r) → (b : MVReg n r) → MVReg n r
+mvregMerge n r a b = pack (matMax r n (witness a) (witness b)) (vecMax r (payload a) (payload b))
+
+mvregIdem : (n : ℕ) → (r : ℕ) → (a : MVReg n r) → Path (MVReg n r) (mvregMerge n r a a) a
+mvregIdem n r a i = pack (matMaxIdem r n (witness a) i) (vecMaxIdem r (payload a) i)
+
+mvregComm : (n : ℕ) → (r : ℕ) → (a : MVReg n r) → (b : MVReg n r) → Path (MVReg n r) (mvregMerge n r a b) (mvregMerge n r b a)
+mvregComm n r a b i = pack (matMaxComm r n (witness a) (witness b) i) (vecMaxComm r (payload a) (payload b) i)
+
+mvregAssoc : (n : ℕ) → (r : ℕ) → (a : MVReg n r) → (b : MVReg n r) → (c : MVReg n r) → Path (MVReg n r) (mvregMerge n r (mvregMerge n r a b) c) (mvregMerge n r a (mvregMerge n r b c))
+mvregAssoc n r a b c i = pack (matMaxAssoc r n (witness a) (witness b) (witness c) i) (vecMaxAssoc r (payload a) (payload b) (payload c) i)
+
+-- Part operations. Each op is merge s (delta s), so L4 (merge s t is t, for
+-- t = merge s d) follows from L3 and L2 of the part. A delta that adds k at
+-- i is the old value with k added at i (vecBump, matBump).
+vecBump : (r : ℕ) → (v : Fin r → ℕ) → (i : Fin r) → (k : ℕ) → Fin r → ℕ
+vecBump r v i k = λ (j : Fin r) → flagIf (finEq r j i) (natAdd (v j) k) (v j)
+
+matBump : (r : ℕ) → (n : ℕ) → (m : Fin r → Fin n → ℕ) → (i : Fin r) → (j : Fin n) → (k : ℕ) → Fin r → Fin n → ℕ
+matBump r n m i j k = λ (x : Fin r) (y : Fin n) → flagIf (and (finEq r x i) (finEq n y j)) (natAdd (m x y) k) (m x y)
+
+-- GSet n: add x joins the singleton of x.
+gsetL4 : (n : ℕ) → (s : GSet n) → (d : GSet n) → Path (GSet n) (gsetMerge n s (gsetMerge n s d)) (gsetMerge n s d)
+gsetL4 n s d = trans (symm (gsetAssoc n s s d)) (cong (λ (x : GSet n) → gsetMerge n x d) (gsetIdem n s))
+
+gsetAdd : (n : ℕ) → (x : Fin n) → (s : GSet n) → GSet n
+gsetAdd n x s = gsetMerge n s (λ (y : Fin n) → finEq n y x)
+
+gsetAddL4 : (n : ℕ) → (x : Fin n) → (s : GSet n) → Path (GSet n) (gsetMerge n s (gsetAdd n x s)) (gsetAdd n x s)
+gsetAddL4 n x s = gsetL4 n s (λ (y : Fin n) → finEq n y x)
+
+-- Counter r: restock i k adds k to p i; dec i k adds k to d i when the
+-- total uses stay at or below s0 plus the total restock (nonneg).
+counterL4 : (r : ℕ) → (s : Counter r) → (d : Counter r) → Path (Counter r) (counterMerge r s (counterMerge r s d)) (counterMerge r s d)
+counterL4 r s d = trans (symm (counterAssoc r s s d)) (cong (λ (x : Counter r) → counterMerge r x d) (counterIdem r s))
+
+counterRestock : (r : ℕ) → (i : Fin r) → (k : ℕ) → (s : Counter r) → Counter r
+counterRestock r i k s = counterMerge r s (pack (vecBump r (witness s) i k) (payload s))
+
+counterRestockL4 : (r : ℕ) → (i : Fin r) → (k : ℕ) → (s : Counter r) → Path (Counter r) (counterMerge r s (counterRestock r i k s)) (counterRestock r i k s)
+counterRestockL4 r i k s = counterL4 r s (pack (vecBump r (witness s) i k) (payload s))
+
+counterCan : (r : ℕ) → (s0 : ℕ) → (k : ℕ) → (s : Counter r) → Bool
+counterCan r s0 k s = natLe (natAdd (sumFin r (payload s)) k) (natAdd s0 (sumFin r (witness s)))
+
+counterDec : (r : ℕ) → (s0 : ℕ) → (i : Fin r) → (k : ℕ) → (s : Counter r) → Option (Counter r)
+counterDec r s0 i k s = flagIf (counterCan r s0 k s) (some (counterMerge r s (pack (witness s) (vecBump r (payload s) i k)))) none
+
+counterDecL4 : (r : ℕ) → (i : Fin r) → (k : ℕ) → (s : Counter r) → Path (Counter r) (counterMerge r s (counterMerge r s (pack (witness s) (vecBump r (payload s) i k)))) (counterMerge r s (pack (witness s) (vecBump r (payload s) i k)))
+counterDecL4 r i k s = counterL4 r s (pack (witness s) (vecBump r (payload s) i k))
+
+-- Escrow r: in and out are the rights that i got from and gave to the other
+-- replicas. dec, transfer j and restock add k to U i, R i j and R i i. dec
+-- and transfer need out + U i + k at or below split i + R i i + in.
+-- A transfer also needs distinct replicas, since the diagonal is restock.
+escrowIn : (r : ℕ) → (s : Escrow r) → (i : Fin r) → ℕ
+escrowIn r s i = sumFin r (λ (j : Fin r) → flagIf (finEq r j i) 0 (witness s j i))
+
+escrowOut : (r : ℕ) → (s : Escrow r) → (i : Fin r) → ℕ
+escrowOut r s i = sumFin r (λ (j : Fin r) → flagIf (finEq r j i) 0 (witness s i j))
+
+escrowCan : (r : ℕ) → (split : Fin r → ℕ) → (i : Fin r) → (k : ℕ) → (s : Escrow r) → Bool
+escrowCan r split i k s = natLe (natAdd (natAdd (escrowOut r s i) (payload s i)) k) (natAdd (natAdd (split i) (witness s i i)) (escrowIn r s i))
+
+escrowL4 : (r : ℕ) → (s : Escrow r) → (d : Escrow r) → Path (Escrow r) (escrowMerge r s (escrowMerge r s d)) (escrowMerge r s d)
+escrowL4 r s d = trans (symm (escrowAssoc r s s d)) (cong (λ (x : Escrow r) → escrowMerge r x d) (escrowIdem r s))
+
+escrowDec : (r : ℕ) → (split : Fin r → ℕ) → (i : Fin r) → (k : ℕ) → (s : Escrow r) → Option (Escrow r)
+escrowDec r split i k s = flagIf (escrowCan r split i k s) (some (escrowMerge r s (pack (witness s) (vecBump r (payload s) i k)))) none
+
+escrowTransfer : (r : ℕ) → (split : Fin r → ℕ) → (i : Fin r) → (j : Fin r) → (k : ℕ) → (s : Escrow r) → Option (Escrow r)
+escrowTransfer r split i j k s = flagIf (and (not (finEq r i j)) (escrowCan r split i k s)) (some (escrowMerge r s (pack (matBump r r (witness s) i j k) (payload s)))) none
+
+escrowRestock : (r : ℕ) → (i : Fin r) → (k : ℕ) → (s : Escrow r) → Escrow r
+escrowRestock r i k s = escrowMerge r s (pack (matBump r r (witness s) i i k) (payload s))
+
+escrowDecL4 : (r : ℕ) → (i : Fin r) → (k : ℕ) → (s : Escrow r) → Path (Escrow r) (escrowMerge r s (escrowMerge r s (pack (witness s) (vecBump r (payload s) i k)))) (escrowMerge r s (pack (witness s) (vecBump r (payload s) i k)))
+escrowDecL4 r i k s = escrowL4 r s (pack (witness s) (vecBump r (payload s) i k))
+
+escrowTransferL4 : (r : ℕ) → (i : Fin r) → (j : Fin r) → (k : ℕ) → (s : Escrow r) → Path (Escrow r) (escrowMerge r s (escrowMerge r s (pack (matBump r r (witness s) i j k) (payload s)))) (escrowMerge r s (pack (matBump r r (witness s) i j k) (payload s)))
+escrowTransferL4 r i j k s = escrowL4 r s (pack (matBump r r (witness s) i j k) (payload s))
+
+escrowRestockL4 : (r : ℕ) → (i : Fin r) → (k : ℕ) → (s : Escrow r) → Path (Escrow r) (escrowMerge r s (escrowRestock r i k s)) (escrowRestock r i k s)
+escrowRestockL4 r i k s = escrowL4 r s (pack (matBump r r (witness s) i i k) (payload s))
+
+-- MVReg n r: write i x takes the dot (i, ctx i + 1), sets x present (even) and
+-- the other values absent (odd) at that dot, and sets absent each dot of the
+-- other replicas that the context covers. x is live at j when m j x is
+-- 2 (ctx j) and ctx j is not 0.
+mvregL4 : (n : ℕ) → (r : ℕ) → (s : MVReg n r) → (d : MVReg n r) → Path (MVReg n r) (mvregMerge n r s (mvregMerge n r s d)) (mvregMerge n r s d)
+mvregL4 n r s d = trans (symm (mvregAssoc n r s s d)) (cong (λ (x : MVReg n r) → mvregMerge n r x d) (mvregIdem n r s))
+
+mvregDelta : (n : ℕ) → (r : ℕ) → (i : Fin r) → (x : Fin n) → (s : MVReg n r) → MVReg n r
+mvregDelta n r i x s = pack (λ (j : Fin r) (y : Fin n) → flagIf (finEq r j i) (natAdd (natMul 2 (natAdd (payload s i) 1)) (flagIf (finEq n y x) 0 1)) (natAdd (natMul 2 (payload s j)) 1)) (λ (j : Fin r) → flagIf (finEq r j i) (natAdd (payload s i) 1) 0)
+
+mvregWrite : (n : ℕ) → (r : ℕ) → (i : Fin r) → (x : Fin n) → (s : MVReg n r) → MVReg n r
+mvregWrite n r i x s = mvregMerge n r s (mvregDelta n r i x s)
+
+mvregWriteL4 : (n : ℕ) → (r : ℕ) → (i : Fin r) → (x : Fin n) → (s : MVReg n r) → Path (MVReg n r) (mvregMerge n r s (mvregWrite n r i x s)) (mvregWrite n r i x s)
+mvregWriteL4 n r i x s = mvregL4 n r s (mvregDelta n r i x s)
+
+mvregLive : (n : ℕ) → (r : ℕ) → (s : MVReg n r) → (j : Fin r) → (x : Fin n) → Bool
+mvregLive n r s j x = and (natEq (witness s j x) (natMul 2 (payload s j))) (natLe 1 (payload s j))
+
+mvregHas : (n : ℕ) → (r : ℕ) → (s : MVReg n r) → (x : Fin n) → Bool
+mvregHas n r s x = natLe 1 (sumFin r (λ (j : Fin r) → flagIf (mvregLive n r s j x) 1 0))
+
+mvregCount : (n : ℕ) → (r : ℕ) → (s : MVReg n r) → ℕ
+mvregCount n r s = sumFin n (λ (x : Fin n) → flagIf (mvregHas n r s x) 1 0)
+
+-- Read n: the read of a set of values. empty when no value is present, one x
+-- when only x is present, conflict with the set and a proof that its count is
+-- 2 or more when two or more values are present. A program reads it with fold
+-- (one case for each constructor). mvregRead reads the live values of an MVReg.
+gsetCount : (n : ℕ) → (s : GSet n) → ℕ
+gsetCount n s = sumFin n (λ (x : Fin n) → flagIf (s x) 1 0)
+
+data Read (n : ℕ) : Type where
+  readEmpty : Read n
+  readOne : (readValue : Fin n) → Read n
+  readConflict : (readSets : (s : GSet n) × Path Bool (natLe 2 (gsetCount n s)) true) → Read n
+
+gsetPick : (n : ℕ) → (s : GSet n) → ℕ
+gsetPick n s = sumFin n (λ (x : Fin n) → flagIf (s x) (witness x) 0)
+
+readAt : (n : ℕ) → (k : ℕ) → Read n
+readAt n k = elim (λ (b : Bool) → Path Bool (natLe (natAdd k 1) n) b → Read n) (λ (p : Path Bool (natLe (natAdd k 1) n) true) → readOne n (pack k p)) (λ (p : Path Bool (natLe (natAdd k 1) n) false) → readEmpty n) (natLe (natAdd k 1) n) refl
+
+gsetRead : (n : ℕ) → (s : GSet n) → Read n
+gsetRead n s = elim (λ (b : Bool) → Path Bool (natLe 2 (gsetCount n s)) b → Read n) (λ (p : Path Bool (natLe 2 (gsetCount n s)) true) → readConflict n (pack s p)) (λ (p : Path Bool (natLe 2 (gsetCount n s)) false) → flagIf (natLe 1 (gsetCount n s)) (readAt n (gsetPick n s)) (readEmpty n)) (natLe 2 (gsetCount n s)) refl
+
+mvregRead : (n : ℕ) → (r : ℕ) → (s : MVReg n r) → Read n
+mvregRead n r s = gsetRead n (λ (x : Fin n) → mvregHas n r s x)
+
+-- The product join (PLAN 4.1 and J3): a state is the Sigma of its parts. The
+-- merge of a pair is the merge of each part. L1 to L3 of the pair follow from
+-- L1 to L3 of each part by pair paths. Nest pairs for three or more parts.
+pairMerge : (A : Type 0) → (B : Type 0) → (ma : A → A → A) → (mb : B → B → B) → (a : A × B) → (b : A × B) → A × B
+pairMerge A B ma mb a b = pack (ma (witness a) (witness b)) (mb (payload a) (payload b))
+
+pairIdem : (A : Type 0) → (B : Type 0) → (ma : A → A → A) → (mb : B → B → B) → (ia : (x : A) → Path A (ma x x) x) → (ib : (y : B) → Path B (mb y y) y) → (a : A × B) → Path (A × B) (pairMerge A B ma mb a a) a
+pairIdem A B ma mb ia ib a i = pack (ia (witness a) i) (ib (payload a) i)
+
+pairComm : (A : Type 0) → (B : Type 0) → (ma : A → A → A) → (mb : B → B → B) → (ca : (x : A) → (y : A) → Path A (ma x y) (ma y x)) → (cb : (x : B) → (y : B) → Path B (mb x y) (mb y x)) → (a : A × B) → (b : A × B) → Path (A × B) (pairMerge A B ma mb a b) (pairMerge A B ma mb b a)
+pairComm A B ma mb ca cb a b i = pack (ca (witness a) (witness b) i) (cb (payload a) (payload b) i)
+
+pairAssoc : (A : Type 0) → (B : Type 0) → (ma : A → A → A) → (mb : B → B → B) → (sa : (x : A) → (y : A) → (z : A) → Path A (ma (ma x y) z) (ma x (ma y z))) → (sb : (x : B) → (y : B) → (z : B) → Path B (mb (mb x y) z) (mb x (mb y z))) → (a : A × B) → (b : A × B) → (c : A × B) → Path (A × B) (pairMerge A B ma mb (pairMerge A B ma mb a b) c) (pairMerge A B ma mb a (pairMerge A B ma mb b c))
+pairAssoc A B ma mb sa sb a b c i = pack (sa (witness a) (witness b) (witness c) i) (sb (payload a) (payload b) (payload c) i)
