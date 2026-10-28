@@ -1,0 +1,12 @@
+-- The ℕ fold at an open successor natAdd y c (S2d, Q31 (a)): c steps after the fold at y. The laws are refl.
+predOneLaw : (y : ℕ) → Path ℕ (fold (λ (k : ℕ) → ℕ) (λ (k : ℕ) (ih : ℕ) → k) 0 (natAdd y 1)) y
+predOneLaw y = refl
+
+predTwoLaw : (y : ℕ) → Path ℕ (fold (λ (k : ℕ) → ℕ) (λ (k : ℕ) (ih : ℕ) → k) 0 (natAdd y 2)) (natAdd y 1)
+predTwoLaw y = refl
+
+addTwoLaw : (y : ℕ) → Path ℕ (fold (λ (a : ℕ) → natAdd a 3) 0 (natAdd y 2)) (natAdd (natAdd (fold (λ (a : ℕ) → natAdd a 3) 0 y) 3) 3)
+addTwoLaw y = refl
+
+predAtFive : ℕ
+predAtFive = fold (λ (k : ℕ) → ℕ) (λ (k : ℕ) (ih : ℕ) → k) 0 (natAdd 5 2)

@@ -61,6 +61,12 @@ done:
 
 int main(void) {
   static const struct { const char *label; const char *source; const char *code; } checks[] = {
+    {"natMax at nested open successors",
+     "value : (a : ℕ) → (b : ℕ) → Path ℕ (natMax (natAdd (natAdd a 1) 1) (natAdd (natAdd b 1) 1)) (natAdd (natAdd (natMax a b) 1) 1)\nvalue a b = refl\n", NULL},
+    {"natMax with a larger left offset",
+     "value : (a : ℕ) → (b : ℕ) → Path ℕ (natMax (natAdd (natAdd a 1) 1) (natAdd b 1)) (natAdd (natMax (natAdd a 1) b) 1)\nvalue a b = refl\n", NULL},
+    {"natMax with a larger right offset",
+     "value : (a : ℕ) → (b : ℕ) → Path ℕ (natMax (natAdd a 1) (natAdd (natAdd b 1) 1)) (natAdd (natMax a (natAdd b 1)) 1)\nvalue a b = refl\n", NULL},
     {"cell universe alias",
      "Small : Type 1\nSmall = Type 0\n"
      "data Box (A : Small) : Type where\n  box : (item : A) → Box A\n"
@@ -149,6 +155,11 @@ int main(void) {
      NULL}
   };
   static const struct { const char *label; const char *signature; const char *body; } rounds[] = {
+    {"dependent fold at open two", "(y : ℕ) → Path ℕ (natAdd y 2) (natAdd y 2)",
+     "λ y → fold (λ (k : ℕ) → Path ℕ k k) (λ (k : ℕ) (ih : Path ℕ k k) → refl) refl (natAdd y 2)"},
+    {"dependent fold at open three",
+     "(P : ℕ → Type 0) → (s : (k : ℕ) → P k → P (natAdd k 1)) → (z : P 0) → (y : ℕ) → P (natAdd y 3)",
+     "λ P s z y → fold P s z (natAdd y 3)"},
     {"integer zero", "ℤ", "pos 0"},
     {"integer positive", "ℤ", "pos 4"},
     {"integer positive boundary", "ℤ", "pos 18446744073709551615"},

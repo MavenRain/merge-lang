@@ -362,6 +362,35 @@ static const Value *step_at(Machine *m, const Value *step, const Value *k, const
   return f == NULL ? NULL : apply_value(m, f, acc);
 }
 
+/* 1 when V is the neutral natAdd y c with a numeral c >= 1. */
+static int nat_add_open(const Value *v) {
+  return v->kind == VAL_STUCK && v->op == OP_NAT_ADD && v->argc == 2u && v->args[1]->kind == VAL_NAT && v->args[1]->nat >= 1u;
+}
+
+static const Value *reduce_fold_nat(Machine *m, uint32_t inst, const Value *const *a, uint32_t n);
+
+/* The fold at a neutral natAdd y c (X): the fold at y, then c steps with
+   the counters y, natAdd y 1, ..., natAdd y (c - 1) (Q31 (a)). */
+static const Value *fold_nat_open(Machine *m, uint32_t inst, const Value *const *a, uint32_t n, const Value *x) {
+  const Value **b = arena_alloc(m->arena, (size_t)n * sizeof *b);
+  const Value *pair[2];
+  const Value *acc;
+  uint64_t k;
+  uint32_t i;
+  if (b == NULL)
+    return oom(m);
+  for (i = 0; i < n; i++)
+    b[i] = a[i];
+  b[2u + inst] = x->args[0];
+  acc = reduce_fold_nat(m, inst, b, n);
+  pair[0] = x->args[0];
+  for (k = 0; k < x->args[1]->nat && acc != NULL; k++) {
+    pair[1] = val_nat(m, k);
+    acc = !spend(m, 1) ? NULL : inst == 0u ? apply_value(m, a[0], acc) : step_at(m, a[1], k == 0u ? x->args[0] : val_op(m, VAL_STUCK, OP_NAT_ADD, 0, 0, pair, 2u), acc);
+  }
+  return acc;
+}
+
 /* fold step z n: step applied n times to z. With a motive (INST 1),
    fold M step z n gives the step the counter k first. */
 static const Value *reduce_fold_nat(Machine *m, uint32_t inst, const Value *const *a, uint32_t n) {
@@ -369,6 +398,8 @@ static const Value *reduce_fold_nat(Machine *m, uint32_t inst, const Value *cons
   const Value *acc = a[1u + inst];
   const Value *out;
   uint64_t k;
+  if (nat_add_open(x))
+    return fold_nat_open(m, inst, a, n, x);
   if (blocked(m, x, OP_FOLD_NAT, inst, 0, a, n, &out))
     return out;
   if (x->kind != VAL_NAT)
@@ -1690,9 +1721,19 @@ static int nat_args(Machine *m, Op op, const Value *const *a, uint32_t n, uint64
 }
 
 static const Value *nat_add(Machine *m, const Value *const *a, uint32_t n) {
+  const Value *pair[2];
   const Value *out;
   uint64_t x = 0;
   uint64_t y = 0;
+  /* Keep successive fold indices natAdd (natAdd y c) d convertible to
+     natAdd y (c + d), including the result of a dependent step. */
+  if (a[0]->kind == VAL_STUCK && a[0]->op == OP_NAT_ADD && a[0]->argc == 2u &&
+      a[0]->args[1]->kind == VAL_NAT && a[1]->kind == VAL_NAT &&
+      a[1]->nat <= UINT64_MAX - a[0]->args[1]->nat) {
+    pair[0] = a[0]->args[0];
+    pair[1] = val_nat(m, a[0]->args[1]->nat + a[1]->nat);
+    return pair[1] == NULL ? NULL : nat_add(m, pair, 2u);
+  }
   if (!nat_args(m, OP_NAT_ADD, a, n, &x, &y, &out))
     return out;
   return x + y < x ? overflow(m) : val_nat(m, x + y);
@@ -1741,29 +1782,39 @@ static int nat_zero(const Value *v) {
   return v->kind == VAL_NAT && v->nat == 0u;
 }
 
-/* 1 when V is the neutral successor natAdd x 1. */
-static int nat_succ(const Value *v) {
-  return v->kind == VAL_STUCK && v->op == OP_NAT_ADD && v->argc == 2u && v->args[1]->kind == VAL_NAT && v->args[1]->nat == 1u;
+/* Add an offset left after peeling common successors. */
+static const Value *nat_offset(Machine *m, const Value *v, uint64_t offset) {
+  const Value *pair[2];
+  if (offset == 0u)
+    return v;
+  pair[0] = v;
+  pair[1] = val_nat(m, offset);
+  return pair[1] == NULL ? NULL : nat_add(m, pair, 2u);
 }
 
 /* natMax a b. With a neutral argument, natMax a 0 is a, natMax 0 b is b
-   and natMax (natAdd a 1) (natAdd b 1) is natAdd (natMax a b) 1. Two
-   numbers give the larger. */
+   and common literal successor offsets move outside natMax. Two numbers
+   give the larger. */
 static const Value *nat_max(Machine *m, const Value *const *a, uint32_t n) {
   const Value *pair[2];
   const Value *out;
   uint64_t x = 0;
   uint64_t y = 0;
+  uint64_t common;
   if (nat_zero(a[1]) && scrut_of(a[0]) == SCRUT_NEUTRAL)
     return a[0];
   if (nat_zero(a[0]) && scrut_of(a[1]) == SCRUT_NEUTRAL)
     return a[1];
-  if (nat_succ(a[0]) && nat_succ(a[1])) {
-    pair[0] = a[0]->args[0];
-    pair[1] = a[1]->args[0];
+  if (nat_add_open(a[0]) && nat_add_open(a[1])) {
+    x = a[0]->args[1]->nat;
+    y = a[1]->args[1]->nat;
+    common = x < y ? x : y;
+    pair[0] = nat_offset(m, a[0]->args[0], x - common);
+    pair[1] = nat_offset(m, a[1]->args[0], y - common);
+    if (pair[0] == NULL || pair[1] == NULL)
+      return NULL;
     pair[0] = nat_max(m, pair, 2u);
-    pair[1] = a[0]->args[1];
-    return pair[0] == NULL ? NULL : nat_add(m, pair, 2u);
+    return pair[0] == NULL ? NULL : nat_offset(m, pair[0], common);
   }
   if (!nat_args(m, OP_NAT_MAX, a, n, &x, &y, &out))
     return out;

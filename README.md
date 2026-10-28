@@ -10,7 +10,7 @@ resource allocation rule. The host is TinyCC. The planned targets are a
 Wasm merge engine, a deterministic replica simulator (`langc sim`) and a
 JSON coordination report.
 
-## Status (S2c)
+## Status (S2d)
 
 This repository is the tcc-wasm kit seed of lang-template, the design, the
 plan, slice S1 (the port of the evolve-lang 1f87a5a surface and cubical
@@ -18,11 +18,13 @@ kernel), slice S1b (induction in the kernel: `natMax`, a `fold` over ℕ
 with a motive, `elim` for Bool and `Option`, and `sumFin`), slice S2
 (the domain: `GSet`, `Counter`, `Escrow`, `MVReg`, `Read n`, the product
 join and the laws L1 to L4 as guest terms), slice S2b (ℤ, `natDiff`,
-`intLe` and the `stock` read of `Counter` and `Escrow`) and slice S2c
+`intLe` and the `stock` read of `Counter` and `Escrow`), slice S2c
 (path constructors of dimension 1 and 2, the `fold` over a higher
 inductive type, a bottom and a left unit law for each part, and `FMSet`
-as program data; `docs/STATUS.md`). `mergeAll` is slice S2d. There is no
-merge engine, no replica simulator and no coordination report yet.
+as program data) and slice S2d (the ℕ `fold` at an open successor
+`natAdd y c`, `isSet` for each part by a Hedberg port, and `mergeAll :
+FMSet S → S` as program data; `docs/STATUS.md`). There is no merge
+engine, no replica simulator and no coordination report yet.
 `make check` passes. `docs/PLAN.md` section 9 gives the slices.
 
 The compiler `langc` is a native program that tcc builds. It is not a Wasm

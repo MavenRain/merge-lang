@@ -7,20 +7,22 @@ state that replicas change while they are disconnected and merge when they
 reconnect. Do not use it for text co-editing, server-only databases or
 Redis scripts.
 
-## Status (S2c)
+## Status (S2d)
 
-S1, S1b, S2, S2b and S2c are built: the port of the evolve-lang 1f87a5a
-surface and cubical kernel (S1), induction in the kernel (S1b: `natMax`,
-a `fold` over ℕ with a motive, `elim` for Bool and `Option`, and
-`sumFin`), the domain with the laws L1 to L4 as guest terms (S2:
+S1, S1b, S2, S2b, S2c and S2d are built: the port of the evolve-lang
+1f87a5a surface and cubical kernel (S1), induction in the kernel (S1b:
+`natMax`, a `fold` over ℕ with a motive, `elim` for Bool and `Option`,
+and `sumFin`), the domain with the laws L1 to L4 as guest terms (S2:
 `GSet`, `Counter`, `Escrow`, `MVReg`, `Read n`, the product join),
 ℤ with the `stock` read (S2b: `natDiff`, `intLe`, `counterStock`,
-`escrowStock`), and the kernel port of path constructors of dimension 2
+`escrowStock`), the kernel port of path constructors of dimension 2
 (S2c: the `fold` over a higher inductive type, a bottom and a left unit
 law for each part, `FMSet` and `fmsetMap` as program data in
-`test/eval/fmset.lang`; `docs/STATUS.md`).
-`langc check --json` and `langc fmt` work. `isSet` for each part and
-`mergeAll` (S2d),
+`test/eval/fmset.lang`), and `mergeAll` (S2d: the ℕ `fold` at an open
+successor `natAdd y c`, `isSet` for each part by a Hedberg port,
+`mergeAll : FMSet S → S` as program data in `test/eval/mergeall.lang`;
+`docs/STATUS.md`).
+`langc check --json` and `langc fmt` work. The `replicated` forms (S3),
 `langc sim`, the Wasm merge engine, the JSON
 coordination report, `langc mcp`, `SKILL.md` and the graded examples are
 planned (`docs/PLAN.md` section 7 and section 9). Do not cite them as built.

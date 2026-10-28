@@ -1,13 +1,60 @@
 # merge-lang status
 
-The build implements slices S1, S1b, S2, S2b and S2c of `docs/PLAN.md`
-section 9: the port of the evolve-lang 1f87a5a surface and cubical kernel
-(S1), induction in the kernel (S1b), the merge-lang domain with the laws
-L1 to L4 as guest terms (S2), ℤ with the `stock` read (S2b), and path
-constructors of dimension 2 with the `fold` over a higher inductive type
-(S2c). It does
-not complete M0. There is no merge engine, no replica simulator and no
+The build implements slices S1, S1b, S2, S2b, S2c and S2d of
+`docs/PLAN.md` section 9: the port of the evolve-lang 1f87a5a surface and
+cubical kernel (S1), induction in the kernel (S1b), the merge-lang domain
+with the laws L1 to L4 as guest terms (S2), ℤ with the `stock` read
+(S2b), path constructors of dimension 2 with the `fold` over a higher
+inductive type (S2c), and `isSet` for each part with `mergeAll` on the
+program side (S2d). It does not complete M0. There is no merge engine, no replica simulator and no
 coordination report yet.
+
+## S2d (2026-10-28)
+
+- Scope (`docs/PLAN.md` section 9, the S2d row; Q29 (a), Q30 (b), Q31
+  (a)): `isSet` for each part and `mergeAll : FMSet S → S` on the
+  program side.
+- Kernel (Q31 (a)): one hunk in `src/front/eval.c` before
+  `reduce_fold_nat`. The ℕ `fold` at an open `natAdd y c` (a numeral
+  `c >= 1`) is the `fold` at `y`, then `c` steps with the counters `y`,
+  `natAdd y 1`, ..., `natAdd y (c - 1)`. There is no `check.c` change:
+  conversion compares evaluated values.
+- `test/eval/mergeall.lang`: `isSet` for each part (`GSet`, `Counter`,
+  `Escrow`, `MVReg`, the product) by a Hedberg port with no empty type.
+  `collSet` uses one `hcomp` with 4 faces. The `absurd` terms use
+  `transp` along a large `fold` or an `elim` into `Type 0`. `mergeAll`
+  takes the bottom, the `merge`, its unit, associativity and
+  commutativity laws, and `isSet` of the part. 5 evals: `allGs` `2`,
+  `allCt` `12`, `allEs` `15`, `allMv` `2`, `allGc` `pack 2 12`.
+- `test/eval/fold-open.lang`: the laws `predOneLaw` (c = 1),
+  `predTwoLaw` (c = 2) and `addTwoLaw` (no motive, c = 2) are `refl`.
+  One eval: `predAtFive` `6`.
+- Gate: `make check` EXIT 0. Examples 13; parse refusals 11; check
+  refusals 59; evals 152; ir 13 lowered; wasm 16; differential 1230
+  cases, 0 mismatches; fmt 119 canonical, 6 non-canonical pairs; json 26
+  fixtures, diagnostics 38 codes (24 with a fixture, 14 with no fixture);
+  gate 0 failures; review, domain and diagnostic edit regressions passed;
+  cubical 43 checks, 36 round trips.
+- Count changes from S2c: evals +6; fmt +2 canonical. The other counts
+  are the same.
+- Mutants (all KILLED): M1 the `mcomm` case of `mergeAll` as `cm h g`
+  (`TYPE_MISMATCH` at `mergeAll`, 5 failures); M2a the first counter
+  `natAdd y 0` (`TYPE_ENDPOINT` at `fN`, 6 failures); M2b each counter
+  `y` (`TYPE_REFL` at `predTwoLaw`, 1 failure); M2c one step short
+  (`TYPE_MISMATCH` at `absurdZS`, 6 failures).
+- Drift: `src/front/eval.c` is shared with the tcc kits. The open
+  successor rule is a merge-lang change.
+
+### Review corrections
+
+The dependent fold at `natAdd y 2` normalized a proof to a path with
+endpoint `natAdd (natAdd y 1) 1`, which did not match the declared
+endpoint `natAdd y 2`. The kernel now combines adjacent literal offsets
+in `natAdd` when their sum fits the numeral range. `natMax` peels common literal
+offsets so its existing successor equations remain convertible.
+Two dependent fold round trips and three `natMax` successor checks in
+`test/cubical.c` cover the fix. The review gate passes with 46 cubical
+checks and 38 round trips; the other S2d counts above are unchanged.
 
 ## S2c (2026-10-28)
 
@@ -235,12 +282,16 @@ coordination report yet.
 - S2c: the `fold` over a higher inductive type (a 1-cell case reduces, a
   2-cell case stays stuck, O52), a bottom and a left unit law for each
   part, and `FMSet` with `fmsetMap` as program data (Q30 (b)).
+- S2d: the ℕ `fold` also steps at an open successor `natAdd y c` (a
+  numeral `c >= 1`, Q31 (a)); `isSet` for each part by a Hedberg port and
+  `mergeAll : FMSet S → S` as program data in `test/eval/mergeall.lang`
+  (Q29 (a), Q30 (b)).
 
 ## Remaining M0 work
 
-1. S2d: `isSet` for each part (a Hedberg port) and `mergeAll : FMSet S →
-   S` on the program side (Q29 (a), Q30 (b)). It needs the USER S2c
-   commit.
+1. S3: the forms `replicas`, `atoms`, `replicated`, `state`, `op`,
+   `invariant` and `allocate` (`docs/PLAN.md` section 9, the S3 row). It
+   needs the USER S2d commit.
 2. The later slices of `docs/PLAN.md` section 9. Each needs the slice
    before it.
 
@@ -254,8 +305,9 @@ coordination report yet.
   `FAMILY_BASE`. A higher inductive type is program data with a type
   argument.
 - A `fold` at a 2-cell, or at a cell with a path field, stays stuck
-  (O52). A `fold` into a part over a type with a 2-cell needs `isSet` of
-  the part (S2d).
+  (O52).
+- The ℕ `fold` steps at a numeral and at an open `natAdd y c` with a
+  numeral `c >= 1` (Q31 (a)). At a different open ℕ, it stays stuck.
 - `sumFin` at an open `n` is stuck: `langc ir` refuses it with
   `REFUSE_RUNTIME_PATH`.
 - The kit names `List`, `nil` and `cons` are dropped. Use a vector
