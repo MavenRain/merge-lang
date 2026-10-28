@@ -2136,6 +2136,7 @@ typedef struct {
   size_t cap;
   size_t len;
   int full;
+  int display_ints;
   const char *const *names;
   uint32_t name_count;
   const char *extra[PRINT_NAMES_MAX];
@@ -2457,6 +2458,39 @@ static void print_other(Printer *p, const Value *v, int atom) {
     put(p, ")");
 }
 
+/* The domain ℤ (S2b): the constructor `name` of the family ℤ with a numeral
+   field. Only the domain file declares data (R2), so the family name is a key
+   that a program cannot take. */
+static int int_ctor(const Machine *m, const Value *v, const char *name) {
+  const CtorInfo *c;
+  if (v == NULL || v->kind != VAL_OP || v->op != OP_CTOR || v->argc != 1u || v->inst >= m->ctor_count)
+    return 0;
+  c = &m->ctors[v->inst];
+  return c->family < m->family_count && strcmp(m->families[c->family].name, "\xE2\x84\xA4") == 0 && strcmp(c->name, name) == 0 && v->args[0] != NULL && v->args[0]->kind == VAL_NAT;
+}
+
+/* A ℤ value prints as a signed numeral: pos k as k and negsuc k as -(k + 1).
+   A negative numeral is in parentheses as an argument. */
+static int print_int(Printer *p, const Value *v, int atom) {
+  char num[32];
+  if (!p->display_ints)
+    return 0;
+  int neg = int_ctor(p->m, v, "negsuc");
+  if (!neg && !int_ctor(p->m, v, "pos"))
+    return 0;
+  snprintf(num, sizeof num, "%llu", (unsigned long long)v->args[0]->nat);
+  if (neg && v->args[0]->nat < UINT64_MAX)
+    snprintf(num, sizeof num, "-%llu", (unsigned long long)v->args[0]->nat + 1ull);
+  if (neg && v->args[0]->nat == UINT64_MAX)
+    snprintf(num, sizeof num, "-18446744073709551616");
+  if (neg && atom)
+    put(p, "(");
+  put(p, num);
+  if (neg && atom)
+    put(p, ")");
+  return 1;
+}
+
 /* An operation prints as its name and its arguments. The last argument is
    printed in the loop, so a long list does not nest. */
 static void print_value(Printer *p, const Value *v, int atom) {
@@ -2468,7 +2502,8 @@ static void print_value(Printer *p, const Value *v, int atom) {
     return;
   }
   p->depth++;
-  while (is_chain(v) && !path_form(v) && !p->full) {
+  while (is_chain(v) && !path_form(v) && !p->full
+      && !(p->display_ints && (int_ctor(p->m, v, "pos") || int_ctor(p->m, v, "negsuc")))) {
     if (atom) {
       put(p, "(");
       open++;
@@ -2482,13 +2517,14 @@ static void print_value(Printer *p, const Value *v, int atom) {
     v = v->args[v->argc - 1u];
     atom = 1;
   }
-  print_other(p, v, atom);
+  if (!print_int(p, v, atom))
+    print_other(p, v, atom);
   for (i = 0; i < open; i++)
     put(p, ")");
   p->depth--;
 }
 
-int value_print(Machine *m, const char *const *names, uint32_t name_count, const Value *v, char *buf, size_t cap) {
+static int print_normal(Machine *m, const char *const *names, uint32_t name_count, const Value *v, char *buf, size_t cap, int display_ints) {
   Printer p;
   if (cap == 0)
     return 0;
@@ -2501,6 +2537,33 @@ int value_print(Machine *m, const char *const *names, uint32_t name_count, const
   p.cap = cap;
   p.names = names;
   p.name_count = name_count;
+  p.display_ints = display_ints;
   print_value(&p, v, 0);
   return !p.full && !m->diag->set;
+}
+
+int value_print(Machine *m, const char *const *names, uint32_t name_count, const Value *v, char *buf, size_t cap) {
+  return print_normal(m, names, name_count, v, buf, cap, 0);
+}
+
+/* Signed numerals are display text, not source syntax. Keep source syntax
+   for functions, types and neutral terms, including those inside data. */
+static int display_data(const Value *v, unsigned depth) {
+  uint32_t i;
+  if (v == NULL || depth >= PRINT_DEPTH_MAX)
+    return 0;
+  if (v->kind == VAL_NAT || v->kind == VAL_TRAP)
+    return 1;
+  if (v->kind != VAL_OP || (v->op != OP_UNIT_VAL && v->op != OP_TRUE
+      && v->op != OP_FALSE && v->op != OP_NONE && v->op != OP_SOME
+      && v->op != OP_PACK && v->op != OP_CTOR))
+    return 0;
+  for (i = 0; i < v->argc; i++)
+    if (!display_data(v->args[i], depth + 1u))
+      return 0;
+  return 1;
+}
+
+int value_display(Machine *m, const Value *v, char *buf, size_t cap) {
+  return print_normal(m, NULL, 0, v, buf, cap, display_data(v, 0));
 }

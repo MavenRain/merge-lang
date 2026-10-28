@@ -7,14 +7,16 @@ state that replicas change while they are disconnected and merge when they
 reconnect. Do not use it for text co-editing, server-only databases or
 Redis scripts.
 
-## Status (S2)
+## Status (S2b)
 
-S1, S1b and S2 are built: the port of the evolve-lang 1f87a5a surface and
-cubical kernel (S1), induction in the kernel (S1b: `natMax`, a `fold`
-over ℕ with a motive, `elim` for Bool and `Option`, and `sumFin`), and
-the domain with the laws L1 to L4 as guest terms (S2: `GSet`, `Counter`,
-`Escrow`, `MVReg`, `Read n`, the product join; `docs/STATUS.md`).
-`langc check --json` and `langc fmt` work. The `stock` read in ℤ,
+S1, S1b, S2 and S2b are built: the port of the evolve-lang 1f87a5a
+surface and cubical kernel (S1), induction in the kernel (S1b: `natMax`,
+a `fold` over ℕ with a motive, `elim` for Bool and `Option`, and
+`sumFin`), the domain with the laws L1 to L4 as guest terms (S2:
+`GSet`, `Counter`, `Escrow`, `MVReg`, `Read n`, the product join), and
+ℤ with the `stock` read (S2b: `natDiff`, `intLe`, `counterStock`,
+`escrowStock`; `docs/STATUS.md`).
+`langc check --json` and `langc fmt` work. `FMSet` and `mergeAll` (S2c),
 `langc sim`, the Wasm merge engine, the JSON
 coordination report, `langc mcp`, `SKILL.md` and the graded examples are
 planned (`docs/PLAN.md` section 7 and section 9). Do not cite them as built.

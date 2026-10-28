@@ -27,7 +27,7 @@ static int check_case(const char *label, const char *source, const char *want) {
   return ok;
 }
 
-static int round_trip(const char *label, const char *signature, const char *body) {
+static int round_trip(const char *label, const char *signature, const char *body, int display) {
   Arena arena;
   Diag diag;
   Machine machine;
@@ -40,7 +40,10 @@ static int round_trip(const char *label, const char *signature, const char *body
   int len = snprintf(source, sizeof source, "value : %s\nvalue = %s\n", signature, body);
   if (len < 0 || (size_t)len >= sizeof source || !load(&arena, source, &machine, &diag)) goto done;
   const Value *v = def_value(&machine, machine.def_count - 1u);
-  if (v == NULL || !value_print(&machine, NULL, 0, v, normal, sizeof normal)) goto done;
+  if (v == NULL) goto done;
+  if (display) {
+    if (!value_display(&machine, v, normal, sizeof normal)) goto done;
+  } else if (!value_print(&machine, NULL, 0, v, normal, sizeof normal)) goto done;
   len = snprintf(again, sizeof again, "%s\nagain : %s\nagain = %s\n", source, signature, normal);
   if (len < 0 || (size_t)len >= sizeof again) goto done;
   diag_init(&diag);
@@ -146,6 +149,14 @@ int main(void) {
      NULL}
   };
   static const struct { const char *label; const char *signature; const char *body; } rounds[] = {
+    {"integer zero", "ℤ", "pos 0"},
+    {"integer positive", "ℤ", "pos 4"},
+    {"integer positive boundary", "ℤ", "pos 18446744073709551615"},
+    {"integer negative", "ℤ", "negsuc 0"},
+    {"integer negative boundary", "ℤ", "negsuc 18446744073709551615"},
+    {"integer option", "Option ℤ", "some (negsuc 2)"},
+    {"integer function", "Unit → ℤ", "λ u → negsuc 0"},
+    {"integer path type", "Type 0", "Path ℤ (pos 0) (pos 0)"},
     {"hcomp", "(p : Path ℕ 0 0) → (i : I) → ℕ", "λ p i → hcomp (λ j → [ i ↦ p j ]) 0"},
     {"Path type", "Type 0", "Path ℕ 0 0"},
     {"varying PathP type", "(e : Path (Type 0) ℕ ℕ) → Type 0", "λ e → PathP (λ (i : I) → e i) 0 0"},
@@ -169,13 +180,24 @@ int main(void) {
     {"shadowed Sigma binder", "Type 0", "(n : ℕ) × (n : ℕ) × Path ℕ n n"},
     {"annotated lambda", "ℕ → ℕ", "λ (x : ℕ) → natAdd x 1"}
   };
+  static const struct { const char *label; const char *signature; const char *body; } displays[] = {
+    {"display positive function", "Unit → ℤ", "λ u → pos 4"},
+    {"display negative function", "Unit → ℤ", "λ u → negsuc 0"},
+    {"display negative boundary function", "Unit → ℤ", "λ u → negsuc 18446744073709551615"},
+    {"display integer path type", "Type 0", "Path ℤ (pos 0) (pos 0)"},
+    {"display function inside data", "ℤ × (Unit → ℤ)", "pack (pos 4) (λ u → negsuc 0)"},
+    {"display neutral integer comparison", "ℤ → Bool", "λ x → intLe x (negsuc 0)"}
+  };
   int ok = 1;
   size_t i;
   for (i = 0; i < sizeof checks / sizeof checks[0]; i++)
     ok &= check_case(checks[i].label, checks[i].source, checks[i].code);
   for (i = 0; i < sizeof rounds / sizeof rounds[0]; i++)
-    ok &= round_trip(rounds[i].label, rounds[i].signature, rounds[i].body);
+    ok &= round_trip(rounds[i].label, rounds[i].signature, rounds[i].body, 0);
+  for (i = 0; i < sizeof displays / sizeof displays[0]; i++)
+    ok &= round_trip(displays[i].label, displays[i].signature, displays[i].body, 1);
   if (ok) printf("cubical regressions: %zu checks, %zu round trips passed\n",
-                 sizeof checks / sizeof checks[0], sizeof rounds / sizeof rounds[0]);
+                 sizeof checks / sizeof checks[0],
+                 sizeof rounds / sizeof rounds[0] + sizeof displays / sizeof displays[0]);
   return ok ? 0 : 1;
 }

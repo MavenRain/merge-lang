@@ -6,7 +6,7 @@
 
 typedef enum {
   TOK_EOF,
-  TOK_IDENT,    /* `ℕ` is the name Nat */
+  TOK_IDENT,    /* `ℕ` is the name Nat; `ℤ` is a name */
   TOK_NAT,
   TOK_LPAREN,
   TOK_RPAREN,

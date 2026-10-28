@@ -1,10 +1,64 @@
 # merge-lang status
 
-The build implements slices S1, S1b and S2 of `docs/PLAN.md` section 9:
-the port of the evolve-lang 1f87a5a surface and cubical kernel (S1),
-induction in the kernel (S1b), and the merge-lang domain with the laws
-L1 to L4 as guest terms (S2). It does not complete M0. There is no merge
-engine, no replica simulator and no coordination report yet.
+The build implements slices S1, S1b, S2 and S2b of `docs/PLAN.md`
+section 9: the port of the evolve-lang 1f87a5a surface and cubical kernel
+(S1), induction in the kernel (S1b), the merge-lang domain with the laws
+L1 to L4 as guest terms (S2), and ℤ with the `stock` read (S2b). It does
+not complete M0. There is no merge engine, no replica simulator and no
+coordination report yet.
+
+## S2b (2026-10-27)
+
+- Scope (`docs/PLAN.md` section 9, the S2b row; Q13 (b), Q22 (a)): ℤ and
+  the `stock` read. No kernel edit.
+- Token: the lexer reads `ℤ` (U+2124) as a name token, the same as `ℕ`
+  (one line in the `SYMBOLS` table of `src/front/lexer.c`). Parser, fmt,
+  check and eval do not change for the token.
+- `LEX_CHAR`: `test/parse/bad-unicode.lang` uses `ℚ` (U+211A), a
+  neighbour of `ℕ` and `ℤ`, and gets `LEX_CHAR` (`unexpected byte 0xe2`).
+  Before S2b, no `.lang` fixture had a non-ASCII `LEX_CHAR`.
+- Domain (`domain/domain.lang`): base data `ℤ` with `pos : ℕ → ℤ` and
+  `negsuc : ℕ → ℤ` (`negsuc k` is `-(k+1)`); `natDiff a b` is `pos (a -
+  b)` if `b ≤ a`, else `negsuc (b - (a+1))`; `intLe` by the
+  non-dependent `fold` on each argument; `counterStock r s0 s` =
+  `natDiff (s0 + sumFin p) (sumFin d)`; `escrowStock r split s` =
+  `natDiff (Σ split + Σ_i R i i) (Σ_i U i)`. The `Escrow` state has no
+  `s0`, so the initial split is an argument.
+- Print rule (`src/front/eval.c`, `int_ctor` and `print_int`): a value
+  `pos k` of the domain data `ℤ` prints as `k`; `negsuc k` prints as
+  `-(k+1)` (`-18446744073709551616` at `k` = 2^64 - 1). A negative value
+  as an argument gets parentheses (`some (-3)`). Only `domain/domain.lang`
+  can declare base data (R2), so a program cannot get this rule for its
+  own data.
+- Tests: `test/eval/int.lang` (18 evals): `natDiff` at 5 2, 2 2 and 2 5;
+  `negsuc 0`, `pos 4`, `negsuc` at 2^64 - 1, `some (-3)`; `intLe` on the
+  four constructor pairs (7 evals); `counterStock` after two concurrent
+  `counterDec` of 1 at `s0` = 1 (merged: -1, the negative stock) and
+  after a restock (2); `escrowStock` after a restock and a dec (8) and
+  after a transfer (6).
+- Gate: `make check` EXIT 0. Examples 13; parse refusals 11; check
+  refusals 59; evals 133; ir 13 lowered; wasm 16; differential 1230
+  cases, 0 mismatches; fmt 114 canonical, 6 non-canonical pairs; json 26
+  fixtures, diagnostics 38 codes (24 with a fixture, 14 with no fixture);
+  gate 0 failures; review, domain and diagnostic edit regressions passed;
+  cubical 43 checks, 22 round trips.
+- Count changes from S2: parse refusals +1 (`bad-unicode.lang`); evals
+  +18 (`int.lang`); fmt +1 canonical. The other counts are the same.
+- Mutants KILLED (3): `natDiff` with `pos` and `negsuc` swapped (14
+  eval failures); `intLe` at `negsuc`/`negsuc` with `natLe m n` (2
+  failures); the print rule without `+ 1` (4 failures).
+- Drift: `src/front/eval.c` is shared with the tcc kits. `int_ctor` and
+  `print_int` are a merge-lang change. The kit copies do not have them.
+
+- Review (2026-10-28): signed numerals are display text, not source syntax.
+  `value_print` keeps the `pos` and `negsuc` constructors in source and
+  diagnostics. `value_display` preserves the signed CLI display for closed
+  constructor data, and keeps source syntax for functions, types and neutral
+  terms, including those nested in data. Eight source round trips and six
+  display round trips in `test/cubical.c` cover both signs, zero, the numeric
+  boundaries, an `Option`, functions, a path type and a neutral comparison.
+  The review gate passes with 43 checks and 36 round trips; other counts
+  above are unchanged.
 
 ## S2 (2026-10-27)
 
@@ -130,11 +184,14 @@ engine, no replica simulator and no coordination report yet.
   over ℕ with a motive, `elim` for Bool and `Option`, and `sumFin`.
 - The domain (S2): `GSet`, `Counter`, `Escrow`, `MVReg`, `Read n`, the
   product join and the laws L1 to L4 as guest terms.
+- ℤ (S2b): the token `ℤ`, base data `ℤ` (`pos`, `negsuc`), `natDiff`,
+  `intLe`, `counterStock`, `escrowStock`, and the print rule for `ℤ`.
 
 ## Remaining M0 work
 
-1. S2b: ℤ (`pos`, `negsuc`, `natDiff`, `intLe`) and the `stock` read of
-   `Counter` and `Escrow`. It needs the USER S2 commit.
+1. S2c: path constructors of dimension 2 in the kernel (the quorum-lang
+   port), the library `FMSet` in generator form and `mergeAll`. It needs
+   the USER S2b commit.
 2. The later slices of `docs/PLAN.md` section 9. Each needs the slice
    before it.
 
@@ -150,7 +207,9 @@ engine, no replica simulator and no coordination report yet.
   `Fin n → A`.
 - A constructor field is not dependent: `readConflict` takes one Sigma
   field (the set and the proof).
-- `nonneg` compares in ℕ. The signed `stock` read waits for ℤ (S2b).
+- `nonneg` compares in ℕ. The signed `stock` read gives ℤ (S2b).
+- ℤ has only `natDiff` and `intLe`: there is no addition, subtraction or
+  negation on ℤ. The print rule applies only to the domain data `ℤ`.
 
 ## Internal boundaries
 

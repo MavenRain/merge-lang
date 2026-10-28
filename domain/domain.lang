@@ -97,8 +97,22 @@ gsetComm n a b i = λ (x : Fin n) → orComm (a x) (b x) i
 gsetAssoc : (n : ℕ) → (a : GSet n) → (b : GSet n) → (c : GSet n) → Path (GSet n) (gsetMerge n (gsetMerge n a b) c) (gsetMerge n a (gsetMerge n b c))
 gsetAssoc n a b c i = λ (x : Fin n) → orAssoc (a x) (b x) (c x) i
 
+-- ℤ (S2b, Q13 (b)): pos k is k and negsuc k is -(k + 1). natDiff a b is a - b
+-- in ℤ and intLe is the order of ℤ. The stock reads of Counter and Escrow
+-- give a ℤ value.
+data ℤ : Type where
+  pos : (posNat : ℕ) → ℤ
+  negsuc : (negsucNat : ℕ) → ℤ
+
+natDiff : (a : ℕ) → (b : ℕ) → ℤ
+natDiff a b = flagIf (natLe b a) (pos (natSub a b)) (negsuc (natSub b (natAdd a 1)))
+
+intLe : (x : ℤ) → (y : ℤ) → Bool
+intLe x y = fold (λ (m : ℕ) → fold (λ (n : ℕ) → natLe m n) (λ (n : ℕ) → false) y) (λ (m : ℕ) → fold (λ (n : ℕ) → true) (λ (n : ℕ) → natLe n m) y) x
+
 -- Counter r: the increments p and the decrements d of r replicas. The start
--- stock s0 is a parameter of the operations, not a part of the state.
+-- stock s0 is a parameter of the operations and of counterStock, not a part
+-- of the state.
 Counter : ℕ → Type 0
 Counter r = (Fin r → ℕ) × (Fin r → ℕ)
 
@@ -188,6 +202,11 @@ counterDec r s0 i k s = flagIf (counterCan r s0 k s) (some (counterMerge r s (pa
 counterDecL4 : (r : ℕ) → (i : Fin r) → (k : ℕ) → (s : Counter r) → Path (Counter r) (counterMerge r s (counterMerge r s (pack (witness s) (vecBump r (payload s) i k)))) (counterMerge r s (pack (witness s) (vecBump r (payload s) i k)))
 counterDecL4 r i k s = counterL4 r s (pack (witness s) (vecBump r (payload s) i k))
 
+-- The Counter stock in ℤ (S2b): s0 + Σ p - Σ d. Two concurrent decs can each
+-- pass counterCan and the merge then has a negative stock.
+counterStock : (r : ℕ) → (s0 : ℕ) → (s : Counter r) → ℤ
+counterStock r s0 s = natDiff (natAdd s0 (sumFin r (witness s))) (sumFin r (payload s))
+
 -- Escrow r: in and out are the rights that i got from and gave to the other
 -- replicas. dec, transfer j and restock add k to U i, R i j and R i i. dec
 -- and transfer need out + U i + k at or below split i + R i i + in.
@@ -221,6 +240,11 @@ escrowTransferL4 r i j k s = escrowL4 r s (pack (matBump r r (witness s) i j k) 
 
 escrowRestockL4 : (r : ℕ) → (i : Fin r) → (k : ℕ) → (s : Escrow r) → Path (Escrow r) (escrowMerge r s (escrowRestock r i k s)) (escrowRestock r i k s)
 escrowRestockL4 r i k s = escrowL4 r s (pack (matBump r r (witness s) i i k) (payload s))
+
+-- The Escrow stock in ℤ (S2b): s0 + Σ_i R i i - Σ_i U i, with s0 = Σ split.
+-- A transfer moves rights between replicas and does not change the stock.
+escrowStock : (r : ℕ) → (split : Fin r → ℕ) → (s : Escrow r) → ℤ
+escrowStock r split s = natDiff (natAdd (sumFin r split) (sumFin r (λ (j : Fin r) → witness s j j))) (sumFin r (payload s))
 
 -- MVReg n r: write i x takes the dot (i, ctx i + 1), sets x present (even) and
 -- the other values absent (odd) at that dot, and sets absent each dot of the

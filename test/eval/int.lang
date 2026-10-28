@@ -1,0 +1,54 @@
+-- The S2b ℤ ops: natDiff, intLe, the ℤ print rule and the stock reads of Counter and Escrow at numerals.
+zDiffPos : ℤ
+zDiffPos = natDiff 5 2
+
+zDiffZero : ℤ
+zDiffZero = natDiff 2 2
+
+zDiffNeg : ℤ
+zDiffNeg = natDiff 2 5
+
+zNegOne : ℤ
+zNegOne = negsuc 0
+
+zPos : ℤ
+zPos = pos 4
+
+zNegMax : ℤ
+zNegMax = negsuc 18446744073709551615
+
+zSome : Option ℤ
+zSome = some (natDiff 2 5)
+
+zLe : (a : ℕ) → (b : ℕ) → Bool
+zLe a b = intLe (natDiff a 3) (natDiff b 3)
+
+zCt0 : Counter 2
+zCt0 = pack (λ (j : Fin 2) → 0) (λ (j : Fin 2) → 0)
+
+zCtA : Counter 2
+zCtA = elim (λ (o : Option (Counter 2)) → Counter 2) zCt0 (λ (c : Counter 2) → c) (counterDec 2 1 (pack 0 refl) 1 zCt0)
+
+zCtB : Counter 2
+zCtB = elim (λ (o : Option (Counter 2)) → Counter 2) zCt0 (λ (c : Counter 2) → c) (counterDec 2 1 (pack 1 refl) 1 zCt0)
+
+zCtNeg : ℤ
+zCtNeg = counterStock 2 1 (counterMerge 2 zCtA zCtB)
+
+zCtUp : ℤ
+zCtUp = counterStock 2 1 (counterRestock 2 (pack 1 refl) 3 (counterMerge 2 zCtA zCtB))
+
+zSplit : Fin 2 → ℕ
+zSplit = λ (j : Fin 2) → 3
+
+zEs0 : Escrow 2
+zEs0 = pack (λ (x : Fin 2) (y : Fin 2) → 0) (λ (j : Fin 2) → 0)
+
+zEsUp : Escrow 2
+zEsUp = escrowRestock 2 (pack 0 refl) 4 zEs0
+
+zEsDec : ℤ
+zEsDec = escrowStock 2 zSplit (elim (λ (o : Option (Escrow 2)) → Escrow 2) zEs0 (λ (e : Escrow 2) → e) (escrowDec 2 zSplit (pack 1 refl) 2 zEsUp))
+
+zEsMove : ℤ
+zEsMove = escrowStock 2 zSplit (elim (λ (o : Option (Escrow 2)) → Escrow 2) zEs0 (λ (e : Escrow 2) → e) (escrowTransfer 2 zSplit (pack 0 refl) (pack 1 refl) 2 zEs0))

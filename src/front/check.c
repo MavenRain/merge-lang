@@ -2924,7 +2924,7 @@ int eval_command(Machine *m, const char *name, char *const *args, int arg_count,
     buf = arena_alloc(m->arena, PRINT_MAX);
     if (buf == NULL)
       return diag_fail(m->diag, "OOM", name, "out of memory") + 1;
-    if (!value_print(m, NULL, 0, v, buf, PRINT_MAX)) {
+    if (!value_display(m, v, buf, PRINT_MAX)) {
       diag_fail(m->diag, "EVAL_PRINT", name, "the normal form exceeds the printer limits");
       return 1;
     }

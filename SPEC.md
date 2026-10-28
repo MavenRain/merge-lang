@@ -140,6 +140,12 @@ canonical symbols too. A normal form can expand an abbreviation, such as
 `Fin n` to its Sigma or `Path` to `PathP`. The printer can keep successive
 lambdas separate; `fmt` merges their binders.
 
+For closed constructor data, `langc eval` can display `pos k` as `k` and
+`negsuc k` as `-(k+1)`, including inside `some` and `pack`. These signed
+numerals are display text: source still uses the constructors. Functions,
+types, neutral terms and diagnostics keep the constructors so that their
+normal forms remain source terms.
+
 ### 2.4 Layout rule
 
 The surface has no keyword at the start of a definition, and an

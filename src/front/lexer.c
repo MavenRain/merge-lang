@@ -32,7 +32,8 @@ static const struct {
   {"Sigma", TOK_KW_SIGMA},
 };
 
-/* The UTF-8 symbols. `ℕ` is a name token; tok_core_text gives Nat. */
+/* The UTF-8 symbols. `ℕ` and `ℤ` are name tokens; tok_core_text gives Nat
+   for `ℕ`. `ℤ` is the name of the domain data ℤ. */
 static const struct {
   const char *bytes;
   TokKind kind;
@@ -44,6 +45,7 @@ static const struct {
   {"\xE2\x88\xA8", TOK_JOIN},
   {"\xE2\x86\xA6", TOK_MAPSTO},
   {"\xE2\x84\x95", TOK_IDENT},
+  {"\xE2\x84\xA4", TOK_IDENT},
 };
 
 #define NAT_SIGN "\xE2\x84\x95"

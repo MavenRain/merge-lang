@@ -1,3 +1,4 @@
+bad-unicode.lang LEX_CHAR
 bad-char.lang LEX_CHAR
 nat-range.lang LEX_NAT_RANGE
 string.lang LEX_CHAR
