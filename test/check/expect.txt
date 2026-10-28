@@ -35,7 +35,7 @@ cell-value-param.lang REFUSE_CELL is not a universe
 cell-field.lang REFUSE_CELL
 cell-two-gen.lang REFUSE_CELL
 cell-path-shape.lang REFUSE_CELL must have the type Path T s t
-cell-path-dim.lang REFUSE_CELL has dimension 2
+cell-path-dim3.lang REFUSE_CELL has dimension 3
 cell-path-end.lang REFUSE_CELL
 codata-no-obs.lang REFUSE_CELL has 0 observations
 codata-dup-field.lang REFUSE_NAME tail is already a field of this clause
@@ -51,7 +51,7 @@ codata-open-label.lang REFUSE_CELL the field pick must be the observation A
 codata-path-field.lang REFUSE_CELL the field loop must be the observation A
 codata-label-universe.lang REFUSE_CELL the label type of pick is in Type 1, above Type 0 of A
 codata-two-obs.lang REFUSE_CELL it has 2 observations
-hit-fold.lang DOMAIN_FAMILY
+hit-fold.lang TYPE_MISMATCH expected a term of type PathP
 natmax-neutral.lang TYPE_REFL
 nat-motive-domain.lang TYPE_MISMATCH
 nat-motive-sort.lang TYPE_MISMATCH the binder type ℕ differs from the expected type

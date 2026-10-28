@@ -1,0 +1,33 @@
+-- FMSet (S2c U2): fmsetMap at points and at a 1-cell; a read of the bottom of each part.
+data FMSet (A : Type 0) : Type where
+  msing : (fmElem : A) → FMSet A
+  mnil : FMSet A
+  munion : (fmLeft : FMSet A) → (fmRight : FMSet A) → FMSet A
+  munit : (fmUnitS : FMSet A) → Path (FMSet A) (munion A (mnil A) fmUnitS) fmUnitS
+  massoc : (fmAssocS : FMSet A) → (fmAssocT : FMSet A) → (fmAssocU : FMSet A) → Path (FMSet A) (munion A (munion A fmAssocS fmAssocT) fmAssocU) (munion A fmAssocS (munion A fmAssocT fmAssocU))
+  mcomm : (fmCommS : FMSet A) → (fmCommT : FMSet A) → Path (FMSet A) (munion A fmCommS fmCommT) (munion A fmCommT fmCommS)
+  trunc : (fmTruncS : FMSet A) → (fmTruncT : FMSet A) → (fmTruncP : Path (FMSet A) fmTruncS fmTruncT) → (fmTruncQ : Path (FMSet A) fmTruncS fmTruncT) → Path (Path (FMSet A) fmTruncS fmTruncT) fmTruncP fmTruncQ
+
+fmsetMap : (A : Type 0) → (B : Type 0) → (f : A → B) → (s : FMSet A) → FMSet B
+fmsetMap A B f s = fold (λ (e : A) → msing B (f e)) (mnil B) (λ (g : FMSet B) (h : FMSet B) → munion B g h) (λ (g : FMSet B) → munit B g) (λ (g : FMSet B) (h : FMSet B) (k : FMSet B) → massoc B g h k) (λ (g : FMSet B) (h : FMSet B) → mcomm B g h) (λ (g : FMSet B) (h : FMSet B) (p : Path (FMSet B) g h) (q : Path (FMSet B) g h) → trunc B g h p q) s
+
+mapNil : FMSet ℕ
+mapNil = fmsetMap ℕ ℕ (λ k → natAdd k 1) (mnil ℕ)
+
+mapTwo : FMSet ℕ
+mapTwo = fmsetMap ℕ ℕ (λ k → natAdd k 1) (munion ℕ (msing ℕ 1) (munion ℕ (msing ℕ 2) (mnil ℕ)))
+
+mapComm : Path (FMSet ℕ) (munion ℕ (msing ℕ 2) (msing ℕ 3)) (munion ℕ (msing ℕ 3) (msing ℕ 2))
+mapComm i = fmsetMap ℕ ℕ (λ k → natAdd k 1) (mcomm ℕ (msing ℕ 1) (msing ℕ 2) i)
+
+botGs : ℕ
+botGs = gsetCount 3 (gsetBot 3)
+
+botCt : ℤ
+botCt = counterStock 2 5 (counterBot 2)
+
+botEs : ℤ
+botEs = escrowStock 2 (λ j → 4) (escrowBot 2)
+
+botMv : Read 3
+botMv = mvregRead 3 2 (mvregBot 3 2)

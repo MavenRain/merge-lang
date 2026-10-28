@@ -1,0 +1,27 @@
+-- HIT fold (S2c U1): a point and a 1-cell reduce, a 2-cell is stuck (O52).
+data Circle (A : Type 0) : Type where
+  cbase : (a : A) → Circle A
+  cloop : (b : A) → Path (Circle A) (cbase A b) (cbase A b)
+
+data Sq (A : Type 0) : Type where
+  pt : (w : A) → Sq A
+  ln : (x : Sq A) → (y : Sq A) → Path (Sq A) x y
+  fc : (u : Sq A) → (v : Sq A) → (p : Path (Sq A) u v) → (q : Path (Sq A) u v) → Path (Path (Sq A) u v) p q
+
+circleBase : ℕ
+circleBase = fold (λ n → n) (λ k i → k) (cbase ℕ 3)
+
+circleLoop : Path ℕ 3 3
+circleLoop i = fold (λ n → n) (λ k j → k) (cloop ℕ 3 i)
+
+seven : (s : Sq ℕ) → Sq ℕ
+seven s = fold (λ n → pt ℕ 7) (λ g h → ln ℕ g h) (λ g h e f → fc ℕ g h e f) s
+
+sqPt : Sq ℕ
+sqPt = seven (pt ℕ 1)
+
+sqLn : Path (Sq ℕ) (pt ℕ 7) (pt ℕ 7)
+sqLn i = seven (ln ℕ (pt ℕ 1) (pt ℕ 2) i)
+
+sqFc : Path (Path (Sq ℕ) (pt ℕ 7) (pt ℕ 7)) (ln ℕ (pt ℕ 7) (pt ℕ 7)) (ln ℕ (pt ℕ 7) (pt ℕ 7))
+sqFc j i = seven (fc ℕ (pt ℕ 1) (pt ℕ 1) (ln ℕ (pt ℕ 1) (pt ℕ 1)) (ln ℕ (pt ℕ 1) (pt ℕ 1)) j i)

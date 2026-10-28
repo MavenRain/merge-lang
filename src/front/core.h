@@ -153,9 +153,9 @@ typedef struct {
   const FieldInfo *fields;
   uint32_t field_count;
   const Core *const *indices; /* result indices in the parameter context, plus fields for a telescope */
-  uint32_t depth;             /* 0: a point constructor; 1: a path constructor (S2 has dimension 1 only) */
+  uint32_t depth;             /* 0: a point constructor; 1 or 2: a path constructor */
   const Core *type;           /* a path constructor: its path type; NULL for a point constructor */
-  const Core *const *ends;    /* 2 * depth ends in the context of the params and all the fields */
+  const Core *const *ends;    /* 2 * depth ends in the context of the params and all the fields: a, b; or p, q, x, y */
 } CtorInfo;
 
 /* The R1 class of a family: a domain base type, a program cell monad (a

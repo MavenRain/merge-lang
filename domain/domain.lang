@@ -97,6 +97,14 @@ gsetComm n a b i = λ (x : Fin n) → orComm (a x) (b x) i
 gsetAssoc : (n : ℕ) → (a : GSet n) → (b : GSet n) → (c : GSet n) → Path (GSet n) (gsetMerge n (gsetMerge n a b) c) (gsetMerge n a (gsetMerge n b c))
 gsetAssoc n a b c i = λ (x : Fin n) → orAssoc (a x) (b x) (c x) i
 
+-- The bottom of a part is the state with no update (S2c). The merge of the
+-- bottom and a state s is s: this is the left unit law of the part.
+gsetBot : (n : ℕ) → GSet n
+gsetBot n = λ (x : Fin n) → false
+
+gsetUnit : (n : ℕ) → (a : GSet n) → Path (GSet n) (gsetMerge n (gsetBot n) a) a
+gsetUnit n a = refl
+
 -- ℤ (S2b, Q13 (b)): pos k is k and negsuc k is -(k + 1). natDiff a b is a - b
 -- in ℤ and intLe is the order of ℤ. The stock reads of Counter and Escrow
 -- give a ℤ value.
@@ -128,6 +136,12 @@ counterComm r a b i = pack (vecMaxComm r (witness a) (witness b) i) (vecMaxComm 
 counterAssoc : (r : ℕ) → (a : Counter r) → (b : Counter r) → (c : Counter r) → Path (Counter r) (counterMerge r (counterMerge r a b) c) (counterMerge r a (counterMerge r b c))
 counterAssoc r a b c i = pack (vecMaxAssoc r (witness a) (witness b) (witness c) i) (vecMaxAssoc r (payload a) (payload b) (payload c) i)
 
+counterBot : (r : ℕ) → Counter r
+counterBot r = pack (λ (x : Fin r) → 0) (λ (x : Fin r) → 0)
+
+counterUnit : (r : ℕ) → (a : Counter r) → Path (Counter r) (counterMerge r (counterBot r) a) a
+counterUnit r a = refl
+
 -- Escrow r: the rights matrix R and the uses vector U. R i j is the rights
 -- that replica i gave to replica j; R i i is the local restock of i.
 Escrow : ℕ → Type 0
@@ -144,6 +158,12 @@ escrowComm r a b i = pack (matMaxComm r r (witness a) (witness b) i) (vecMaxComm
 
 escrowAssoc : (r : ℕ) → (a : Escrow r) → (b : Escrow r) → (c : Escrow r) → Path (Escrow r) (escrowMerge r (escrowMerge r a b) c) (escrowMerge r a (escrowMerge r b c))
 escrowAssoc r a b c i = pack (matMaxAssoc r r (witness a) (witness b) (witness c) i) (vecMaxAssoc r (payload a) (payload b) (payload c) i)
+
+escrowBot : (r : ℕ) → Escrow r
+escrowBot r = pack (λ (x : Fin r) (y : Fin r) → 0) (λ (x : Fin r) → 0)
+
+escrowUnit : (r : ℕ) → (a : Escrow r) → Path (Escrow r) (escrowMerge r (escrowBot r) a) a
+escrowUnit r a = refl
 
 -- MVReg n r: the dotted form in the lex encoding (O11). m j x is 2c when the
 -- value x is present at the dot (j, c) and 2c + 1 when it is absent; ctx j
@@ -162,6 +182,12 @@ mvregComm n r a b i = pack (matMaxComm r n (witness a) (witness b) i) (vecMaxCom
 
 mvregAssoc : (n : ℕ) → (r : ℕ) → (a : MVReg n r) → (b : MVReg n r) → (c : MVReg n r) → Path (MVReg n r) (mvregMerge n r (mvregMerge n r a b) c) (mvregMerge n r a (mvregMerge n r b c))
 mvregAssoc n r a b c i = pack (matMaxAssoc r n (witness a) (witness b) (witness c) i) (vecMaxAssoc r (payload a) (payload b) (payload c) i)
+
+mvregBot : (n : ℕ) → (r : ℕ) → MVReg n r
+mvregBot n r = pack (λ (x : Fin r) (y : Fin n) → 0) (λ (x : Fin r) → 0)
+
+mvregUnit : (n : ℕ) → (r : ℕ) → (a : MVReg n r) → Path (MVReg n r) (mvregMerge n r (mvregBot n r) a) a
+mvregUnit n r a = refl
 
 -- Part operations. Each op is merge s (delta s), so L4 (merge s t is t, for
 -- t = merge s d) follows from L3 and L2 of the part. A delta that adds k at
@@ -309,3 +335,9 @@ pairComm A B ma mb ca cb a b i = pack (ca (witness a) (witness b) i) (cb (payloa
 
 pairAssoc : (A : Type 0) → (B : Type 0) → (ma : A → A → A) → (mb : B → B → B) → (sa : (x : A) → (y : A) → (z : A) → Path A (ma (ma x y) z) (ma x (ma y z))) → (sb : (x : B) → (y : B) → (z : B) → Path B (mb (mb x y) z) (mb x (mb y z))) → (a : A × B) → (b : A × B) → (c : A × B) → Path (A × B) (pairMerge A B ma mb (pairMerge A B ma mb a b) c) (pairMerge A B ma mb a (pairMerge A B ma mb b c))
 pairAssoc A B ma mb sa sb a b c i = pack (sa (witness a) (witness b) (witness c) i) (sb (payload a) (payload b) (payload c) i)
+
+pairBot : (A : Type 0) → (B : Type 0) → (za : A) → (zb : B) → A × B
+pairBot A B za zb = pack za zb
+
+pairUnit : (A : Type 0) → (B : Type 0) → (ma : A → A → A) → (mb : B → B → B) → (za : A) → (zb : B) → (ua : (x : A) → Path A (ma za x) x) → (ub : (y : B) → Path B (mb zb y) y) → (a : A × B) → Path (A × B) (pairMerge A B ma mb (pairBot A B za zb) a) a
+pairUnit A B ma mb za zb ua ub a i = pack (ua (witness a) i) (ub (payload a) i)

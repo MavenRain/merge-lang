@@ -756,6 +756,76 @@ static const Value *case_type(Checker *c, const CtorInfo *ctor, const Env *env, 
   return t;
 }
 
+/* The Core of PathP (λ _ → LINE) X Y at level LVL (LINE is at LVL + 1). */
+static const Core *path_core(Checker *c, uint32_t lvl, const Core *line, const Value *x, const Value *y) {
+  const Core *cx = x == NULL ? NULL : quote_value(c->m, lvl, x);
+  const Core *cy = y == NULL ? NULL : quote_value(c->m, lvl, y);
+  return line == NULL || cx == NULL || cy == NULL ? NULL : op3(c, OP_PATHP, 0, 3, core_bind(c, CORE_LAM, "_", NULL, line), cx, cy);
+}
+
+/* T is the family FAM (at any arguments). */
+static int is_family_core(const Core *t, uint32_t fam) {
+  return t != NULL && t->kind == CORE_OP && t->op == OP_FAMILY && t->inst == fam;
+}
+
+/* The point term K through the fold cases: a field variable is itself
+   (from ENV), and a point constructor of FAM applies its case in CASES to
+   its fields (the parameters drop). */
+static const Value *star(Checker *c, uint32_t fam, const Value *const *cases, const Env *env, const Core *k) {
+  Machine *m = c->m;
+  const FamilyInfo *f = &m->families[fam];
+  const Value *acc;
+  const Value *arg;
+  uint32_t j;
+  if (k->kind != CORE_OP || k->op != OP_CTOR || k->inst < f->first_ctor || k->inst >= f->first_ctor + f->ctor_count || m->ctors[k->inst].depth != 0u)
+    return eval_core(m, env, k);
+  acc = cases[k->inst - f->first_ctor];
+  for (j = 0; j < m->ctors[k->inst].field_count && acc != NULL; j++) {
+    arg = star(c, fam, cases, env, k->args[f->param_count + j]);
+    acc = arg == NULL ? NULL : apply_value(m, acc, arg);
+  }
+  return acc;
+}
+
+static int family_has_path(const Machine *m, uint32_t fam);
+static const Core *path_body(const Core *t);
+
+/* The type of the fold case of CTOR over FAM, a family with a path
+   constructor: a Pi over the fields into RES at depth 0, else Path RES a*
+   b* (depth 1) or Path (Path RES x* y*) p* q* (depth 2), with the ends
+   through the earlier CASES. A recursive field has the type RES; a path
+   field Path FAM u v has the type Path RES u* v*. A field type sees the
+   earlier fields, so each field is a fresh variable in ENV. */
+static const Value *hit_case_type(Checker *c, uint32_t fam, const CtorInfo *ctor, const Value *const *cases, const Env *env, const Value *res) {
+  Machine *m = c->m;
+  const Core **doms = arena_alloc(m->arena, ((size_t)ctor->field_count + 1u) * sizeof *doms);
+  uint32_t n = ctor->field_count;
+  uint32_t lvl = c->level + n;
+  const Value *dom;
+  const Core *line;
+  const Core *k;
+  uint32_t i;
+  if (doms == NULL) {
+    FAIL(c, "OOM", "out of memory");
+    return NULL;
+  }
+  for (i = 0; i < n; i++) {
+    const Core *t = ctor->fields[i].type;
+    int path = !ctor->fields[i].recursive && is_family_core(path_body(t), fam);
+    dom = ctor->fields[i].recursive ? res : path ? NULL : eval_core(m, env, t);
+    doms[i] = path ? path_core(c, c->level + i, quote_value(m, c->level + i + 1u, res), star(c, fam, cases, env, t->args[1]), star(c, fam, cases, env, t->args[2]))
+              : dom == NULL ? NULL : quote_value(m, c->level + i, dom);
+    env = env_push(m, env, val_var(m, c->level + i));
+    if (doms[i] == NULL || env == NULL)
+      return NULL;
+  }
+  line = ctor->depth == 2u ? path_core(c, lvl + 1u, quote_value(m, lvl + 2u, res), star(c, fam, cases, env, ctor->ends[2]), star(c, fam, cases, env, ctor->ends[3])) : quote_value(m, lvl + 1u, res);
+  k = ctor->depth == 0u ? quote_value(m, lvl, res) : path_core(c, lvl, line, star(c, fam, cases, env, ctor->ends[0]), star(c, fam, cases, env, ctor->ends[1]));
+  for (i = n; i > 0u && k != NULL; i--)
+    k = core_bind(c, CORE_PI, ctor->fields[i - 1u].name, doms[i - 1u], k);
+  return here(c, k);
+}
+
 /* fold case... x over a domain family: one case for each constructor. */
 static const Core *fold_family(Call *k, const Core *s, const Value *st) {
   Checker *c = k->c;
@@ -764,16 +834,23 @@ static const Core *fold_family(Call *k, const Core *s, const Value *st) {
   const Env *env = env_of(c, st->args, st->argc);
   const Value *res = k->hint;
   const Core **cores = arena_alloc(m->arena, ((size_t)f->ctor_count + 2u) * sizeof *cores);
+  const Value **vals = arena_alloc(m->arena, ((size_t)f->ctor_count + 1u) * sizeof *vals);
+  const Value *want;
+  int hit = family_has_path(m, st->inst);
   uint32_t j;
-  if (cores == NULL)
+  if (cores == NULL || vals == NULL)
     return nul(FAIL(c, "OOM", "out of memory"));
   if (res == NULL && m->ctors[f->first_ctor].field_count == 0u)
     cores[0] = infer(c, k->args[0], &res);
   if (res == NULL)
     return nul(FAIL(c, "TYPE_INFER", "fold over %s needs a declared result type here", f->name));
+  /* a family with a path constructor gets the case types of
+     hit_case_type, whose ends go through the earlier cases (VALS) */
   for (j = 0; j < f->ctor_count; j++) {
-    cores[j] = cores[j] != NULL ? cores[j] : check(c, k->args[j], case_type(c, &m->ctors[f->first_ctor + j], env, res));
-    if (cores[j] == NULL)
+    want = hit ? hit_case_type(c, st->inst, &m->ctors[f->first_ctor + j], vals, env, res) : case_type(c, &m->ctors[f->first_ctor + j], env, res);
+    cores[j] = cores[j] != NULL ? cores[j] : want == NULL ? NULL : check(c, k->args[j], want);
+    vals[j] = cores[j] == NULL || !hit ? NULL : here(c, cores[j]);
+    if (cores[j] == NULL || (hit && vals[j] == NULL))
       return NULL;
   }
   cores[f->ctor_count] = s;
@@ -869,8 +946,6 @@ static const Core *rule_fold(Call *k) {
   fam = val_is(st, OP_FAMILY) ? st->inst : NO_FAMILY;
   if (s != NULL && fam != NO_FAMILY && c->m->families[fam].index_count > 0u)
     return nul(FAIL(c, "DOMAIN_FAMILY", "fold over %s is not in S2: a fold over an indexed family needs a dependent eliminator (S3)", c->m->families[fam].name));
-  if (s != NULL && fam != NO_FAMILY && family_has_path(c->m, fam))
-    return nul(FAIL(c, "DOMAIN_FAMILY", "fold over %s is not in S2: a fold over a higher inductive family needs a dependent eliminator (S3)", c->m->families[fam].name));
   if (s != NULL && fam != NO_FAMILY && c->m->families[fam].ctor_count + 1u == k->argc) {
     k->hint = k->outer;
     return fold_family(k, s, st);
@@ -1457,7 +1532,7 @@ static const Core *pctor_app(Call *k, uint32_t ctor, const Value *const *vals, u
   k->type = eval_core(c->m, env_of(c, vals, n), ci->type);
   body = core_op(c, OP_PCTOR, ctor, 0, args, n + d);
   for (i = 0; i < d; i++)
-    body = op3(c, OP_PLAM, 0, 1, core_bind(c, CORE_LAM, "i", NULL, body), NULL, NULL);
+    body = op3(c, OP_PLAM, 0, 1, core_bind(c, CORE_LAM, i == 0u && d == 2u ? "j" : "i", NULL, body), NULL, NULL);
   return body;
 }
 
@@ -2226,8 +2301,9 @@ static int point_term(const Checker *c, uint32_t fam, const FieldInfo *fields, u
 }
 
 /* A path constructor: its type is Path T s t, where T is the family at its
-   params and s, t are point terms. S2 has dimension 1 only (Q-S2b-5 (a)):
-   a square gets REFUSE_CELL. The fields are pushed. */
+   params and s, t are point terms (depth 1), or Path (Path T x y) p q, where
+   p, q are path fields (depth 2). A 3-cell gets REFUSE_CELL. The ends x, y
+   of a square leave the line binder by evaluation. The fields are pushed. */
 static int check_pctor(Checker *c, uint32_t fam, const Ctor *ctor, const FieldInfo *fields, CtorInfo *ci) {
   Machine *m = c->m;
   const char *name = m->families[fam].name;
@@ -2235,8 +2311,10 @@ static int check_pctor(Checker *c, uint32_t fam, const Ctor *ctor, const FieldIn
   uint64_t level = 0;
   const Core *t = check_type(c, ctor->result, &level);
   const Core *k = t;
-  const Core **ends = arena_alloc(m->arena, 2u * sizeof *ends);
+  const Core *inner = path_body(t);
+  const Core **ends = arena_alloc(m->arena, 5u * sizeof *ends);
   uint32_t depth = 0;
+  uint32_t i;
   if (t == NULL)
     return 0;
   if (ends == NULL)
@@ -2247,12 +2325,25 @@ static int check_pctor(Checker *c, uint32_t fam, const Ctor *ctor, const FieldIn
   }
   if (k == NULL || depth == 0u)
     return FAIL(c, "REFUSE_CELL", "%s is not a cell signature: the path constructor %s must have the type Path T s t, where T is %s at its own parameters (rule R1)", name, ctor->name, name);
-  if (depth > 1u)
-    return FAIL(c, "REFUSE_CELL", "%s is not a cell signature: the path constructor %s has dimension %u; S2 has dimension 1 only (rule R1)", name, ctor->name, (unsigned)depth);
+  if (depth > 2u)
+    return FAIL(c, "REFUSE_CELL", "%s is not a cell signature: the path constructor %s has dimension %u; only 1 and 2 are available (rule R1)", name, ctor->name, (unsigned)depth);
   ends[0] = t->args[1];
   ends[1] = t->args[2];
-  if (!(point_term(c, fam, fields, n, ends[0], 0u) && point_term(c, fam, fields, n, ends[1], 0u)))
+  if (depth == 1u && !(point_term(c, fam, fields, n, ends[0], 0u) && point_term(c, fam, fields, n, ends[1], 0u)))
     return FAIL(c, "REFUSE_CELL", "%s is not a cell signature: an end of the path constructor %s must be a point term (rule R1)", name, ctor->name);
+  for (i = 0; depth == 2u && i < 2u; i++)
+    if (ends[i] == NULL || ends[i]->kind != CORE_VAR || ends[i]->index >= n)
+      return FAIL(c, "REFUSE_CELL", "%s is not a cell signature: the ends p, q of the square %s must be fields of the constructor (rule R1)", name, ctor->name);
+  for (i = 0; depth == 2u && i < 2u; i++) {
+    const Value *v;
+    if (!point_term(c, fam, fields, n, inner->args[1u + i], 1u))
+      return FAIL(c, "REFUSE_CELL", "%s is not a cell signature: an end of the path constructor %s must be a point term (rule R1)", name, ctor->name);
+    if (!push(c, "_", val_op(m, VAL_OP, OP_I, 0, 0, NULL, 0)))
+      return 0;
+    v = here(c, inner->args[1u + i]);
+    pop(c);
+    ends[2u + i] = quote_value(m, c->level, v);
+  }
   ci->depth = depth;
   ci->type = t;
   ci->ends = ends;

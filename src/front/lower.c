@@ -745,6 +745,13 @@ static int cases_of(Low *l, Buf *b, const Value *xv, const Value *const *cases, 
     return 0;
   for (i = 0; i < n; i++) {
     arm = buf_under(b);
+    /* A path constructor keeps its tag but has no run-time case. */
+    if (fields[i] == UINT32_MAX) {
+      if (!store(l, &arm, res, trap_value(l)))
+        return 0;
+      arms[i] = block_of(&arm);
+      continue;
+    }
     args = arena_alloc(l->m->arena, ((size_t)fields[i] + 1u) * sizeof *args);
     if (args == NULL)
       return oom(l);
@@ -875,7 +882,7 @@ static int fam_switch(Low *l, Buf *b, const IrExpr *addr, const Value *v, const 
     return oom(l);
   for (i = 0; i < fam->ctor_count; i++) {
     arm = buf_under(b);
-    if (!((rec[i] != NO_REC) == rec_arms ? fam_case(l, &arm, addr, v->args[i], &l->m->ctors[fam->first_ctor + i], rec[i], acc)
+    if (!((rec[i] != NO_REC) == rec_arms && l->m->ctors[fam->first_ctor + i].depth == 0u ? fam_case(l, &arm, addr, v->args[i], &l->m->ctors[fam->first_ctor + i], rec[i], acc)
                                          : store(l, &arm, acc, trap_value(l))))
       return 0;
     arms[i] = block_of(&arm);
@@ -916,14 +923,15 @@ static int family_fold(Low *l, Buf *b, const Value *v, Operand *out) {
     c = &l->m->ctors[fam->first_ctor + i];
     here = 0;
     recs[i] = NO_REC;
-    for (k = 0; k < c->field_count; k++) {
+    /* a path constructor has no arm and no recursive field */
+    for (k = 0; k < c->field_count && c->depth == 0u; k++) {
       here += c->fields[k].recursive ? 1u : 0u;
       recs[i] = c->fields[k].recursive ? k : recs[i];
     }
     if (here > 1u)
       return diag_fail(l->m->diag, "REFUSE_RUNTIME_TREE", l->m->def, "a fold over a tree of %s must exist at run time (HOST-LIMIT)", fam->name);
     rec += here;
-    fields[i] = c->field_count;
+    fields[i] = c->depth == 0u ? c->field_count : UINT32_MAX;
   }
   return rec != 0 ? family_spine(l, b, v, recs, out) : cases_of(l, b, v->args[fam->ctor_count], v->args, fields, fam->ctor_count, out);
 }

@@ -389,13 +389,98 @@ static const Value *stuck_fold(Machine *m, uint32_t family, const Value *const *
   return val_op(m, VAL_STUCK, OP_FOLD_FAMILY, family, 0, args, ncases + 1u);
 }
 
+static const Value *fold_family(Machine *m, uint32_t family, const Value *const *cases, uint32_t ncases, const Value *x);
+static const Value *reduce_papp(Machine *m, const Value *const *a, uint32_t n);
+static Core *new_core(Machine *m, CoreKind kind);
+
+/* Map a path field through the fold, using an environment so that open
+   cases and endpoints retain their free variables. */
+static const Value *fold_path_field(Machine *m, uint32_t family, const Value *const *cases, uint32_t ncases, const Value *p, const Value *type) {
+  const Env *env = NULL;
+  const Core **args = arena_alloc(m->arena, ((size_t)ncases + 1u) * sizeof *args);
+  const Core **pa = arena_alloc(m->arena, 4u * sizeof *pa);
+  Core *app = new_core(m, CORE_OP);
+  Core *body = new_core(m, CORE_OP);
+  Core *var;
+  uint32_t i;
+  if (args == NULL || pa == NULL || app == NULL || body == NULL)
+    return oom(m);
+  if (!val_is(type, OP_PATHP) || type->argc != 3u)
+    return internal(m, "a fold of a field without a path type");
+  env = env_push(m, env, p);
+  env = env == NULL ? NULL : env_push(m, env, type->args[1]);
+  env = env == NULL ? NULL : env_push(m, env, type->args[2]);
+  for (i = 0; i < ncases && env != NULL; i++) {
+    env = env_push(m, env, cases[i]);
+    var = new_core(m, CORE_VAR);
+    if (var == NULL)
+      return NULL;
+    var->index = ncases - i;
+    args[i] = var;
+  }
+  if (env == NULL)
+    return NULL;
+  for (i = 0; i < 4u; i++) {
+    var = new_core(m, CORE_VAR);
+    if (var == NULL)
+      return NULL;
+    var->index = i == 0u ? ncases + 3u : i == 1u ? 0u : ncases + 4u - i;
+    pa[i] = var;
+  }
+  app->op = OP_PAPP;
+  app->args = pa;
+  app->argc = 4u;
+  args[ncases] = app;
+  body->op = OP_FOLD_FAMILY;
+  body->inst = family;
+  body->args = args;
+  body->argc = ncases + 1u;
+  return val_make(m, OP_PLAM, 0, 1u, val_closure(m, VAL_LAM, "i", NULL, env, body), NULL, NULL);
+}
+
+/* fold case... x at a path constructor X: at depth 1, the case of X
+   applied to the fields (a recursive field folded), at the interval arg,
+   with the folded declared ends (so i0 and i1 give the fold of an end). A
+   fold at a 2-cell or at a cell with a path field stays stuck (O52). */
+static const Value *fold_pctor(Machine *m, uint32_t family, const Value *const *cases, uint32_t ncases, const Value *x) {
+  const FamilyInfo *fam = family < m->family_count ? &m->families[family] : NULL;
+  const CtorInfo *ci = x->inst < m->ctor_count ? &m->ctors[x->inst] : NULL;
+  const Env *env = NULL;
+  const Value *pa[4];
+  const Value *acc;
+  uint32_t p = fam == NULL ? 0u : fam->param_count;
+  uint32_t flat = 1u;
+  uint32_t i;
+  if (fam == NULL || ci == NULL || ci->ends == NULL || x->inst < fam->first_ctor || x->inst - fam->first_ctor >= ncases || x->argc != p + ci->field_count + ci->depth)
+    return internal(m, "a fold of a path constructor of another family");
+  for (i = 0; i < ci->field_count; i++)
+    flat = ci->fields[i].type != NULL && ci->fields[i].type->kind == CORE_OP && ci->fields[i].type->op == OP_PATHP ? 0u : flat;
+  if (ci->depth != 1u || flat == 0u)
+    return stuck_fold(m, family, cases, ncases, x);
+  acc = cases[x->inst - fam->first_ctor];
+  for (i = 0; i < p + ci->field_count; i++)
+    env = env_push(m, env, x->args[i]);
+  for (i = 0; i < ci->field_count && acc != NULL; i++)
+    acc = apply_value(m, acc, ci->fields[i].recursive ? fold_family(m, family, cases, ncases, x->args[p + i]) : x->args[p + i]);
+  pa[0] = acc;
+  pa[1] = x->args[p + ci->field_count];
+  pa[2] = fold_family(m, family, cases, ncases, eval_core(m, env, ci->ends[0]));
+  pa[3] = fold_family(m, family, cases, ncases, eval_core(m, env, ci->ends[1]));
+  return acc == NULL || pa[2] == NULL || pa[3] == NULL ? NULL : reduce_papp(m, pa, 4u);
+}
+
 /* fold case... x over a domain family: the case of the constructor of X,
-   applied to its fields. A recursive field arrives folded. */
+   applied to its fields. A recursive field arrives folded; a path field in
+   the family of a higher inductive family arrives mapped. */
 static const Value *fold_family(Machine *m, uint32_t family, const Value *const *cases, uint32_t ncases, const Value *x) {
   const FamilyInfo *fam;
   const CtorInfo *ctor;
+  const Env *env = NULL;
+  const Core *t;
+  const Core *line;
   const Value *acc;
   const Value *field;
+  int hit = 0;
   uint32_t i;
   if (x == NULL)
     return NULL;
@@ -407,6 +492,8 @@ static const Value *fold_family(Machine *m, uint32_t family, const Value *const 
   case SCRUT_VALUE:
     break;
   }
+  if (val_is(x, OP_PCTOR))
+    return fold_pctor(m, family, cases, ncases, x);
   if (!val_is(x, OP_CTOR) || x->inst >= m->ctor_count || family >= m->family_count)
     return internal(m, "a fold of a value that is not in the family");
   fam = &m->families[family];
@@ -415,10 +502,25 @@ static const Value *fold_family(Machine *m, uint32_t family, const Value *const 
     return internal(m, "a fold of a constructor of another family");
   if (!enter(m))
     return NULL;
+  for (i = 0; i < fam->ctor_count; i++)
+    hit = hit || m->ctors[fam->first_ctor + i].depth != 0u;
+  for (i = 0; i < fam->param_count; i++) {
+    env = env_push(m, env, x->args[i]);
+    if (env == NULL) {
+      m->depth--;
+      return NULL;
+    }
+  }
   acc = cases[x->inst - fam->first_ctor];
   for (i = 0; i < ctor->field_count && acc != NULL; i++) {
     field = x->args[fam->param_count + i];
-    acc = apply_value(m, acc, ctor->fields[i].recursive ? fold_family(m, family, cases, ncases, field) : field);
+    t = ctor->fields[i].type;
+    line = t != NULL && t->kind == CORE_OP && t->op == OP_PATHP && t->argc == 3u && t->args[0] != NULL && t->args[0]->kind == CORE_LAM ? t->args[0]->b : NULL;
+    if (ctor->fields[i].recursive)
+      field = fold_family(m, family, cases, ncases, field);
+    else if (hit && line != NULL && line->kind == CORE_OP && line->op == OP_FAMILY && line->inst == family)
+      field = fold_path_field(m, family, cases, ncases, field, eval_core(m, env, t));
+    acc = apply_value(m, acc, field);
   }
   m->depth--;
   return acc;
@@ -1729,20 +1831,32 @@ static int arity_ok(const Machine *m, Op op, uint32_t inst, uint32_t n) {
   return n == varied_arity(m, op, inst);
 }
 
-/* A path constructor at an end of its dimension is that end. The
+/* A path constructor at an end of a dimension is that end. The
    arguments are the params and the fields, then one interval for each
-   dimension (S2 has dimension 1 only). */
+   dimension (1 or 2). */
 static const Value *reduce_pctor(Machine *m, uint32_t inst, const Value *const *a, uint32_t n) {
   const CtorInfo *ci = inst < m->ctor_count ? &m->ctors[inst] : NULL;
   const Env *env = NULL;
+  const Value *pa[4];
   uint32_t d = ci != NULL ? ci->depth : 0u;
+  uint32_t k;
   uint32_t i;
-  if (ci == NULL || ci->ends == NULL || d != 1u || d > n)
+  if (ci == NULL || ci->ends == NULL || d == 0u || d > 2u || d > n)
     return internal(m, "a path constructor without ends");
-  for (i = 0; i + d < n; i++)
+  k = n - d;
+  for (i = 0; i < k; i++)
     env = env_push(m, env, a[i]);
-  if (val_is(a[n - 1u], OP_I0) || val_is(a[n - 1u], OP_I1))
-    return eval_core(m, env, ci->ends[val_is(a[n - 1u], OP_I1) ? 1 : 0]);
+  if (d == 1u && (val_is(a[k], OP_I0) || val_is(a[k], OP_I1)))
+    return eval_core(m, env, ci->ends[val_is(a[k], OP_I1) ? 1 : 0]);
+  if (d == 2u && (val_is(a[k], OP_I0) || val_is(a[k], OP_I1))) {
+    pa[0] = eval_core(m, env, ci->ends[val_is(a[k], OP_I1) ? 1 : 0]);
+    pa[1] = a[k + 1u];
+    pa[2] = eval_core(m, env, ci->ends[2]);
+    pa[3] = eval_core(m, env, ci->ends[3]);
+    return reduce_papp(m, pa, 4);
+  }
+  if (d == 2u && (val_is(a[k + 1u], OP_I0) || val_is(a[k + 1u], OP_I1)))
+    return eval_core(m, env, ci->ends[val_is(a[k + 1u], OP_I1) ? 3 : 2]);
   return val_op(m, VAL_OP, OP_PCTOR, inst, 0, a, n);
 }
 

@@ -1,11 +1,57 @@
 # merge-lang status
 
-The build implements slices S1, S1b, S2 and S2b of `docs/PLAN.md`
+The build implements slices S1, S1b, S2, S2b and S2c of `docs/PLAN.md`
 section 9: the port of the evolve-lang 1f87a5a surface and cubical kernel
 (S1), induction in the kernel (S1b), the merge-lang domain with the laws
-L1 to L4 as guest terms (S2), and ℤ with the `stock` read (S2b). It does
+L1 to L4 as guest terms (S2), ℤ with the `stock` read (S2b), and path
+constructors of dimension 2 with the `fold` over a higher inductive type
+(S2c). It does
 not complete M0. There is no merge engine, no replica simulator and no
 coordination report yet.
+
+## S2c (2026-10-28)
+
+- Scope (`docs/PLAN.md` section 9, the S2c row; O13, Q29 (a), Q30 (b)):
+  the kernel port of path constructors of dimension 2, a bottom and a
+  left unit law for each part, and `FMSet` as program data. `isSet` and
+  `mergeAll` are slice S2d.
+- Kernel port (quorum-lang 09f7f59 and 351cbf4, one hunk at a time):
+  `check_pctor` accepts a path constructor of dimension 1 or 2 and
+  refuses dimension 3 (`REFUSE_CELL`, "has dimension 3; only 1 and 2 are
+  available"). The `fold` over a higher inductive type is in `check.c`,
+  `eval.c` and `lower.c`. At a 1-cell, the `fold` applies the case to the
+  fields (a recursive field is folded) at the interval argument. At a
+  2-cell, or at a cell with a path field, the `fold` stays stuck (O52).
+- Domain (`domain/domain.lang`): a bottom and a left unit law for each
+  part (`gsetBot`/`gsetUnit`, `counterBot`/`counterUnit`,
+  `escrowBot`/`escrowUnit`, `mvregBot`/`mvregUnit`, `pairBot`/`pairUnit`).
+  Each unit law is `refl`: `or false y` is `y` and `natMax 0 b` is `b`.
+- `FMSet` (Q30 (b)): each domain family is `FAMILY_BASE`, and R1 refuses
+  a path constructor in it. `FMSet` (`msing`, `mnil`, `munion`, `munit`,
+  `massoc`, `mcomm`, the 2-cell `trunc`) and `fmsetMap` are program data
+  in `test/eval/fmset.lang`.
+- Tests: `test/check/cell-path-dim.lang` moves to `test/eval` (accepted
+  at dimension 2); `test/check/cell-path-dim3.lang` gets `REFUSE_CELL`;
+  `test/check/hit-fold.lang` gets `TYPE_MISMATCH` (a 1-cell case must be
+  a `PathP`); `test/eval/hit.lang` (5 evals: `Circle` and the square `Sq`,
+  with the stuck `fold` at the 2-cell); `test/eval/fmset.lang` (7 evals:
+  `fmsetMap` at `mnil`, at two points and at `mcomm`; a read of the
+  bottom of `GSet`, `Counter`, `Escrow` and `MVReg`).
+- Gate: `make check` EXIT 0. Examples 13; parse refusals 11; check
+  refusals 59; evals 146; ir 13 lowered; wasm 16; differential 1230
+  cases, 0 mismatches; fmt 117 canonical, 6 non-canonical pairs; json 26
+  fixtures, diagnostics 38 codes (24 with a fixture, 14 with no fixture);
+  gate 0 failures; review, domain and diagnostic edit regressions passed;
+  cubical 43 checks, 36 round trips.
+- Count changes from S2b: evals +13; fmt +3 canonical. The other counts
+  are the same.
+- Mutants: M1 the dimension bound `> 1u` KILLED (13 failures); M2 the
+  bound `> 3u` KILLED (1 failure); M3b the `fold` at a 1-cell with an
+  unfolded recursive field KILLED (6 failures). M3a, the wrong end in the
+  `fold` at a 1-cell, SURVIVED: an end at an interval variable does not
+  show in a printed value.
+- Drift: `src/front/check.c`, `eval.c` and `lower.c` are shared with the
+  tcc kits. The dimension 2 port is a merge-lang change.
 
 ## S2b (2026-10-27)
 
@@ -177,7 +223,7 @@ coordination report yet.
 - `langc check --json`, with the `parsed` and `typed` counts on the last
   line. `docs/DIAGNOSTICS.md` gives the codes.
 - The cubical kernel: `I`, `PathP`, `Path`, `transp`, `hcomp`, systems,
-  indexed families, path constructors of dimension 1, `REFUSE_CELL` for CM
+  indexed families, path constructors of dimension 1 and 2, `REFUSE_CELL` for CM
   and CC signatures, codata, the corecursor, `head` and `tail`.
 - `Fin n` as the Sigma of `docs/PLAN.md` section 2.2.
 - Induction (S1b): `natMax` with its rules on open arguments, a `fold`
@@ -186,12 +232,15 @@ coordination report yet.
   product join and the laws L1 to L4 as guest terms.
 - ℤ (S2b): the token `ℤ`, base data `ℤ` (`pos`, `negsuc`), `natDiff`,
   `intLe`, `counterStock`, `escrowStock`, and the print rule for `ℤ`.
+- S2c: the `fold` over a higher inductive type (a 1-cell case reduces, a
+  2-cell case stays stuck, O52), a bottom and a left unit law for each
+  part, and `FMSet` with `fmsetMap` as program data (Q30 (b)).
 
 ## Remaining M0 work
 
-1. S2c: path constructors of dimension 2 in the kernel (the quorum-lang
-   port), the library `FMSet` in generator form and `mergeAll`. It needs
-   the USER S2b commit.
+1. S2d: `isSet` for each part (a Hedberg port) and `mergeAll : FMSet S →
+   S` on the program side (Q29 (a), Q30 (b)). It needs the USER S2c
+   commit.
 2. The later slices of `docs/PLAN.md` section 9. Each needs the slice
    before it.
 
@@ -200,7 +249,13 @@ coordination report yet.
 - `langc` stops at the first error (`docs/DIAGNOSTICS.md`).
 - `langc check` gives one `W_NONCANON` at most: for the first program region
   that is not canonical.
-- A path constructor has dimension 1. A square gets `REFUSE_CELL`.
+- A path constructor has dimension 1 or 2. A 3-cell gets `REFUSE_CELL`.
+- Domain data has no path constructor (R1, Q30): each domain family is
+  `FAMILY_BASE`. A higher inductive type is program data with a type
+  argument.
+- A `fold` at a 2-cell, or at a cell with a path field, stays stuck
+  (O52). A `fold` into a part over a type with a 2-cell needs `isSet` of
+  the part (S2d).
 - `sumFin` at an open `n` is stuck: `langc ir` refuses it with
   `REFUSE_RUNTIME_PATH`.
 - The kit names `List`, `nil` and `cons` are dropped. Use a vector
