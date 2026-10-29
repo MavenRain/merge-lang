@@ -4,5 +4,5 @@ replicas A B
 atoms Tag := urgent ∣ home ∣ work
 
 replicated Tags
-  state tags : GSet
+  state tags : GSet Tag
   op tag (t : Tag) := add tags t

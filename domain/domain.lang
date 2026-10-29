@@ -233,6 +233,11 @@ counterDecL4 r i k s = counterL4 r s (pack (witness s) (vecBump r (payload s) i 
 counterStock : (r : ℕ) → (s0 : ℕ) → (s : Counter r) → ℤ
 counterStock r s0 s = natDiff (natAdd s0 (sumFin r (witness s))) (sumFin r (payload s))
 
+-- The invariant `nonneg PART` of a Counter part (S3e, Q37 (a)): the stock is
+-- at or above 0.
+counterNonneg : (r : ℕ) → (s0 : ℕ) → (s : Counter r) → Bool
+counterNonneg r s0 s = intLe (pos 0) (counterStock r s0 s)
+
 -- Escrow r: in and out are the rights that i got from and gave to the other
 -- replicas. dec, transfer j and restock add k to U i, R i j and R i i. dec
 -- and transfer need out + U i + k at or below split i + R i i + in.
@@ -271,6 +276,10 @@ escrowRestockL4 r i k s = escrowL4 r s (pack (matBump r r (witness s) i i k) (pa
 -- A transfer moves rights between replicas and does not change the stock.
 escrowStock : (r : ℕ) → (split : Fin r → ℕ) → (s : Escrow r) → ℤ
 escrowStock r split s = natDiff (natAdd (sumFin r split) (sumFin r (λ (j : Fin r) → witness s j j))) (sumFin r (payload s))
+
+-- The invariant `nonneg PART` of an allocated Counter part (S3e, Q37 (a)).
+escrowNonneg : (r : ℕ) → (split : Fin r → ℕ) → (s : Escrow r) → Bool
+escrowNonneg r split s = intLe (pos 0) (escrowStock r split s)
 
 -- MVReg n r: write i x takes the dot (i, ctx i + 1), sets x present (even) and
 -- the other values absent (odd) at that dot, and sets absent each dot of the

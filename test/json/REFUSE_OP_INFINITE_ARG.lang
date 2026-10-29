@@ -1,0 +1,5 @@
+replicas A B
+
+replicated Shop
+  state stock : Counter
+  op o (k : ℕ) := dec stock k

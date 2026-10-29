@@ -191,8 +191,10 @@ got=$(node test/run-wasm.mjs "$tmp/entries.wasm" pick 2 4 9 2>&1) || true
 # fronttool AST dump of F equals the dump of `fmt F` (the round trip). Each
 # test/fmt/X.lang formats to test/fmt/X.canon (X.canon is in the canonical
 # list), the two dumps are equal, and `langc check` gives W_NONCANON on
-# X.lang and no warning on X.canon. A test/fmt/form-X pair holds a form, so
-# `langc check` gives REFUSE_FORM (exit 1) on the two files until slice S3e.
+# X.lang and no warning on X.canon. A test/fmt/form-X pair with a
+# `replicated` form does not type (a bare GSet or MVReg, an op on ℕ), so
+# `langc check` gives exit 1 and the pinned code on the two files (S3e E2).
+# The `replicas` and `atoms` pairs check.
 same_dump() {
   build/fronttool dump "$1" >"$tmp/d1.txt" 2>&1 && build/fronttool dump "$2" >"$tmp/d2.txt" 2>&1 &&
     cmp -s "$tmp/d1.txt" "$tmp/d2.txt"
@@ -225,14 +227,15 @@ for f in test/fmt/*.lang; do
   fi
   same_dump "$f" "$c" || { echo "FAIL round trip $f: the AST dump differs from $c"; fail=$((fail + 1)); }
   case "$f" in
-    test/fmt/form-*)
+    test/fmt/form-op.lang | test/fmt/form-replicated.lang | test/fmt/form-state.lang)
       for g in "$f" "$c"; do
         status=0
         build/langc check "$g" >/dev/null 2>"$tmp/err" || status=$?
         first=$(head -n 1 "$tmp/err")
-        case "$status|$first" in
-          "1|langc: REFUSE_FORM: "*) ;;
-          *) echo "FAIL check $g: want exit 1 and REFUSE_FORM, got $status|$first"; fail=$((fail + 1)) ;;
+        case "$f|$status|$first" in
+          "test/fmt/form-replicated.lang|1|langc: REFUSE_OP_INFINITE_ARG: "*) ;;
+          "test/fmt/form-op.lang|1|langc: REFUSE_NO_MERGE: "* | "test/fmt/form-state.lang|1|langc: REFUSE_NO_MERGE: "*) ;;
+          *) echo "FAIL check $g: want exit 1 and the pinned code, got $status|$first"; fail=$((fail + 1)) ;;
         esac
       done
       continue

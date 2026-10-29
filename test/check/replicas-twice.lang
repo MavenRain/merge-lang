@@ -1,0 +1,4 @@
+-- A second replicas form defines Replica again.
+replicas A B
+
+replicas C

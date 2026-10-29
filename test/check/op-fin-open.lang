@@ -1,0 +1,7 @@
+replicas A B
+
+atoms Amount := 1 ∣ 2
+
+replicated Shop
+  state stock : Counter (init 2)
+  op sell (k : Fin n) := dec stock k

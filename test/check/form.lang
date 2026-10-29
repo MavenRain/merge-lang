@@ -1,1 +1,3 @@
-replicas A B
+replicated Tags
+  state tags : GSet
+  state hits : Counter (init 0)

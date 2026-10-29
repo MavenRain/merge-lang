@@ -1,0 +1,53 @@
+-- allocate makes the Counter part stock an Escrow part with the split
+-- ShopStockSplit; ShopInv is nonneg on the part (S3e E3, Q37 (a)).
+replicas A B
+
+atoms Amount := 1 ∣ 2
+
+replicated Shop
+  state stock : Counter (init 2)
+  op sell (k : Amount) := dec stock k
+  op give (j : Replica) (k : Amount) := transfer stock j k
+  op refill (k : Amount) := restock stock k
+  invariant nonneg stock
+  allocate stock by escrow (A ↦ 2, B ↦ 0)
+
+-- No allocate: two concurrent takes can each pass and the merge breaks
+-- the invariant.
+replicated Stock
+  state count : Counter (init 1)
+  op take (k : Amount) := dec count k
+  invariant nonneg count
+
+run : Option Shop → Shop
+run o = elim (λ (p : Option Shop) → Shop) ShopBot (λ (s : Shop) → s) o
+
+isNone : Option Shop → Bool
+isNone o = elim (λ (p : Option Shop) → Bool) true (λ (s : Shop) → false) o
+
+given : Shop
+given = run (ShopGive A B (pack 0 refl) ShopBot)
+
+share : ℕ
+share = ShopStockSplit A
+
+blocked : Bool
+blocked = isNone (ShopSell B (pack 0 refl) ShopBot)
+
+self : Bool
+self = isNone (ShopGive A A (pack 0 refl) ShopBot)
+
+kept : Bool
+kept = ShopInv (ShopMerge (run (ShopSell A (pack 0 refl) given)) (run (ShopSell B (pack 0 refl) given)))
+
+refilled : ℤ
+refilled = escrowStock 2 ShopStockSplit (run (ShopRefill B (pack 1 refl) given))
+
+broken : Bool
+broken = ShopInv (pack (λ (x : Replica) (y : Replica) → 0) (λ (x : Replica) → 3))
+
+taken : Replica → Stock
+taken i = elim (λ (p : Option Stock) → Stock) StockBot (λ (s : Stock) → s) (StockTake i (pack 0 refl) StockBot)
+
+over : Bool
+over = StockInv (StockMerge (taken A) (taken B))

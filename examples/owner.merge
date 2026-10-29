@@ -4,5 +4,5 @@ replicas A B
 atoms User := ana ∣ ben
 
 replicated Task
-  state owner : MVReg
+  state owner : MVReg User
   op assign (u : User) := write owner u

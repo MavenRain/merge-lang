@@ -1,0 +1,4 @@
+replicas A B
+
+replicated Shop
+  state n : ℕ

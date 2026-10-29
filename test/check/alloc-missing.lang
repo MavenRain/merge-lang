@@ -1,0 +1,5 @@
+replicas A B
+
+replicated Shop
+  state stock : Counter (init 1)
+  allocate stock by escrow (A ↦ 1)

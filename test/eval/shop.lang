@@ -1,0 +1,50 @@
+-- replicated Shop gives Shop = GSet 3 × Counter 2 × MVReg 2 2, ShopBot,
+-- ShopMerge and one op def for each op line (S3e E2, Q38 (a)).
+replicas A B
+
+atoms Tag := urgent ∣ home ∣ work
+
+atoms User := ana ∣ ben
+
+atoms Amount := 1 ∣ 2
+
+replicated Shop
+  state tags : GSet Tag
+  state stock : Counter (init 3)
+  state owner : MVReg User
+  op tag (t : Tag) := add tags t
+  op sell (k : Amount) := dec stock k
+  op refill (k : Amount) := restock stock k
+  op assign (u : User) := write owner u
+
+-- One part: a dec op gives the counterDec Option directly.
+replicated Stock
+  state count : Counter (init 1)
+  op take (k : Amount) := dec count k
+
+run : Option Shop → Shop
+run o = elim (λ (p : Option Shop) → Shop) ShopBot (λ (s : Shop) → s) o
+
+isNone : Option Shop → Bool
+isNone o = elim (λ (p : Option Shop) → Bool) true (λ (s : Shop) → false) o
+
+tagged : ℕ
+tagged = gsetCount 3 (witness (run (ShopTag A urgent ShopBot)))
+
+merged : ℕ
+merged = gsetCount 3 (witness (ShopMerge (run (ShopTag A urgent ShopBot)) (run (ShopTag B work ShopBot))))
+
+sold : ℤ
+sold = counterStock 2 3 (witness (payload (run (ShopSell B (pack 1 refl) ShopBot))))
+
+oversold : Bool
+oversold = isNone (ShopSell A (pack 1 refl) (run (ShopSell B (pack 1 refl) ShopBot)))
+
+refilled : ℤ
+refilled = counterStock 2 3 (witness (payload (run (ShopRefill A (pack 0 refl) ShopBot))))
+
+owned : ℕ
+owned = mvregCount 2 2 (payload (payload (run (ShopAssign A ben ShopBot))))
+
+taken : Bool
+taken = elim (λ (p : Option Stock) → Bool) true (λ (s : Stock) → false) (StockTake A (pack 1 refl) StockBot)

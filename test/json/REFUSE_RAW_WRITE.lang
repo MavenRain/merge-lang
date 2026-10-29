@@ -1,0 +1,7 @@
+replicas A B
+
+atoms Tag := urgent ∣ home
+
+replicated Tags
+  state tags : GSet Tag
+  op tag (t : Tag) := dec tags t

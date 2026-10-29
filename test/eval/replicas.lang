@@ -1,0 +1,22 @@
+-- replicas A B gives Replica = Fin 2, A = pack 0 refl and B = pack 1 refl.
+replicas A B
+
+-- Numeral atoms give Amount = Fin 2 and AmountValue : Amount → ℕ (Q34).
+atoms Amount := 1 ∣ 2
+
+atoms User := ana ∣ ben
+
+indexA : ℕ
+indexA = witness A
+
+indexB : ℕ
+indexB = witness B
+
+indexBen : ℕ
+indexBen = witness ben
+
+amountFirst : ℕ
+amountFirst = AmountValue (pack 0 refl)
+
+amountSecond : ℕ
+amountSecond = AmountValue (pack 1 refl)

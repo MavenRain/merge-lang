@@ -2516,6 +2516,7 @@ static int check_def(Checker *c, const Decl *d) {
 typedef struct {
   Checker *c;
   const Decl *d;
+  int line, col; /* the span of each generated term and def: the declaration word */
   const CocellField *kinds;
   uint32_t count;
   uint64_t n;
@@ -2532,8 +2533,8 @@ static Term *cg_node(const Cogen *g, TermKind kind, const char *name, const Term
     return NULL;
   memset(t, 0, sizeof *t);
   t->kind = kind;
-  t->line = g->d->line;
-  t->col = g->d->col;
+  t->line = g->line;
+  t->col = g->col;
   t->name = name;
   t->left = left;
   t->right = right;
@@ -2639,7 +2640,7 @@ static int cg_start(const Cogen *g, const char *name) {
   return name == NULL ? FAIL(c, "OOM", "out of memory") : name_free(c, name);
 }
 
-static int cg_def(const Cogen *g, const char *name, const Term *type, const Term *body) {
+static int cg_def_origin(const Cogen *g, Origin origin, const char *name, const Term *type, const Term *body) {
   Decl d;
   if (type == NULL || body == NULL)
     return FAIL(g->c, "OOM", "out of memory");
@@ -2647,13 +2648,17 @@ static int cg_def(const Cogen *g, const char *name, const Term *type, const Term
     return 0;
   memset(&d, 0, sizeof d);
   d.kind = DECL_DEF;
-  d.origin = ORIGIN_DOMAIN;
-  d.line = d.end_line = g->d->line;
-  d.col = d.end_col = g->d->col;
+  d.origin = origin;
+  d.line = d.end_line = g->line;
+  d.col = d.end_col = g->col;
   d.name = name;
   d.type = type;
   d.body = body;
   return check_def(g->c, &d);
+}
+
+static int cg_def(const Cogen *g, const char *name, const Term *type, const Term *body) {
+  return cg_def_origin(g, ORIGIN_DOMAIN, name, type, body);
 }
 
 /* The label type D_f_E, the twin of intent-lang check_label: its closed
@@ -2847,6 +2852,8 @@ static int check_cofamily(Checker *c, const Decl *d) {
     return 0;
   g.c = c;
   g.d = d;
+  g.line = d->line;
+  g.col = d->col;
   g.kinds = kinds;
   g.count = (uint32_t)count;
   if (!cg_names(&g))
@@ -2862,12 +2869,616 @@ static int check_cofamily(Checker *c, const Decl *d) {
   return cg_walk(&g) && cg_corec(&g);
 }
 
-static int check_decl(Checker *c, const Decl *d) {
-  if (d->kind == DECL_REPLICAS || d->kind == DECL_ATOMS || d->kind == DECL_REPLICATED) {
-    /* `replicas` has no name: the message names the form. */
-    c->m->def = d->name != NULL ? d->name : "replicas";
-    return FAIL(c, "REFUSE_FORM", "the forms are not checked before slice S3e; the parse and fmt accept them");
+static const Term *cg_nat(const Cogen *g, uint64_t n) {
+  Term *t = cg_node(g, TERM_NAT, NULL, NULL, NULL);
+  if (t != NULL)
+    t->nat = n;
+  return t;
+}
+
+/* The member J of a Fin type: pack J refl. */
+static const Term *cg_member(const Cogen *g, uint64_t j) {
+  return cg_app(g, cg_app(g, cg_var(g, "pack"), cg_nat(g, j)), cg_var(g, "refl"));
+}
+
+/* λ (x : TYPE) → flagIf (natEq (witness x) 0) v0 (flagIf .. v(n-1)):
+   the numeral of each member of a numeral atoms form (Q34 (a)). */
+/* λ x : TYPE → the flagIf (natEq (witness x) j) chain that gives the
+   numeral of NAMES j at member j of the N names (N >= 1). */
+static const Term *cg_value(const Cogen *g, const char *type, const FormName *names, size_t n) {
+  size_t j = n - 1u;
+  const Term *w = cg_app(g, cg_var(g, "witness"), cg_var(g, "x"));
+  const Term *body = cg_nat(g, names[j].nat);
+  for (; j > 0; j--) {
+    const Term *test = cg_app(g, cg_app(g, cg_var(g, "natEq"), w), cg_nat(g, j - 1u));
+    body = cg_app(g, cg_app(g, cg_app(g, cg_var(g, "flagIf"), test), cg_nat(g, names[j - 1u].nat)), body);
   }
+  return cg_lam(g, "x", cg_var(g, type), body);
+}
+
+/* The synthetic program defs of a `replicas` or `atoms` form (Q9, Q33
+   (a)), each with the span of the form word. TYPE : Type 0 is Fin n for
+   the n names. Each name is the member pack j refl : TYPE. Numerals give
+   no member defs: TYPEValue : TYPE → Nat gives the numeral of a member
+   (Q34 (a)). A name clash gives REFUSE_NAME (cg_start). */
+static int check_finite(Checker *c, const Decl *d, const char *type) {
+  Cogen g;
+  size_t j;
+  memset(&g, 0, sizeof g);
+  g.c = c;
+  g.d = d;
+  g.line = d->line;
+  g.col = d->col;
+  if (!cg_def_origin(&g, ORIGIN_PROGRAM, type, cg_univ(&g, 0), cg_app(&g, cg_var(&g, "Fin"), cg_nat(&g, d->name_count))))
+    return 0;
+  if (d->name_count > 0u && d->names[0].text == NULL)
+    return cg_def_origin(&g, ORIGIN_PROGRAM, cg_join(&g, type, "Value"), cg_pi(&g, NULL, cg_var(&g, type), cg_var(&g, "Nat")),
+                         cg_value(&g, type, d->names, d->name_count));
+  for (j = 0; j < d->name_count; j++) {
+    if (!cg_def_origin(&g, ORIGIN_PROGRAM, d->names[j].text, cg_var(&g, type), cg_member(&g, j)))
+      return 0;
+  }
+  return 1;
+}
+
+/* The part kinds of a `state` line (Q36 (a)). */
+typedef enum {
+  PART_GSET,
+  PART_MVREG,
+  PART_COUNTER,
+  PART_ESCROW,
+  PART_NONE
+} PartKind;
+
+static const char *const PART_TYPE[] = {"GSet", "MVReg", "Counter", "Escrow"};
+static const char *const PART_PREFIX[] = {"gset", "mvreg", "counter", "escrow"};
+
+/* The part operations (J2, Q35 (a)): the word, the part kind, the count
+   of arguments after the part and whether the result is an Option. An
+   Escrow part has operations only when an `allocate` line gives its
+   split. */
+typedef enum {
+  PW_ADD,
+  PW_WRITE,
+  PW_DEC,
+  PW_RESTOCK,
+  PW_ESCROW_DEC,
+  PW_TRANSFER,
+  PW_ESCROW_RESTOCK
+} PartWord;
+
+static const struct {
+  const char *word;
+  PartKind kind;
+  size_t args;
+  int partial;
+} PART_OPS[] = {
+  [PW_ADD] = {"add", PART_GSET, 1, 0},
+  [PW_WRITE] = {"write", PART_MVREG, 1, 0},
+  [PW_DEC] = {"dec", PART_COUNTER, 1, 1},
+  [PW_RESTOCK] = {"restock", PART_COUNTER, 1, 0},
+  [PW_ESCROW_DEC] = {"dec", PART_ESCROW, 1, 1},
+  [PW_TRANSFER] = {"transfer", PART_ESCROW, 2, 1},
+  [PW_ESCROW_RESTOCK] = {"restock", PART_ESCROW, 1, 0},
+};
+
+/* A state line: its part kind, the member count n of its atoms name
+   (GSet, MVReg) and its Counter init. An allocated Counter is an Escrow
+   part with its allocate line, the share of each replica (in the
+   replicas order) and the name of its split def. */
+typedef struct {
+  const FormItem *it;
+  PartKind kind;
+  uint64_t n;
+  uint64_t s0;
+  const FormItem *alloc;
+  const FormName *shares;
+  const char *split;
+} Part;
+
+/* The span of WORD at LINE, COL (the width in code points). */
+static Span word_span(int line, int col, const char *word) {
+  int width = 0;
+  const char *p;
+  for (p = word; *p != '\0'; p++) width += ((unsigned char)*p & 0xC0u) != 0x80u;
+  return (Span){NULL, line, col, line, col + width};
+}
+
+/* The form Decl of KIND (and NAME when it is not NULL) before this one. */
+static const Decl *form_decl(const Checker *c, DeclKind kind, const char *name) {
+  size_t i;
+  for (i = 0; i < c->decl_index; i++) {
+    const Decl *d = &c->decls->items[i];
+    if (d->kind == kind && (name == NULL || (d->name != NULL && strcmp(d->name, name) == 0)))
+      return d;
+  }
+  return NULL;
+}
+
+static PartKind part_kind(const Term *type) {
+  const Term *head = type->kind == TERM_APP ? type->left : type;
+  PartKind k;
+  for (k = PART_GSET; k < PART_NONE; k++) {
+    if (head->kind == TERM_VAR && strcmp(head->name, PART_TYPE[k]) == 0)
+      return k;
+  }
+  return PART_NONE;
+}
+
+/* J1: a state type is GSet T or MVReg T (T an atoms name), Counter (the
+   one kind with an init) or Escrow; else REFUSE_NO_MERGE at the state
+   word. An unknown T gives NAME_UNKNOWN. */
+static int form_part(Checker *c, const FormItem *it, Part *part) {
+  const Term *arg = it->type != NULL && it->type->kind == TERM_APP ? it->type->right : NULL;
+  Span span = word_span(it->line, it->col, "state");
+  const Decl *atoms;
+  part->it = it;
+  part->kind = it->type == NULL ? PART_NONE : part_kind(it->type);
+  part->n = 0;
+  part->s0 = it->has_init ? it->init : 0u;
+  part->alloc = NULL;
+  part->shares = NULL;
+  part->split = NULL;
+  if (part->kind == PART_NONE)
+    return diag_fail_at(c->m->diag, "REFUSE_NO_MERGE", c->m->def, span, NULL, NULL, NULL,
+                        "the state %s has no merge; a part type is GSet T or MVReg T (T an atoms name), Counter or Escrow (Q36 (a))",
+                        it->name.text);
+  if (it->has_init && part->kind != PART_COUNTER)
+    return diag_fail_at(c->m->diag, "REFUSE_NO_MERGE", c->m->def, span, NULL, NULL, NULL, "the state %s: only a Counter part has an init",
+                        it->name.text);
+  if (part->kind == PART_COUNTER || part->kind == PART_ESCROW)
+    return arg == NULL ? 1
+                       : diag_fail_at(c->m->diag, "REFUSE_NO_MERGE", c->m->def, span, NULL, NULL, NULL,
+                                      "the state %s: %s takes no type argument (Q36 (a))", it->name.text, PART_TYPE[part->kind]);
+  if (arg == NULL || arg->kind != TERM_VAR)
+    return diag_fail_at(c->m->diag, "REFUSE_NO_MERGE", c->m->def, span, NULL, NULL, NULL,
+                        "the state %s: %s takes one atoms name (Q36 (a))", it->name.text, PART_TYPE[part->kind]);
+  atoms = form_decl(c, DECL_ATOMS, arg->name);
+  if (atoms == NULL)
+    return diag_fail_at(c->m->diag, "NAME_UNKNOWN", c->m->def, word_span(arg->line, arg->col, arg->name), NULL, arg->name, NULL,
+                        "unknown name %s; the type of a GSet or MVReg part is an atoms name", arg->name);
+  part->n = atoms->name_count;
+  return 1;
+}
+
+/* F applied to the N terms ARGS. */
+static const Term *cg_spine(const Cogen *g, const char *f, const Term *const *args, size_t n) {
+  const Term *t = cg_var(g, f);
+  size_t j;
+  for (j = 0; j < n; j++) t = cg_app(g, t, args[j]);
+  return t;
+}
+
+/* The part type for SUFFIX NULL, else the part term prefixSUFFIX: GSet
+   takes n, MVReg n r, Counter and Escrow r. */
+static const Term *part_term(const Cogen *g, const Part *p, uint64_t r, const char *suffix) {
+  const Term *t = cg_var(g, suffix == NULL ? PART_TYPE[p->kind] : cg_join(g, PART_PREFIX[p->kind], suffix));
+  if (p->kind == PART_GSET || p->kind == PART_MVREG)
+    t = cg_app(g, t, cg_nat(g, p->n));
+  return p->kind == PART_GSET ? t : cg_app(g, t, cg_nat(g, r));
+}
+
+/* NAME : Type 0 is the right-nested × of the K part types; NAMEBot and
+   NAMEMerge are the pairBot and pairMerge chains over the part bots and
+   merges (one part: the part terms). */
+static int form_shop(const Cogen *g, const Part *parts, size_t k, uint64_t r) {
+  const char *name = g->d->name;
+  const Term *type = part_term(g, &parts[k - 1u], r, NULL);
+  const Term *bot = part_term(g, &parts[k - 1u], r, "Bot");
+  const Term *merge = part_term(g, &parts[k - 1u], r, "Merge");
+  const Term *self = cg_var(g, name);
+  size_t j;
+  for (j = k - 1u; j > 0; j--) {
+    const Part *p = &parts[j - 1u];
+    const Term *a = part_term(g, p, r, NULL);
+    bot = cg_spine(g, "pairBot", (const Term *const[]){a, type, part_term(g, p, r, "Bot"), bot}, 4);
+    merge = cg_spine(g, "pairMerge", (const Term *const[]){a, type, part_term(g, p, r, "Merge"), merge}, 4);
+    type = a == NULL || type == NULL ? NULL : cg_node(g, TERM_SIGMA, NULL, a, type);
+  }
+  return cg_def_origin(g, ORIGIN_PROGRAM, name, cg_univ(g, 0), type) &&
+         cg_def_origin(g, ORIGIN_PROGRAM, cg_join(g, name, "Bot"), self, bot) &&
+         cg_def_origin(g, ORIGIN_PROGRAM, cg_join(g, name, "Merge"), cg_pi(g, NULL, self, cg_pi(g, NULL, self, self)), merge);
+}
+
+static int term_has_name(const Term *t, const char *name) {
+  return t != NULL && ((t->name != NULL && strcmp(t->name, name) == 0) || term_has_name(t->left, name) ||
+                       term_has_name(t->right, name));
+}
+
+/* A fresh binder must hide neither a global nor a name in the source,
+   including the binders and annotations of argument expressions. */
+static const char *op_binder(const Cogen *g, const FormItem *it, const char *base) {
+  int clash = 1;
+  size_t j;
+  while (base != NULL && clash) {
+    clash = name_owner(g->c, base) != NULL || term_has_name(it->body, base);
+    for (j = 0; j < it->param_count; j++)
+      clash = clash || strcmp(it->params[j].name, base) == 0 || term_has_name(it->params[j].type, base);
+    if (clash)
+      base = cg_join(g, base, "'");
+  }
+  return base;
+}
+
+/* Rename free occurrences only. TO is fresh throughout the source, so a
+   nested binder cannot capture it. Keep the original diagnostic spans. */
+static const Term *op_rename(const Cogen *g, const Term *t, const char *from, const char *to) {
+  const Term *left, *right;
+  Term *out;
+  if (t == NULL)
+    return NULL;
+  left = op_rename(g, t->left, from, to);
+  right = t->name != NULL && t->kind != TERM_VAR && strcmp(t->name, from) == 0
+              ? t->right : op_rename(g, t->right, from, to);
+  if ((t->left != NULL && left == NULL) || (t->right != NULL && right == NULL))
+    return NULL;
+  out = arena_alloc(g->c->m->arena, sizeof *out);
+  if (out == NULL)
+    return NULL;
+  *out = *t;
+  out->left = left;
+  out->right = right;
+  if (t->kind == TERM_VAR && strcmp(t->name, from) == 0)
+    out->name = to;
+  return out;
+}
+
+/* User parameters must not capture the domain functions and constructors
+   inserted by elaboration. Their annotations keep lexical scope. */
+static int op_scope(const Cogen *g, const FormItem *it, FormItem *out) {
+  Field *params = arena_alloc(g->c->m->arena, (it->param_count + 1u) * sizeof *params);
+  size_t j, a;
+  if (params == NULL)
+    return 0;
+  *out = *it;
+  if (it->param_count > 0u)
+    memcpy(params, it->params, it->param_count * sizeof *params);
+  out->params = params;
+  for (j = 0; j < it->param_count; j++) {
+    params[j].name = op_binder(g, out, it->params[j].name);
+    if (params[j].name == NULL)
+      return 0;
+  }
+  for (j = 0; j < it->param_count; j++) {
+    for (a = j; a > 0; a--)
+      params[j].type = op_rename(g, params[j].type, it->params[a - 1u].name, params[a - 1u].name);
+    if (params[j].type == NULL)
+      return 0;
+  }
+  return out->body != NULL;
+}
+
+/* J1: an op parameter type is an atoms name, Replica or Fin m. */
+static int op_param_finite(const Checker *c, const Term *t) {
+  if (t->kind == TERM_VAR)
+    return strcmp(t->name, "Replica") == 0 || form_decl(c, DECL_ATOMS, t->name) != NULL;
+  return t->kind == TERM_APP && t->left->kind == TERM_VAR && strcmp(t->left->name, "Fin") == 0 && t->right->kind == TERM_NAT;
+}
+
+/* An amount through NAMEValue (Q34 (a)): ARG is an op parameter of a
+   numeral atoms type T gives TValue ARG; else ARG. */
+static const Term *op_amount(const Cogen *g, const FormItem *it, const Term *arg) {
+  size_t j;
+  for (j = 0; arg->kind == TERM_VAR && j < it->param_count; j++) {
+    const Term *t = it->params[j].type;
+    const Decl *atoms = t->kind == TERM_VAR ? form_decl(g->c, DECL_ATOMS, t->name) : NULL;
+    if (strcmp(it->params[j].name, arg->name) == 0 && atoms != NULL && atoms->name_count > 0u && atoms->names[0].text == NULL)
+      return cg_app(g, cg_var(g, cg_join(g, t->name, "Value")), arg);
+  }
+  return arg;
+}
+
+/* The part operation W on the part PART of P at the replica I (TO: the
+   replica that gets the rights of a transfer). */
+static const Term *part_op(const Cogen *g, PartWord w, const Part *p, uint64_t r, const Term *i, const Term *to, const Term *arg,
+                           const Term *part) {
+  const Term *n = cg_nat(g, p->n), *rr = cg_nat(g, r), *split = p->split == NULL ? NULL : cg_var(g, p->split);
+  if (w == PW_ADD)
+    return cg_spine(g, "gsetAdd", (const Term *const[]){n, arg, part}, 3);
+  if (w == PW_WRITE)
+    return cg_spine(g, "mvregWrite", (const Term *const[]){n, rr, i, arg, part}, 5);
+  if (w == PW_DEC)
+    return cg_spine(g, "counterDec", (const Term *const[]){rr, cg_nat(g, p->s0), i, arg, part}, 5);
+  if (w == PW_RESTOCK)
+    return cg_spine(g, "counterRestock", (const Term *const[]){rr, i, arg, part}, 4);
+  if (w == PW_ESCROW_DEC)
+    return cg_spine(g, "escrowDec", (const Term *const[]){rr, split, i, arg, part}, 5);
+  if (w == PW_TRANSFER)
+    return cg_spine(g, "escrowTransfer", (const Term *const[]){rr, split, i, to, arg, part}, 6);
+  return cg_spine(g, "escrowRestock", (const Term *const[]){rr, i, arg, part}, 4);
+}
+
+/* Part J of the right-nested K-tuple S. */
+static const Term *form_get(const Cogen *g, size_t k, size_t j, const Term *s) {
+  size_t d;
+  for (d = 0; d < j; d++) s = cg_app(g, cg_var(g, "payload"), s);
+  return j + 1u == k ? s : cg_app(g, cg_var(g, "witness"), s);
+}
+
+/* The K-tuple CUR (from part D) with part J replaced by X. */
+static const Term *form_put(const Cogen *g, size_t k, size_t d, size_t j, const Term *cur, const Term *x) {
+  const Term *here = d == j ? x : cg_app(g, cg_var(g, "witness"), cur);
+  if (d + 1u == k)
+    return d == j ? x : cur;
+  return cg_spine(g, "pack", (const Term *const[]){here, form_put(g, k, d + 1u, j, cg_app(g, cg_var(g, "payload"), cur), x)}, 2);
+}
+
+/* The op result: a total part value V goes back into S under some; a
+   partial one (an Option) with one part is the result; else an Option
+   elim puts the new part back. */
+static const Term *op_result(const Cogen *g, const FormItem *it, const Part *p, uint64_t r, size_t k, size_t j, int partial,
+                             const Term *s, const Term *v) {
+  const Term *shop = cg_var(g, g->d->name);
+  const Term *pt = part_term(g, p, r, NULL);
+  const char *o = op_binder(g, it, "o"), *x = op_binder(g, it, "x");
+  if (!partial)
+    return cg_app(g, cg_var(g, "some"), form_put(g, k, 0, j, s, v));
+  if (k == 1u)
+    return v;
+  return cg_spine(g, "elim",
+                  (const Term *const[]){cg_lam(g, o, cg_app(g, cg_var(g, "Option"), pt), cg_app(g, cg_var(g, "Option"), shop)),
+                                        cg_var(g, "none"),
+                                        cg_lam(g, x, pt, cg_app(g, cg_var(g, "some"), form_put(g, k, 0, j, s, cg_var(g, x)))), v},
+                  4);
+}
+
+/* NAME with an upper case first letter (Q38 (a)). */
+static const char *cg_word(const Cogen *g, const char *x) {
+  size_t l = strlen(x);
+  char *s = arena_alloc(g->c->m->arena, l + 1u);
+  if (s == NULL)
+    return NULL;
+  memcpy(s, x, l + 1u);
+  if (s[0] >= 'a' && s[0] <= 'z')
+    s[0] = (char)(s[0] - 'a' + 'A');
+  return s;
+}
+
+/* An op line: NAMEWord : Replica → params → NAME → Option NAME (Q38
+   (a)). J1: REFUSE_OP_INFINITE_ARG at a parameter that is not finite.
+   J2: REFUSE_RAW_WRITE at the op word when the body is not one part
+   operation `WORD PART ARG..` of the part kind of PART (Q35 (a)). */
+static int form_op(const Cogen *g, const FormItem *it, const Part *parts, size_t k, uint64_t r) {
+  Checker *c = g->c;
+  const FormItem *source = it;
+  FormItem scoped;
+  const Term *args[4];
+  const Term *head, *part, *i, *s, *body, *type;
+  const Term *replica = cg_var(g, "Replica"), *shop = cg_var(g, g->d->name);
+  size_t argc = 0, j, pj = k, w = sizeof PART_OPS / sizeof PART_OPS[0];
+  const char *ib, *sb;
+  for (j = 0; j < it->param_count; j++) {
+    const Field *f = &it->params[j];
+    if (!op_param_finite(c, f->type))
+      return diag_fail_at(c->m->diag, "REFUSE_OP_INFINITE_ARG", c->m->def, word_span(f->line, f->col, f->name), NULL, NULL, NULL,
+                          "the parameter %s of op %s is not finite; an op parameter type is an atoms name, Replica or Fin m", f->name,
+                          it->name.text);
+  }
+  if (!op_scope(g, it, &scoped))
+    return FAIL(c, "OOM", "out of memory");
+  it = &scoped;
+  head = it->body;
+  for (; head != NULL && head->kind == TERM_APP && argc < 4u; argc++) {
+    args[argc] = head->right;
+    head = head->left;
+  }
+  part = argc > 0u ? args[argc - 1u] : NULL;
+  if (part != NULL && part->kind == TERM_VAR && head->kind == TERM_VAR) {
+    for (j = 0; j < k && pj == k; j++) pj = strcmp(parts[j].it->name.text, part->name) == 0 ? j : k;
+    if (pj == k)
+      return diag_fail_at(c->m->diag, "NAME_UNKNOWN", c->m->def, word_span(part->line, part->col, part->name), NULL, part->name, NULL,
+                          "unknown name %s; the part of an op is a state of this form", part->name);
+    for (j = 0; j < sizeof PART_OPS / sizeof PART_OPS[0]; j++) {
+      if (strcmp(PART_OPS[j].word, head->name) == 0 && PART_OPS[j].kind == parts[pj].kind && PART_OPS[j].args + 1u == argc &&
+          (parts[pj].kind != PART_ESCROW || parts[pj].split != NULL))
+        w = j;
+    }
+  }
+  if (w == sizeof PART_OPS / sizeof PART_OPS[0])
+    return diag_fail_at(c->m->diag, "REFUSE_RAW_WRITE", c->m->def, word_span(it->line, it->col, "op"), NULL, NULL, NULL,
+                        "the body of op %s is not one part operation (Q35 (a)): add p x on a GSet, write p x on an MVReg, dec p k "
+                        "or restock p k on a Counter, dec p k, transfer p j k or restock p k on an allocated Counter",
+                        it->name.text);
+  /* WORD and PART are form labels. Only the argument expressions are in
+     the parameter scope, with the last repeated name binding first. */
+  for (j = 0; j < PART_OPS[w].args; j++) {
+    size_t a;
+    for (a = it->param_count; a > 0; a--)
+      args[j] = op_rename(g, args[j], source->params[a - 1u].name, it->params[a - 1u].name);
+    if (args[j] == NULL)
+      return FAIL(c, "OOM", "out of memory");
+  }
+  ib = op_binder(g, it, "i");
+  sb = op_binder(g, it, "s");
+  i = cg_var(g, ib);
+  s = cg_var(g, sb);
+  body = op_result(g, it, &parts[pj], r, k, pj, PART_OPS[w].partial, s,
+                   part_op(g, (PartWord)w, &parts[pj], r, i, PART_OPS[w].args == 2u ? args[1] : NULL,
+                           w == PW_ADD || w == PW_WRITE ? args[0] : op_amount(g, it, args[0]),
+                           form_get(g, k, pj, s)));
+  body = cg_lam(g, sb, shop, body);
+  type = cg_pi(g, NULL, shop, cg_app(g, cg_var(g, "Option"), shop));
+  for (j = it->param_count; j > 0; j--) {
+    body = cg_lam(g, it->params[j - 1u].name, it->params[j - 1u].type, body);
+    type = cg_pi(g, it->params[j - 1u].name, it->params[j - 1u].type, type);
+  }
+  return cg_def_origin(g, ORIGIN_PROGRAM, cg_join(g, g->d->name, cg_word(g, it->name.text)), cg_pi(g, NULL, replica, type),
+                       cg_lam(g, ib, replica, body));
+}
+
+/* The part J of the K parts with the state name NAME, else K. */
+static size_t part_index(const Part *parts, size_t k, const char *name) {
+  size_t j, pj = k;
+  for (j = 0; j < k && pj == k; j++) pj = strcmp(parts[j].it->name.text, name) == 0 ? j : k;
+  return pj;
+}
+
+/* An allocate line (design table row 7): PART is a Counter state and
+   becomes an Escrow part. J1: each replica has one share and the shares
+   sum to the Counter init, else REFUSE_ALLOC_SUM at the allocate word.
+   A part that is not a Counter (an Escrow part, or a second allocate)
+   has no init: the state type path gives REFUSE_NO_MERGE at the
+   allocate word. */
+static int form_alloc(Checker *c, const FormItem *it, Part *parts, size_t k, const Decl *replicas) {
+  Span span = word_span(it->line, it->col, "allocate");
+  size_t r = replicas->name_count, pj = part_index(parts, k, it->name.text), j, x;
+  FormName *shares;
+  uint64_t left;
+  int over = 0;
+  if (pj == k)
+    return diag_fail_at(c->m->diag, "NAME_UNKNOWN", c->m->def, word_span(it->name.line, it->name.col, it->name.text), NULL,
+                        it->name.text, NULL, "unknown name %s; the part of an allocate is a state of this form", it->name.text);
+  if (parts[pj].kind != PART_COUNTER)
+    return diag_fail_at(c->m->diag, "REFUSE_NO_MERGE", c->m->def, span, NULL, NULL, NULL,
+                        "the state %s: only a Counter part takes an allocate; an Escrow part has no init", it->name.text);
+  shares = arena_alloc(c->m->arena, (r + 1u) * sizeof *shares);
+  if (shares == NULL)
+    return FAIL(c, "OOM", "out of memory");
+  memset(shares, 0, (r + 1u) * sizeof *shares);
+  left = parts[pj].s0;
+  for (j = 0; j < it->share_count; j++) {
+    const FormName *f = &it->shares[j];
+    size_t ri = r;
+    for (x = 0; x < r && ri == r; x++) ri = f->text != NULL && strcmp(replicas->names[x].text, f->text) == 0 ? x : r;
+    if (ri == r)
+      return diag_fail_at(c->m->diag, "NAME_UNKNOWN", c->m->def, word_span(f->line, f->col, f->text == NULL ? "0" : f->text), NULL,
+                          f->text, NULL, "unknown name %s; a share of an allocate names a replica", f->text == NULL ? "(a numeral)" : f->text);
+    if (shares[ri].text != NULL)
+      return diag_fail_at(c->m->diag, "REFUSE_ALLOC_SUM", c->m->def, span, NULL, NULL, NULL,
+                          "allocate %s: the replica %s has two shares; give each replica one share", it->name.text, f->text);
+    shares[ri] = *f;
+    over = over || f->nat > left;
+    left = over ? 0u : left - f->nat;
+  }
+  if (over || left != 0u || it->share_count != r)
+    return diag_fail_at(c->m->diag, "REFUSE_ALLOC_SUM", c->m->def, span, NULL, NULL, NULL,
+                        "allocate %s: give each replica one share, and the shares sum to the Counter init %llu", it->name.text,
+                        (unsigned long long)parts[pj].s0);
+  parts[pj].kind = PART_ESCROW;
+  parts[pj].alloc = it;
+  parts[pj].shares = shares;
+  return 1;
+}
+
+/* NAMEPARTSplit : Replica → ℕ (Q38 (a)), the share chain over witness i,
+   with the span of the allocate word. */
+static int form_split(Cogen *g, Part *p, uint64_t r) {
+  g->line = p->alloc->line;
+  g->col = p->alloc->col;
+  p->split = cg_join(g, cg_join(g, g->d->name, cg_word(g, p->it->name.text)), "Split");
+  if (p->split == NULL)
+    return FAIL(g->c, "OOM", "out of memory");
+  return cg_def_origin(g, ORIGIN_PROGRAM, p->split, cg_pi(g, NULL, cg_var(g, "Replica"), cg_var(g, "Nat")),
+                       cg_value(g, "Replica", p->shares, r));
+}
+
+/* An invariant line (Q37 (a)): `nonneg PART` on a Counter part gives
+   counterNonneg r s0, on an allocated Counter escrowNonneg r split, at
+   the part PART of S. Another body gives REFUSE_RAW_WRITE at the
+   invariant word. */
+static int form_inv(const Cogen *g, const FormItem *it, const Part *parts, size_t k, uint64_t r, const Term *s, const Term **out) {
+  Checker *c = g->c;
+  const Term *b = it->body, *part = b != NULL && b->kind == TERM_APP ? b->right : NULL, *get;
+  size_t pj = k;
+  if (part != NULL && part->kind == TERM_VAR && b->left->kind == TERM_VAR && strcmp(b->left->name, "nonneg") == 0) {
+    pj = part_index(parts, k, part->name);
+    if (pj == k)
+      return diag_fail_at(c->m->diag, "NAME_UNKNOWN", c->m->def, word_span(part->line, part->col, part->name), NULL, part->name, NULL,
+                          "unknown name %s; the part of an invariant is a state of this form", part->name);
+  }
+  if (pj == k || (parts[pj].kind != PART_COUNTER && parts[pj].split == NULL))
+    return diag_fail_at(c->m->diag, "REFUSE_RAW_WRITE", c->m->def, word_span(it->line, it->col, "invariant"), NULL, NULL, NULL,
+                        "the invariant is not nonneg PART on a Counter or an allocated Counter (Q37 (a))");
+  get = form_get(g, k, pj, s);
+  *out = parts[pj].kind == PART_COUNTER
+             ? cg_spine(g, "counterNonneg", (const Term *const[]){cg_nat(g, r), cg_nat(g, parts[pj].s0), get}, 3)
+             : cg_spine(g, "escrowNonneg", (const Term *const[]){cg_nat(g, r), cg_var(g, parts[pj].split), get}, 3);
+  return 1;
+}
+
+/* A replicated form (Q9, Q33 (a)): the allocate lines change their
+   Counter parts to Escrow parts; NAME, NAMEBot and NAMEMerge from the
+   state lines (the span of the replicated word); NAMEPARTSplit for each
+   allocate line; NAMEWord for each op line (the span of the op word);
+   NAMEInv : NAME → Bool, the and of the invariant lines (the span of the
+   first invariant word). */
+static int check_replicated(Checker *c, const Decl *d) {
+  Part *parts = arena_alloc(c->m->arena, (d->item_count + 1u) * sizeof *parts);
+  const Decl *replicas = form_decl(c, DECL_REPLICAS, NULL);
+  const FormItem *first = NULL;
+  const Term *inv = NULL, *shop, *s;
+  size_t k = 0, j;
+  Cogen g;
+  if (parts == NULL)
+    return FAIL(c, "OOM", "out of memory");
+  for (j = 0; j < d->item_count; j++) {
+    if (d->items[j].kind == ITEM_STATE) {
+      size_t a;
+      const FormName *name = &d->items[j].name;
+      for (a = 0; a < k; a++) {
+        if (strcmp(parts[a].it->name.text, name->text) == 0)
+          return diag_fail_at(c->m->diag, "REFUSE_NAME", c->m->def, word_span(name->line, name->col, name->text), NULL,
+                              name->text, NULL, "the state %s is already defined in %s", name->text, d->name);
+      }
+      if (!form_part(c, &d->items[j], &parts[k]))
+        return 0;
+      k++;
+    }
+  }
+  if (k == 0u)
+    return diag_fail_at(c->m->diag, "REFUSE_NO_MERGE", c->m->def, word_span(d->line, d->col, "replicated"), NULL, NULL, NULL,
+                        "a replicated form with no state line has no merge");
+  if (replicas == NULL)
+    return diag_fail_at(c->m->diag, "NAME_UNKNOWN", c->m->def, word_span(d->line, d->col, "replicated"), NULL, "Replica", NULL,
+                        "unknown name Replica; a replicas form comes before a replicated form");
+  for (j = 0; j < d->item_count; j++) {
+    if (d->items[j].kind == ITEM_ALLOCATE && !form_alloc(c, &d->items[j], parts, k, replicas))
+      return 0;
+  }
+  memset(&g, 0, sizeof g);
+  g.c = c;
+  g.d = d;
+  g.line = d->line;
+  g.col = d->col;
+  if (!form_shop(&g, parts, k, replicas->name_count))
+    return 0;
+  for (j = 0; j < k; j++) {
+    if (parts[j].alloc != NULL && !form_split(&g, &parts[j], replicas->name_count))
+      return 0;
+  }
+  shop = cg_var(&g, d->name);
+  s = cg_var(&g, "s");
+  for (j = 0; j < d->item_count; j++) {
+    const FormItem *it = &d->items[j];
+    const Term *t = NULL;
+    c->m->def = d->name;
+    g.line = it->line;
+    g.col = it->col;
+    if (it->kind == ITEM_OP && !form_op(&g, it, parts, k, replicas->name_count))
+      return 0;
+    if (it->kind == ITEM_INVARIANT && !form_inv(&g, it, parts, k, replicas->name_count, s, &t))
+      return 0;
+    if (it->kind == ITEM_INVARIANT) {
+      inv = inv == NULL ? t : cg_spine(&g, "and", (const Term *const[]){inv, t}, 2);
+      first = first == NULL ? it : first;
+    }
+  }
+  if (first == NULL)
+    return 1;
+  g.line = first->line;
+  g.col = first->col;
+  return cg_def_origin(&g, ORIGIN_PROGRAM, cg_join(&g, d->name, "Inv"), cg_pi(&g, NULL, shop, cg_var(&g, "Bool")),
+                       cg_lam(&g, "s", shop, inv));
+}
+
+static int check_decl(Checker *c, const Decl *d) {
+  /* The forms first: no generic Decl path reads a form (S3a trap). */
+  if (d->kind == DECL_REPLICAS)
+    return check_finite(c, d, "Replica");
+  if (d->kind == DECL_ATOMS)
+    return check_finite(c, d, d->name);
+  if (d->kind == DECL_REPLICATED)
+    return check_replicated(c, d);
   if (d->kind == DECL_AXIOM)
     return FAIL(c, "REFUSE_AXIOM", "an axiom has no proof (rule R2)");
   if (d->is_rec)
@@ -2901,6 +3512,15 @@ int check_program(Arena *arena, const DeclList *decls, Machine *m, Diag *diag) {
       ctors += 1u + f;
       defs += 3u + 2u * f;
     }
+    /* A replicas or atoms form with N names gives at most 1 + N
+       definitions (check_finite). */
+    if (d->kind == DECL_REPLICAS || d->kind == DECL_ATOMS)
+      defs += d->name_count;
+    /* A replicated form gives NAME, NAMEBot, NAMEMerge, one def for each
+       op and allocate line and one NAMEInv for its invariant lines
+       (check_replicated). */
+    if (d->kind == DECL_REPLICATED)
+      defs += 3u + d->item_count;
   }
   m->defs = arena_alloc(arena, (defs + 1u) * sizeof *m->defs);
   m->families = arena_alloc(arena, (families + 1u) * sizeof *m->families);

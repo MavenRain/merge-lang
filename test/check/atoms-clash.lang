@@ -1,0 +1,4 @@
+-- The member A of User is the replica A.
+replicas A B
+
+atoms User := A ∣ ben

@@ -578,8 +578,9 @@ static int parse_fields(Parser *p, const Field **out, size_t *out_count) {
       if (items == NULL) return 0;
       items[count].name = b.names[i];
       items[count].type = b.type;
-      items[count].line = b.tok->line;
-      items[count].col = b.tok->col;
+      /* The span of a field is its name: the names follow the '(' token. */
+      items[count].line = b.tok[1 + i].line;
+      items[count].col = b.tok[1 + i].col;
       count++;
     }
   }

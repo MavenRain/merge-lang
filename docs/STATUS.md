@@ -1,14 +1,78 @@
 # merge-lang status
 
-The build implements slices S1, S1b, S2, S2b, S2c, S2d and S3a of
+The build implements slices S1, S1b, S2, S2b, S2c, S2d, S3a and S3e of
 `docs/PLAN.md` section 9: the port of the evolve-lang 1f87a5a surface and
 cubical kernel (S1), induction in the kernel (S1b), the merge-lang domain
 with the laws L1 to L4 as guest terms (S2), ℤ with the `stock` read
 (S2b), path constructors of dimension 2 with the `fold` over a higher
 inductive type (S2c), `isSet` for each part with `mergeAll` on the
-program side (S2d), and the parse and `fmt` of the merge forms (S3a). It
-does not complete M0. There is no merge engine, no replica simulator and no
-coordination report yet.
+program side (S2d), the parse and `fmt` of the merge forms (S3a), and
+the elaboration of the forms to guest terms (S3e). It does not complete
+M0. There is no merge engine, no replica simulator and no coordination
+report yet.
+
+## S3e (2026-10-29)
+
+- Scope (`docs/PLAN.md` section 9, the S3e row; Q33 (a) to Q38 (a)):
+  `langc check` elaborates the 7 forms to guest terms on the S2 domain
+  parts. Each form gives synthetic `DECL_DEF` nodes that `check_def`
+  checks (Q33 (a)). A type error points at the form word.
+- `replicas` and `atoms`: the type `NAME = Fin n` and one definition for
+  each member. A numeric `atoms` domain also gives `NAMEValue : NAME →
+  ℕ` (Q34 (a)). A name clash gives `REFUSE_NAME` at the form word.
+- `replicated NAME`: the state type `NAME`, `NAMEBot` and `NAMEMerge`.
+  A `state` line of a `GSet` or `MVReg` part names an atoms domain
+  (`state tags : GSet Tag`, Q36 (a)). An `op` body is one part
+  operation (Q35 (a)) and gives one definition (`ShopSell` for `op
+  sell`, Q38 (a)); a partial part operation gives an `Option`.
+  `allocate` on a `Counter` part gives an `Escrow` part and
+  `NAMEPARTSplit : Replica → ℕ` (`ShopStockSplit`). `invariant nonneg
+  PART` is the only invariant body (Q37 (a)); it gives `NAMEInv : NAME
+  → Bool`. `domain/domain.lang` gets `counterNonneg` and
+  `escrowNonneg`.
+- New codes (`docs/DIAGNOSTICS.md`, each with a fixture
+  `test/json/CODE.lang`): `REFUSE_NO_MERGE` (a `state` part with no
+  merge, a bare `GSet` or `MVReg`, an init on a part that is not a
+  `Counter`, an `allocate` on a part that is not a `Counter`, a second
+  `allocate`, a form with no `state`), `REFUSE_OP_INFINITE_ARG` (an
+  `op` parameter type that is not finite; the span is the parameter
+  name), `REFUSE_RAW_WRITE` (an `op` body that is not a part operation
+  of its part, or an `invariant` body that is not `nonneg PART`) and
+  `REFUSE_ALLOC_SUM` (two shares for one replica, a replica with no
+  share, or a sum of shares that is not the init). `REFUSE_FORM` and
+  `test/json/REFUSE_FORM.lang` are removed. An unknown atoms name, part
+  or share replica, or no `replicas` form, gives `NAME_UNKNOWN`.
+- Parser: the span of a Field is its name token, not the `(` of the
+  binder group.
+- Examples: `tags.merge` and `owner.merge` name an atoms domain (Q36
+  (a)). The four examples pass `langc check`. The `examples/*.merge`
+  gate loop is still fmt only (S3x adds `check`).
+- Tests: 10 new `test/check` fixtures (`alloc-missing`, `alloc-sum`,
+  `alloc-twice`, `alloc-under`, `atoms-clash`, `form-invariant`,
+  `op-arity`, `op-fin-open`, `raw-write`, `replicas-twice`) with the
+  text pinned; `test/check/form.lang` now gives `REFUSE_NO_MERGE`;
+  `test/eval/replicas.lang`, `shop.lang` and `escrow.lang` with 7 rows
+  each; 4 new json fixtures. The gate pair branch: `form-replicated`
+  stops with `REFUSE_OP_INFINITE_ARG`, `form-op` and `form-state` stop
+  with `REFUSE_NO_MERGE`.
+- Gate: `make check` EXIT 0. Examples 13; parse refusals 22; check
+  refusals 70; evals 173; ir 13 lowered; wasm 16; differential 1230
+  cases, 0 mismatches; fmt 143 canonical, 12 non-canonical pairs; merge
+  examples 4 canonical; json 30 fixtures, diagnostics 42 codes (28 with
+  a fixture, 14 with no fixture); gate 0 failures; review, domain and
+  diagnostic edit regressions passed; cubical 46 checks, 38 round trips.
+- Count changes from S3a: check refusals +10; evals +21; fmt +16
+  canonical; json +3 (4 new, `REFUSE_FORM` out); diagnostics +3 codes,
+  each with a fixture. The other counts are the same.
+- Mutants (14, each KILLED by a gate test; 4 after new fixtures): the
+  J1 `REFUSE_NO_MERGE` head test; the `REFUSE_OP_INFINITE_ARG` call, its
+  `Fin` numeral test (`op-fin-open`) and its `Replica` test (eval
+  escrow); the parser Field span (the json column); the
+  `REFUSE_ALLOC_SUM` `over` test, the sum under the init
+  (`alloc-under`) and the share count (`alloc-missing`); the J2
+  `REFUSE_RAW_WRITE` word test, part kind test and arity test
+  (`op-arity`); the `cg_value` names and `natEq` (eval replicas);
+  `op_amount` (eval shop).
 
 ## S3a (2026-10-28)
 
@@ -340,15 +404,17 @@ checks and 38 round trips; the other S2d counts above are unchanged.
   (Q29 (a), Q30 (b)).
 - S3a: the parse and `fmt` of the forms `replicas`, `atoms`,
   `replicated`, `state`, `op`, `invariant` and `allocate` (Q32 (a), Q34
-  (a)); `langc check` refuses a form with `REFUSE_FORM`.
+  (a)).
+- S3e: `langc check` elaborates the 7 forms to guest terms (Q33 (a) to
+  Q38 (a)) with the codes `REFUSE_NO_MERGE`, `REFUSE_OP_INFINITE_ARG`,
+  `REFUSE_RAW_WRITE` and `REFUSE_ALLOC_SUM`; `counterNonneg` and
+  `escrowNonneg` in the domain.
 
 ## Remaining M0 work
 
-1. S3e: the elaboration of the 7 forms to guest terms and the codes
-   `REFUSE_NO_MERGE`, `REFUSE_OP_INFINITE_ARG`, `REFUSE_RAW_WRITE` and
-   `REFUSE_ALLOC_SUM` (`docs/PLAN.md` section 9, the S3e row; Q33 (a),
-   Q34 (a), Q35 (a)). It needs the USER S3a commit. Then S3x: the four
-   examples type with `langc check`, the docs and the S3 close.
+1. S3x: the `examples/*.merge` gate loop runs `langc check` too (the
+   four examples GREEN), the docs and the S3 close (`docs/PLAN.md`
+   section 9, the S3x row). It needs the USER S3e commit.
 2. The later slices of `docs/PLAN.md` section 9. Each needs the slice
    before it.
 
@@ -374,8 +440,9 @@ checks and 38 round trips; the other S2d counts above are unchanged.
 - `nonneg` compares in ℕ. The signed `stock` read gives ℤ (S2b).
 - ℤ has only `natDiff` and `intLe`: there is no addition, subtraction or
   negation on ℤ. The print rule applies only to the domain data `ℤ`.
-- `langc check` refuses a `replicas`, `atoms` or `replicated` form with
-  `REFUSE_FORM` until S3e. The parser and `langc fmt` accept the forms.
+- An `op` body is one part operation, with no `requires` (Q35 (a)). An
+  `invariant` body is `nonneg PART` only (Q37 (a)).
+- The `examples/*.merge` gate loop checks `fmt` only until S3x.
 - The 10 form words (`replicas`, `atoms`, `replicated`, `state`, `op`,
   `invariant`, `allocate`, `by`, `escrow`, `init`) are keywords: a
   program cannot use them as names.

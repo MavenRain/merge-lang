@@ -57,4 +57,14 @@ nat-motive-domain.lang TYPE_MISMATCH
 nat-motive-sort.lang TYPE_MISMATCH the binder type ℕ differs from the expected type
 elim-motive-domain.lang TYPE_MISMATCH
 sumfin-open.lang TYPE_REFL
-form.lang REFUSE_FORM replicas: the forms
+form.lang REFUSE_NO_MERGE Tags: the state tags: GSet takes one atoms name
+raw-write.lang REFUSE_RAW_WRITE Tags: the body of op tag is not one part operation
+form-invariant.lang REFUSE_RAW_WRITE Shop: the invariant is not nonneg PART
+replicas-twice.lang REFUSE_NAME Replica: Replica is already defined
+alloc-sum.lang REFUSE_ALLOC_SUM Shop: allocate stock: give each replica one share, and the shares sum to the Counter init 1
+alloc-twice.lang REFUSE_NO_MERGE Shop: the state stock: only a Counter part takes an allocate
+atoms-clash.lang REFUSE_NAME A: A is already defined
+op-fin-open.lang REFUSE_OP_INFINITE_ARG Shop: the parameter k of op sell is not finite
+alloc-under.lang REFUSE_ALLOC_SUM Shop: allocate stock: give each replica one share, and the shares sum to the Counter init 2
+alloc-missing.lang REFUSE_ALLOC_SUM Shop: allocate stock: give each replica one share, and the shares sum to the Counter init 1
+op-arity.lang REFUSE_RAW_WRITE Tags: the body of op tag is not one part operation

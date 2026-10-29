@@ -61,6 +61,72 @@ done:
 
 int main(void) {
   static const struct { const char *label; const char *source; const char *code; } checks[] = {
+    {"duplicate state names refused",
+     "replicas A B\n\nreplicated Shop\n"
+     "  state stock : Counter (init 1)\n  state stock : Counter (init 7)\n"
+     "  invariant nonneg stock\n", "REFUSE_NAME"},
+    {"numeric atoms stay members in a GSet op",
+     "replicas A B\n\natoms Tag := 10 ∣ 20\n\nreplicated Shop\n"
+     "  state tags : GSet Tag\n  op tag (t : Tag) := add tags t\n\n"
+     "value : Path (Option Shop) (ShopTag A (pack 1 refl) ShopBot) (some (gsetAdd 2 (pack 1 refl) (gsetBot 2)))\n"
+     "value = refl\n", NULL},
+    {"numeric atoms stay members in an MVReg op",
+     "replicas A B\n\natoms User := 10 ∣ 20\n\nreplicated Shop\n"
+     "  state owner : MVReg User\n  op assign (u : User) := write owner u\n\n"
+     "value : Path (Option Shop) (ShopAssign A (pack 1 refl) ShopBot) (some (mvregWrite 2 2 A (pack 1 refl) (mvregBot 2 2)))\n"
+     "value = refl\n", NULL},
+    {"op parameter cannot capture some",
+     "replicas A B\n\natoms Tag := urgent ∣ work\n\nreplicated Shop\n"
+     "  state tags : GSet Tag\n  op tag (some : Tag) := add tags some\n\n"
+     "value : Path (Option Shop) (ShopTag A work ShopBot) (some (gsetAdd 2 work (gsetBot 2)))\nvalue = refl\n", NULL},
+    {"op parameter cannot capture a domain operation",
+     "replicas A B\n\natoms Tag := urgent ∣ work\n\nreplicated Shop\n"
+     "  state tags : GSet Tag\n  op tag (gsetAdd : Tag) := add tags gsetAdd\n\n"
+     "value : Path (Option Shop) (ShopTag A work ShopBot) (some (gsetAdd 2 work (gsetBot 2)))\nvalue = refl\n", NULL},
+    {"op parameter cannot capture a tuple projection",
+     "replicas A B\n\natoms Tag := urgent ∣ work\n\nreplicated Shop\n"
+     "  state tags : GSet Tag\n  state stock : Counter\n"
+     "  op tag (witness : Tag) := add tags witness\n", NULL},
+    {"partial op parameter cannot capture payload",
+     "replicas A B\n\natoms Amount := 1 ∣ 2\n\nreplicated Shop\n"
+     "  state tags : Counter\n  state stock : Counter (init 3)\n"
+     "  op sell (payload : Amount) := dec stock payload\n", NULL},
+    {"op parameter cannot capture its amount conversion",
+     "replicas A B\n\natoms Amount := 1 ∣ 3\n\nreplicated Shop\n"
+     "  state stock : Counter (init 5)\n  op sell (AmountValue : Amount) := dec stock AmountValue\n\n"
+     "value : Path (Option Shop) (ShopSell A (pack 1 refl) ShopBot) (counterDec 2 5 A 3 (counterBot 2))\nvalue = refl\n", NULL},
+    {"generated replica binder cannot capture an atoms type",
+     "replicas A B\n\natoms i := urgent ∣ work\n\nreplicated Shop\n"
+     "  state tags : GSet i\n  op tag (t : i) := add tags t\n", NULL},
+    {"generated state binder cannot capture an argument annotation",
+     "replicas A B\n\natoms s := urgent ∣ work\n\nreplicated Shop\n"
+     "  state tags : GSet s\n  op tag (t : s) := add tags ((λ (x : s) → x) t)\n", NULL},
+    {"generated motive binder cannot capture the shop type",
+     "replicas A B\n\natoms Amount := 1\n\nreplicated o\n"
+     "  state tags : Counter\n  state stock : Counter (init 1)\n"
+     "  op sell (k : Amount) := dec stock k\n", NULL},
+    {"operation word is outside the parameter scope",
+     "replicas A B\n\natoms Tag := urgent ∣ work\n\nreplicated Shop\n"
+     "  state tags : GSet Tag\n  op tag (add : Tag) := add tags add\n\n"
+     "value : Path (Option Shop) (ShopTag A work ShopBot) (some (gsetAdd 2 work (gsetBot 2)))\nvalue = refl\n", NULL},
+    {"state label is outside the parameter scope",
+     "replicas A B\n\natoms Tag := urgent ∣ work\n\nreplicated Shop\n"
+     "  state tags : GSet Tag\n  op tag (tags : Tag) := add tags tags\n\n"
+     "value : Path (Option Shop) (ShopTag A work ShopBot) (some (gsetAdd 2 work (gsetBot 2)))\nvalue = refl\n", NULL},
+    {"renamed parameter avoids nested argument binders",
+     "replicas A B\n\natoms Tag := urgent ∣ work\n\nreplicated Shop\n"
+     "  state tags : GSet Tag\n  op tag (t : Tag) := add tags ((λ (t' : Tag) → t) urgent)\n\n"
+     "value : Path (Option Shop) (ShopTag A work ShopBot) (some (gsetAdd 2 work (gsetBot 2)))\nvalue = refl\n", NULL},
+    {"argument binder still shadows an op parameter",
+     "replicas A B\n\natoms Tag := urgent ∣ work\n\nreplicated Shop\n"
+     "  state tags : GSet Tag\n  op tag (t : Tag) := add tags ((λ (t : Tag) → t) urgent)\n\n"
+     "value : Path (Option Shop) (ShopTag A work ShopBot) (some (gsetAdd 2 urgent (gsetBot 2)))\nvalue = refl\n", NULL},
+    {"last repeated op parameter binds the argument",
+     "replicas A B\n\natoms Tag := urgent ∣ work\n\nreplicated Shop\n"
+     "  state tags : GSet Tag\n  op tag (t : Tag) (t : Tag) := add tags t\n\n"
+     "value : Path (Option Shop) (ShopTag A urgent work ShopBot) (some (gsetAdd 2 work (gsetBot 2)))\nvalue = refl\n", NULL},
+    {"op without parameters",
+     "replicas A B\n\nreplicated Shop\n  state stock : Counter (init 1)\n  op sell := dec stock 1\n", NULL},
     {"natMax at nested open successors",
      "value : (a : ℕ) → (b : ℕ) → Path ℕ (natMax (natAdd (natAdd a 1) 1) (natAdd (natAdd b 1) 1)) (natAdd (natAdd (natMax a b) 1) 1)\nvalue a b = refl\n", NULL},
     {"natMax with a larger left offset",
