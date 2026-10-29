@@ -1,0 +1,6 @@
+replicas A B
+replicated Shop
+    state stock : Counter (init 1)
+    op sell (k : Amount) :=  dec stock k
+    invariant  nonneg stock
+    allocate stock by escrow (A↦1,B ↦ 0)

@@ -2,8 +2,17 @@
      decl   := 'postulate' NAME ':' term
              | 'rec'? NAME ':' term NAME NAME* '=' term
              | 'data' NAME group* ':' 'Type' 'where' ctor+
+             | 'replicas' NAME+
+             | 'atoms' NAME ':=' member ('∣' member)*
+             | 'replicated' NAME item+
      ctor   := NAME ':' term
      group  := '(' NAME+ ':' term ')'
+     member := NAME | NAT        (all members are names or all are numerals)
+     item   := 'state' NAME ':' term ('(' 'init' NAT ')')?
+             | 'op' NAME group* ':=' term
+             | 'invariant' term
+             | 'allocate' NAME 'by' 'escrow' '(' share (',' share)* ')'
+     share  := NAME '↦' NAT
      term   := ('λ' | '\') (NAME | group)+ '→' term
              | 'fun' (NAME | group)+ '=>' term
              | prod ('→' term)?
@@ -14,7 +23,8 @@
    line, at a column <= STOP, ends the current term as end of input does. The
    clause line repeats the signature name. In a `data` block the first
    constructor sets the constructor column; each constructor starts a new
-   line at that column. */
+   line at that column. In a `replicated` block the first item sets the
+   item column in the same way. */
 #include <string.h>
 
 #include "front/parser.h"
@@ -197,6 +207,17 @@ static int starts_atom(TokKind kind) {
     case TOK_RBRACK:
     case TOK_COMMA:
     case TOK_MAPSTO:
+    case TOK_BAR:
+    case TOK_KW_REPLICAS:
+    case TOK_KW_ATOMS:
+    case TOK_KW_REPLICATED:
+    case TOK_KW_STATE:
+    case TOK_KW_OP:
+    case TOK_KW_INVARIANT:
+    case TOK_KW_ALLOCATE:
+    case TOK_KW_BY:
+    case TOK_KW_ESCROW:
+    case TOK_KW_INIT:
       return 0;
   }
   return 0;
@@ -412,6 +433,17 @@ static const Term *parse_atom(Parser *p) {
     case TOK_KW_SIGMA: return parse_sigma(p);
     case TOK_TILDE: return parse_neg(p);
     case TOK_LBRACK: return parse_system(p);
+    case TOK_BAR:
+    case TOK_KW_REPLICAS:
+    case TOK_KW_ATOMS:
+    case TOK_KW_REPLICATED:
+    case TOK_KW_STATE:
+    case TOK_KW_OP:
+    case TOK_KW_INVARIANT:
+    case TOK_KW_ALLOCATE:
+    case TOK_KW_BY:
+    case TOK_KW_ESCROW:
+    case TOK_KW_INIT:
     case TOK_EOF:
     case TOK_RPAREN:
     case TOK_COLON:
@@ -438,9 +470,14 @@ static const Term *parse_atom(Parser *p) {
   return NULL;
 }
 
+/* `(init` follows the part type of a `state` item; no atom starts so. */
+static int at_init(const Parser *p) {
+  return at(p, TOK_LPAREN) && peek_at(p, 1)->kind == TOK_KW_INIT;
+}
+
 static const Term *parse_app(Parser *p) {
   const Term *head = parse_atom(p);
-  while (head != NULL && starts_atom(kind_of(p))) {
+  while (head != NULL && starts_atom(kind_of(p)) && !at_init(p)) {
     const Term *arg = parse_atom(p);
     Term *app = arg == NULL ? NULL : make_term(p, TERM_APP, head->line, head->col);
     if (app == NULL) return NULL;
@@ -759,6 +796,182 @@ static int parse_data(Parser *p, Decl *d) {
   return 1;
 }
 
+/* The forms (Q32 (a)). The model is the evolve-lang 9595979 `protocol`
+   form. */
+static int take_form_name(Parser *p, FormName *out, const char *what) {
+  out->line = cur(p)->line;
+  out->col = cur(p)->col;
+  out->nat = 0;
+  out->text = take_name(p, what);
+  return out->text != NULL;
+}
+
+/* A new name at the end of NAMES. */
+static FormName *next_name(Parser *p, FormName **names, size_t *count, size_t *cap) {
+  *names = grow(p, *names, *count, cap, sizeof **names);
+  if (*names == NULL) return NULL;
+  FormName *n = &(*names)[*count];
+  (*count)++;
+  return n;
+}
+
+/* The head `KEYWORD NAME` of a form. */
+static int parse_form_head(Parser *p, Decl *d, DeclKind kind, const char *what) {
+  d->kind = kind;
+  bump(p);
+  d->name = take_name(p, what);
+  p->stop = 1;
+  if (d->name == NULL) return 0;
+  p->def = d->name;
+  return 1;
+}
+
+/* `replicas A B ..`: one replica name at least. */
+static int parse_replicas(Parser *p, Decl *d) {
+  d->kind = DECL_REPLICAS;
+  bump(p);
+  p->stop = 1;
+  FormName *names = NULL;
+  size_t count = 0;
+  size_t cap = 0;
+  do {
+    FormName *n = next_name(p, &names, &count, &cap);
+    if (n == NULL || !take_form_name(p, n, "a replica name")) return 0;
+  } while (at(p, TOK_IDENT));
+  d->names = names;
+  d->name_count = count;
+  return 1;
+}
+
+/* A member of `atoms`: a numeral when NUMERIC (the first member is a
+   numeral), else a name. */
+static int take_member(Parser *p, FormName *out, int numeric, int first) {
+  out->line = cur(p)->line;
+  out->col = cur(p)->col;
+  out->text = NULL;
+  out->nat = cur(p)->nat;
+  if (numeric) return eat(p, TOK_NAT) ? 1 : fail_at(p, cur(p), "a Nat literal (the first member is a numeral)");
+  if (!at(p, TOK_IDENT))
+    return fail_at(p, cur(p), first ? "a member name or a Nat literal" : "a member name (the first member is a name)");
+  out->text = take_name(p, "a member name");
+  return out->text != NULL;
+}
+
+/* `atoms NAME := m ∣ ..`: all members are names or all are numerals
+   (Q34 (a)). */
+static int parse_atoms(Parser *p, Decl *d) {
+  if (!parse_form_head(p, d, DECL_ATOMS, "an atoms name") || !expect(p, TOK_DEFINE, "':='")) return 0;
+  int numeric = at(p, TOK_NAT);
+  FormName *names = NULL;
+  size_t count = 0;
+  size_t cap = 0;
+  do {
+    FormName *n = next_name(p, &names, &count, &cap);
+    if (n == NULL || !take_member(p, n, numeric, count == 1)) return 0;
+  } while (eat(p, TOK_BAR));
+  d->names = names;
+  d->name_count = count;
+  return 1;
+}
+
+/* `state NAME : T`, then `(init n)` or nothing. */
+static int parse_state(Parser *p, FormItem *it) {
+  if (!take_form_name(p, &it->name, "a state name") || !expect(p, TOK_COLON, "':'")) return 0;
+  it->type = parse_term(p);
+  if (it->type == NULL || !at_init(p)) return it->type != NULL;
+  bump(p);
+  bump(p);
+  if (!at(p, TOK_NAT)) return fail_at(p, cur(p), "a Nat literal");
+  it->has_init = 1;
+  it->init = cur(p)->nat;
+  bump(p);
+  return expect(p, TOK_RPAREN, "')'");
+}
+
+/* `op NAME (x : A) .. := body`: the body is one part operation
+   (Q35 (a)). */
+static int parse_op(Parser *p, FormItem *it) {
+  if (!take_form_name(p, &it->name, "an operation name") || !parse_fields(p, &it->params, &it->param_count)
+      || !expect(p, TOK_DEFINE, "a binder group or ':='"))
+    return 0;
+  it->body = parse_term(p);
+  return it->body != NULL;
+}
+
+static int parse_invariant(Parser *p, FormItem *it) {
+  it->body = parse_term(p);
+  return it->body != NULL;
+}
+
+/* `allocate NAME by escrow (A ↦ n, ..)`. */
+static int parse_allocate(Parser *p, FormItem *it) {
+  if (!take_form_name(p, &it->name, "a state name") || !expect(p, TOK_KW_BY, "'by'")
+      || !expect(p, TOK_KW_ESCROW, "'escrow'") || !expect(p, TOK_LPAREN, "'('"))
+    return 0;
+  FormName *shares = NULL;
+  size_t count = 0;
+  size_t cap = 0;
+  do {
+    FormName *s = next_name(p, &shares, &count, &cap);
+    if (s == NULL || !take_form_name(p, s, "a replica name") || !expect(p, TOK_MAPSTO, "'↦'")) return 0;
+    if (!at(p, TOK_NAT)) return fail_at(p, cur(p), "a Nat literal");
+    s->nat = cur(p)->nat;
+    bump(p);
+  } while (eat(p, TOK_COMMA));
+  it->shares = shares;
+  it->share_count = count;
+  return expect(p, TOK_RPAREN, "',' or ')'");
+}
+
+/* The item words and their parsers. */
+static const struct {
+  TokKind word;
+  ItemKind kind;
+  int (*parse)(Parser *p, FormItem *it);
+} ITEM_WORDS[] = {
+  {TOK_KW_STATE, ITEM_STATE, parse_state},
+  {TOK_KW_OP, ITEM_OP, parse_op},
+  {TOK_KW_INVARIANT, ITEM_INVARIANT, parse_invariant},
+  {TOK_KW_ALLOCATE, ITEM_ALLOCATE, parse_allocate},
+};
+
+#define ITEM_WORD_COUNT (sizeof ITEM_WORDS / sizeof ITEM_WORDS[0])
+
+/* One item line at COLUMN: the item word gives the kind. */
+static int parse_item(Parser *p, FormItem *it, int column) {
+  size_t i = 0;
+  while (i < ITEM_WORD_COUNT && ITEM_WORDS[i].word != cur(p)->kind) i++;
+  if (i == ITEM_WORD_COUNT) return fail_at(p, cur(p), "'state', 'op', 'invariant' or 'allocate'");
+  memset(it, 0, sizeof *it);
+  it->kind = ITEM_WORDS[i].kind;
+  it->line = cur(p)->line;
+  it->col = cur(p)->col;
+  bump(p);
+  p->stop = column;
+  int ok = ITEM_WORDS[i].parse(p, it);
+  p->stop = 1;
+  return ok;
+}
+
+/* `replicated NAME`, then one item a line at one column (the evolve-lang
+   `protocol` layout). */
+static int parse_replicated(Parser *p, Decl *d) {
+  if (!parse_form_head(p, d, DECL_REPLICATED, "a replicated name")) return 0;
+  if (kind_of(p) == TOK_EOF || !first_on_line(p)) return fail_at(p, cur(p), "an item on a new indented line");
+  int column = cur(p)->col;
+  FormItem *items = NULL;
+  size_t count = 0;
+  size_t cap = 0;
+  do {
+    items = grow(p, items, count, &cap, sizeof *items);
+    if (items == NULL || !parse_item(p, &items[count], column)) return 0;
+    count++;
+  } while (at_ctor(p, column));
+  d->items = items;
+  d->item_count = count;
+  return 1;
+}
+
 static int parse_decl_body(Parser *p, Decl *d) {
   switch (cur(p)->kind) {
     case TOK_KW_POSTULATE: return parse_postulate(p, d);
@@ -766,6 +979,17 @@ static int parse_decl_body(Parser *p, Decl *d) {
     case TOK_KW_CODATA: return parse_data(p, d);
     case TOK_KW_REC:
     case TOK_IDENT: return parse_def(p, d);
+    case TOK_KW_REPLICAS: return parse_replicas(p, d);
+    case TOK_KW_ATOMS: return parse_atoms(p, d);
+    case TOK_KW_REPLICATED: return parse_replicated(p, d);
+    case TOK_BAR:
+    case TOK_KW_STATE:
+    case TOK_KW_OP:
+    case TOK_KW_INVARIANT:
+    case TOK_KW_ALLOCATE:
+    case TOK_KW_BY:
+    case TOK_KW_ESCROW:
+    case TOK_KW_INIT:
     case TOK_EOF:
     case TOK_NAT:
     case TOK_LPAREN:
@@ -790,7 +1014,7 @@ static int parse_decl_body(Parser *p, Decl *d) {
     case TOK_MAPSTO:
       break;
   }
-  return fail_at(p, cur(p), "a signature, 'rec', 'postulate', 'data' or 'codata'");
+  return fail_at(p, cur(p), "a signature, 'rec', 'postulate', 'data', 'codata', 'replicas', 'atoms' or 'replicated'");
 }
 
 /* The head token is read with stop 0; the parts after it set stop 1. */

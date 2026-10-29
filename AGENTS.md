@@ -7,9 +7,9 @@ state that replicas change while they are disconnected and merge when they
 reconnect. Do not use it for text co-editing, server-only databases or
 Redis scripts.
 
-## Status (S2d)
+## Status (S3a)
 
-S1, S1b, S2, S2b, S2c and S2d are built: the port of the evolve-lang
+S1, S1b, S2, S2b, S2c, S2d and S3a are built: the port of the evolve-lang
 1f87a5a surface and cubical kernel (S1), induction in the kernel (S1b:
 `natMax`, a `fold` over ℕ with a motive, `elim` for Bool and `Option`,
 and `sumFin`), the domain with the laws L1 to L4 as guest terms (S2:
@@ -20,9 +20,12 @@ and `sumFin`), the domain with the laws L1 to L4 as guest terms (S2:
 law for each part, `FMSet` and `fmsetMap` as program data in
 `test/eval/fmset.lang`), and `mergeAll` (S2d: the ℕ `fold` at an open
 successor `natAdd y c`, `isSet` for each part by a Hedberg port,
-`mergeAll : FMSet S → S` as program data in `test/eval/mergeall.lang`;
-`docs/STATUS.md`).
-`langc check --json` and `langc fmt` work. The `replicated` forms (S3),
+`mergeAll : FMSet S → S` as program data in `test/eval/mergeall.lang`),
+and the parse and `fmt` of the merge forms (S3a: `replicas`, `atoms`,
+`replicated`, `state`, `op`, `invariant`, `allocate`; `langc check`
+refuses a form with `REFUSE_FORM`; `docs/STATUS.md`).
+`langc check --json` and `langc fmt` work. The check of the forms (S3e,
+S3x),
 `langc sim`, the Wasm merge engine, the JSON
 coordination report, `langc mcp`, `SKILL.md` and the graded examples are
 planned (`docs/PLAN.md` section 7 and section 9). Do not cite them as built.

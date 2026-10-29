@@ -531,7 +531,9 @@ on the new checks, docs, close (stage, commit message, next prompt).
 | S2b | ℤ (Q13 (b), Q22 (a)), no kernel work: the lexer token `ℤ`; base data `ℤ` (`pos`, `negsuc`) in `domain/domain.lang`; `natDiff`, `intLe`; the `stock` read of `Counter` and `Escrow` | one eval test per ℤ operation; `stock` below zero prints a negative value; `LEX_CHAR` still refuses another non-ASCII character; mutant: swap the sign in `natDiff` DONE 2026-10-27: `make check` EXIT 0: examples 13 checked, 0 failed; parse refusals 11 (`test/parse/bad-unicode.lang` gets `LEX_CHAR` for `ℚ`); check refusals 59; evals 133 (18 ℤ evals in `test/eval/int.lang`); ir 13 lowered; wasm 16 modules valid; differential 1230 cases, 0 mismatches; fmt 114 canonical, 6 non-canonical pairs; json 26 fixtures, diagnostics 38 codes (24 with a fixture, 14 with no fixture); gate 0 failures; review, domain and diagnostic edit regressions passed; cubical 43 checks, 22 round trips. `negsuc k` prints as `-(k+1)`. The 3 mutants KILLED: `natDiff` with `pos` and `negsuc` swapped; `intLe` at `negsuc`/`negsuc` with `natLe m n`; the print rule without `+ 1` |
 | S2c | kernel: path constructors of dimension 2 (port of quorum-lang 09f7f59 S3, its O37 to O56; O13); `FMSet` in generator form (Q14 (b)) as program data in `test/eval/fmset.lang` (Q30 (b)); the Q29 (a) scope: the `fold` over a higher inductive type, a bottom and a left unit law for each part in `domain/domain.lang`, and `fmsetMap`, a `fold` from `FMSet` into `FMSet`; `mergeAll` moves to S2d | `test/check/cell-path-dim.lang` moves to accepted at dimension 2 (`test/eval/cell-path-dim.lang`), a new dimension 3 fixture gets `REFUSE_CELL`; the cons form still gets `REFUSE_CELL`; mutants: the dimension bound, the `fold` at a 1-cell DONE 2026-10-28: `make check` EXIT 0: examples 13 checked, 0 failed; parse refusals 11; check refusals 59; evals 146 (+13: 1 in `test/eval/cell-path-dim.lang`, 5 in `test/eval/hit.lang`, 7 in `test/eval/fmset.lang`); ir 13 lowered; wasm 16 modules valid; differential 1230 cases, 0 mismatches; fmt 117 canonical, 6 non-canonical pairs; json 26 fixtures, diagnostics 38 codes (24 with a fixture, 14 with no fixture); gate 0 failures; review, domain and diagnostic edit regressions passed; cubical 43 checks, 36 round trips. Mutants: M1 the bound `> 1u` KILLED (13 failures); M2 the bound `> 3u` KILLED (1 failure); M3a the wrong end in the `fold` at a 1-cell SURVIVED (an end at an interval variable does not show in a printed value); M3b the unfolded recursive field in the `fold` at a 1-cell KILLED (6 failures) |
 | S2d | `isSet` for each part by a Hedberg port (it can need a multi-face `hcomp` and an empty type); `mergeAll : FMSet S → S` by `FMSet` recursion into the bottom and `merge` of each part, on the program side (Q29 (a); Q30 (b): `FMSet` is a cell signature in a program); a `fold` into a part over a type with a 2-cell needs `isSet` of the part | `isSet` type-checks for each part; one eval test of `mergeAll` per part; mutants: the `mcomm` case of `mergeAll` DONE 2026-10-28: `make check` EXIT 0: examples 13 checked, 0 failed; parse refusals 11; check refusals 59; evals 152 (5 `mergeAll` evals in `test/eval/mergeall.lang`, 1 in `test/eval/fold-open.lang`); ir 13 lowered; wasm 16 modules valid; differential 1230 cases, 0 mismatches; fmt 119 canonical, 6 non-canonical pairs; json 26 fixtures, diagnostics 38 codes (24 with a fixture, 14 with no fixture); gate 0 failures; review, domain and diagnostic edit regressions passed; cubical 43 checks, 36 round trips. Q31 (a): one `eval.c` hunk, the ℕ `fold` steps at an open successor `natAdd y c`. The 4 mutants KILLED: the `mcomm` case of `mergeAll` as `cm h g` (`TYPE_MISMATCH`, 5 failures); the first counter `natAdd y 0` (`TYPE_ENDPOINT` at `fN`, 6 failures); each counter `y` (`TYPE_REFL` at `predTwoLaw`, 1 failure); one step short (`TYPE_MISMATCH` at `absurdZS`, 6 failures) |
-| S3 | forms: `replicas`, `atoms`, `replicated`, `state`, `op`, `invariant`, `allocate`, elaborated to guest terms (Q9); `REFUSE_NO_MERGE`, `REFUSE_OP_INFINITE_ARG`, `REFUSE_RAW_WRITE`, `REFUSE_ALLOC_SUM`; `examples/tags.merge`, `owner.merge`, `inventory.merge`, `inventory-escrow.merge` parse and type | one fixture per code; `fmt` round trip on the forms; mutants on each J1 and J2 test |
+| S3a | parse and `fmt` of the forms `replicas`, `atoms`, `replicated`, `state`, `op`, `invariant`, `allocate` (Q32 (a)): the lexer token `∣` and the form keywords; the form AST; the parser blocks (the evolve-lang `protocol` layout: a `replicated NAME` body has one item a line at one column); `fmt` of the 7 forms; a domain with numerals and names is a parse refusal (Q34 (a)); `check` of a form refuses with a kit code until S3e; `examples/tags.merge`, `owner.merge`, `inventory.merge`, `inventory-escrow.merge` parse and fmt (a gate loop for `examples/*.merge`, fmt only) | `fmt` round trip on the forms; one parse refusal per bad form shape; the four examples fmt canonical; mutants on the parse refusals and the fmt printers DONE 2026-10-28: `make check` EXIT 0: examples 13 checked, 0 failed; parse refusals 22 (11 form refusals, the text pinned); check refusals 60 (`test/check/form.lang`, `REFUSE_FORM`); evals 152; ir 13 lowered; wasm 16 modules valid; differential 1230 cases, 0 mismatches; fmt 127 canonical, 12 non-canonical pairs (6 `test/fmt/form-*` pairs); merge examples 4 canonical (the new gate loop); json 27 fixtures, diagnostics 39 codes (25 with a fixture, 14 with no fixture; the new code `REFUSE_FORM`); gate 0 failures; review, domain and diagnostic edit regressions passed; cubical 46 checks, 38 round trips. The 11 mutants KILLED by a gate test: the numeric member branch of `atoms` takes a name (`atoms-mix-nat`); the first-name branch messages swapped (`atoms-mix-name`); the `replicated` item loop takes a column >= the item column (`replicated-column`); the `at_init` test of `state` always true (`state-init-name`, 2 form pairs); the `↦` of `allocate` optional (`share-no-mapsto`); `fmt` drops the `init` print (the form pairs); the share separator `, ` as a space (`form-replicated`, `inventory-escrow.merge`); the `∣` separator as a space (`form-atoms-*`); the `REFUSE_FORM` test drops `atoms`, `replicated` or `replicas` (3 mutants: the form pair branch, `form.lang`) |
+| S3e | the 7 forms elaborated to guest terms (Q9) on the S2 domain parts and the S2d `mergeAll`, by the evolve-lang route (Q33 (a): synthetic `DECL_DEF` nodes, a type error points at the form word); a numeric atom domain also gives `NAMEValue : NAME → ℕ` (Q34 (a)); an `op` body is one part operation, no `requires` (Q35 (a)); `REFUSE_NO_MERGE`, `REFUSE_OP_INFINITE_ARG`, `REFUSE_RAW_WRITE`, `REFUSE_ALLOC_SUM` with their docs/DIAGNOSTICS.md rows | one fixture per code; mutants on each J1 and J2 test |
+| S3x | the four examples parse and type (`check` GREEN; the `examples/*.merge` gate loop runs `check` too); the docs; the S3 close | the four examples GREEN |
 | S3b | kernel: the CM test admits a field `E → T A` with `E` closed data (the mandate-lang 4.6 R1 rule, its domain.lang `IO`); library `Ops A`; an `op` body can be an `Ops` script of part reads and part operations, one step at one replica (Q15 (b), Q24 (a)); L4 for scripts by composition | a fixture for the new field rule and a refused fixture where `E` mentions `A`; an eval test of a script that reads, then writes; mutants on the closed test of `E` and on the script step order |
 | S4 | the checker: J4 to J6, the bounded search core in C (shared with S5), `REFUSE_NEEDS_COORDINATION`, `REFUSE_RULE_MISMATCH`, `REFUSE_READ_WINNER`, `W_BOUNDED`; L5, L5r, L6a, L6b, L7, L8; the `Replica S` cofamily with `Event = local Op ∣ recv S` (Q16 (b), Q25 (a)); `laws` and `pairs` counts in `check --json` | one test per code with its JSON shape; `inventory.merge` refused, `inventory-escrow.merge` GREEN with L7 proved; L5r proved or bounded, never proved by a bounded run; mutants on each class test and on L7 |
 | S5 | `langc sim`: schedules, order, reduction, transcript; golden `test/sim/*.out` (the demo); determinism gate | the demo transcript equals its golden file; two runs byte-identical; mutants on the order and on the minimality test |
@@ -725,3 +727,45 @@ RULED (letter) is a USER ruling.
   S1b `natMax` open successor rule; then `isSet ℕ` is a guest proof. (b)
   no kernel change: `IsSet ℕ` is a hypothesis argument of the fixture.
   (c) defer `isSet` of the ℕ parts to a new slice.
+- Q32 the S3 split (S3 Unit 0, 2026-10-28). RULED (a). S3 needs more
+  than one session. The name S3b is taken (the `Ops A` slice, Q24 (a)),
+  so the new letters skip b. (a) three slices, each with a USER commit:
+  S3a = the lexer (`∣`, the form keywords), the form AST, the parser
+  blocks (the evolve-lang `protocol` layout), `fmt` of the 7 forms with
+  a round trip, the parse refusals for a bad form shape, and the four
+  `examples/*.merge` parse and fmt (a gate loop for `.merge`; `check` of
+  a form refuses with a kit code until S3e); S3e = the elaboration of
+  the 7 forms to guest terms, the 4 codes with one fixture each, the
+  DIAGNOSTICS rows, the J1 and J2 mutants; S3x = the four examples parse
+  and type (`check` GREEN), the docs and the S3 close. (b) two slices:
+  S3a as in (a); S3e = (a) S3e and S3x (two sessions or more, one
+  commit). (c) one slice S3 over resume sessions with one USER commit at
+  the end (as S2). The reason for (a): each part fits one session with
+  the close, and each commit is a small review.
+- Q33 the elaboration route (S3 Unit 0, 2026-10-28). RULED (a). (a) the
+  evolve-lang route: a form stays a Decl node; `check.c` builds
+  synthetic `DECL_DEF` nodes (`ORIGIN_PROGRAM`) and runs `check_def` on
+  them; a type error points at the form word. (b) the restrict-lang and
+  resolve-lang route: `check.c` prints the guest source text of the
+  form, then lexes, parses and checks it; less C, but a type error in
+  the generated text has a span in that text, not in the program. The
+  reason for (a): a diagnostic must point at the program line (4.5 fix
+  hints, `check --json` spans).
+- Q34 numeric atoms (S3 Unit 0, 2026-10-28). RULED (a). The Surface
+  sketch (4.4) has `atoms Amount := 1 ∣ 2` and `sell (k : Amount) :=
+  dec stock k`, but `counterDec` takes `k : ℕ`. (a) an atom domain is
+  `Fin n`; when each member is a numeral, the elaboration also writes
+  `NAMEValue : NAME → ℕ`, and a part operation that takes an amount
+  applies it; a domain with numerals and names is a parse refusal. (b)
+  refuse numeral members; an amount argument is `Fin n` and its value is
+  the index (`Fin 3` gives 0, 1, 2). The reason for (a): it keeps the
+  sketch and the D5 counterexample (`sell 1`).
+- Q35 the op body (S3 Unit 0, 2026-10-28). RULED (a). J2 (4.3) says "a
+  composition of part operations" and an optional `requires` predicate;
+  no slice row names the syntax. (a) S3 admits one part operation per
+  `op` body and no `requires`; a sequence and `requires` come with the
+  S3b `Ops` scripts (Q24 (a)); `REFUSE_RAW_WRITE` refuses a body that is
+  not one part operation at the running replica. (b) S3 also admits `o1
+  ; o2` (Option composition, the precondition is the conjunction) and a
+  `requires P` line. The reason for (a): the four examples use one part
+  operation each, and the S3b scripts give the sequence.

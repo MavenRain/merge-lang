@@ -31,6 +31,9 @@
 == REFUSE_DATA.lang exit 1
 {"code":"REFUSE_DATA","severity":"error","span":{"file":"test/json/REFUSE_DATA.lang","line":1,"col":1,"end_line":3,"end_col":15},"expected":null,"found":null,"fix":null,"retry":true,"message":"a program cannot declare data with no type argument; a base type comes only from domain/domain.lang (rule R2)"}
 {"parsed":"1 of 1","typed":"0 of 1","affine":"0 of 0","laws":"0 of 0"}
+== REFUSE_FORM.lang exit 1
+{"code":"REFUSE_FORM","severity":"error","span":{"file":"test/json/REFUSE_FORM.lang","line":1,"col":1,"end_line":1,"end_col":13},"expected":null,"found":null,"fix":null,"retry":true,"message":"the forms are not checked before slice S3e; the parse and fmt accept them"}
+{"parsed":"1 of 1","typed":"0 of 1","affine":"0 of 0","laws":"0 of 0"}
 == REFUSE_NAME.lang exit 1
 {"code":"REFUSE_NAME","severity":"error","span":{"file":"test/json/REFUSE_NAME.lang","line":1,"col":1,"end_line":2,"end_col":11},"expected":null,"found":null,"fix":null,"retry":true,"message":"natAdd is a core name (rule R4)"}
 {"parsed":"1 of 1","typed":"0 of 1","affine":"0 of 0","laws":"0 of 0"}

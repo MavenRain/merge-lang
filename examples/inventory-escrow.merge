@@ -1,0 +1,11 @@
+-- Inventory with escrow (D5): each replica sells only its own rights.
+replicas A B
+
+atoms Amount := 1 ∣ 2
+
+replicated Shop
+  state stock : Counter (init 1)
+  op sell (k : Amount) := dec stock k
+  op refill (k : Amount) := restock stock k
+  invariant nonneg stock
+  allocate stock by escrow (A ↦ 1, B ↦ 0)

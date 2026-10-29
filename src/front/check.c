@@ -1668,7 +1668,8 @@ static int unknown_name(Checker *c, const Term *head) {
   size_t i;
   Span span;
   for (i = c->decl_index; i < c->decls->count; i++) {
-    if (strcmp(c->decls->items[i].name, name) == 0)
+    const char *decl_name = c->decls->items[i].name;
+    if (decl_name != NULL && strcmp(decl_name, name) == 0)
       return FAIL(c, "REFUSE_REC", "%s is this definition or a later one; a definition can use only earlier ones (rule R3)", name);
   }
   for (i = 0; i < sizeof DROPPED / sizeof DROPPED[0]; i++) {
@@ -2862,6 +2863,11 @@ static int check_cofamily(Checker *c, const Decl *d) {
 }
 
 static int check_decl(Checker *c, const Decl *d) {
+  if (d->kind == DECL_REPLICAS || d->kind == DECL_ATOMS || d->kind == DECL_REPLICATED) {
+    /* `replicas` has no name: the message names the form. */
+    c->m->def = d->name != NULL ? d->name : "replicas";
+    return FAIL(c, "REFUSE_FORM", "the forms are not checked before slice S3e; the parse and fmt accept them");
+  }
   if (d->kind == DECL_AXIOM)
     return FAIL(c, "REFUSE_AXIOM", "an axiom has no proof (rule R2)");
   if (d->is_rec)

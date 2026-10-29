@@ -191,7 +191,8 @@ got=$(node test/run-wasm.mjs "$tmp/entries.wasm" pick 2 4 9 2>&1) || true
 # fronttool AST dump of F equals the dump of `fmt F` (the round trip). Each
 # test/fmt/X.lang formats to test/fmt/X.canon (X.canon is in the canonical
 # list), the two dumps are equal, and `langc check` gives W_NONCANON on
-# X.lang and no warning on X.canon.
+# X.lang and no warning on X.canon. A test/fmt/form-X pair holds a form, so
+# `langc check` gives REFUSE_FORM (exit 1) on the two files until slice S3e.
 same_dump() {
   build/fronttool dump "$1" >"$tmp/d1.txt" 2>&1 && build/fronttool dump "$2" >"$tmp/d2.txt" 2>&1 &&
     cmp -s "$tmp/d1.txt" "$tmp/d2.txt"
@@ -223,6 +224,20 @@ for f in test/fmt/*.lang; do
     fail=$((fail + 1))
   fi
   same_dump "$f" "$c" || { echo "FAIL round trip $f: the AST dump differs from $c"; fail=$((fail + 1)); }
+  case "$f" in
+    test/fmt/form-*)
+      for g in "$f" "$c"; do
+        status=0
+        build/langc check "$g" >/dev/null 2>"$tmp/err" || status=$?
+        first=$(head -n 1 "$tmp/err")
+        case "$status|$first" in
+          "1|langc: REFUSE_FORM: "*) ;;
+          *) echo "FAIL check $g: want exit 1 and REFUSE_FORM, got $status|$first"; fail=$((fail + 1)) ;;
+        esac
+      done
+      continue
+      ;;
+  esac
   out=$(build/langc check "$f" 2>"$tmp/err") || true
   first=$(head -n 1 "$tmp/err")
   case "$out|$first" in
@@ -236,6 +251,23 @@ for f in test/fmt/*.lang; do
   fi
 done
 echo "fmt: $canon canonical, $pairs non-canonical pairs"
+
+# Each examples/*.merge file is canonical and keeps its AST dump. `langc
+# check` refuses a form until slice S3e, so this loop runs fmt only.
+merges=0
+for f in examples/*.merge; do
+  merges=$((merges + 1))
+  status=0
+  build/langc fmt "$f" >"$tmp/fmt.out" 2>"$tmp/fmt.err" || status=$?
+  if [ "$status" -ne 0 ] || ! cmp -s "$f" "$tmp/fmt.out"; then
+    echo "FAIL fmt $f: not canonical, exit $status $(head -n 1 "$tmp/fmt.err")"
+    fail=$((fail + 1))
+  elif ! same_dump "$f" "$tmp/fmt.out"; then
+    echo "FAIL round trip $f: the AST dump changes after fmt"
+    fail=$((fail + 1))
+  fi
+done
+echo "merge examples: $merges canonical"
 
 # JSON shape: `langc check --json` on each test/json/*.lang gives the lines of
 # test/json/expect.txt exactly (with the exit code and any stderr line).

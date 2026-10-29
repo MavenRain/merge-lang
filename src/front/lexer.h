@@ -31,7 +31,18 @@ typedef enum {
   TOK_LBRACK,   /* [ (a system) */
   TOK_RBRACK,   /* ] */
   TOK_COMMA,    /* , (between the cells of a system) */
-  TOK_MAPSTO    /* ↦ */
+  TOK_MAPSTO,   /* ↦ */
+  TOK_BAR,      /* ∣ (between the members of `atoms`) */
+  TOK_KW_REPLICAS, /* the form words (Q32 (a)) */
+  TOK_KW_ATOMS,
+  TOK_KW_REPLICATED,
+  TOK_KW_STATE,
+  TOK_KW_OP,
+  TOK_KW_INVARIANT,
+  TOK_KW_ALLOCATE,
+  TOK_KW_BY,
+  TOK_KW_ESCROW,
+  TOK_KW_INIT
 } TokKind;
 
 /* LINE and COL are 1-based; COL counts code points. END_COL is the column

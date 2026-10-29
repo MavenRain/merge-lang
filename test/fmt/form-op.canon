@@ -1,0 +1,4 @@
+replicated Reg
+  state value : MVReg
+  op clear := reset value
+  op put (r : Replica) (x : ℕ) := write value r x

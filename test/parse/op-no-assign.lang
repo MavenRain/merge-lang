@@ -1,0 +1,2 @@
+replicated Shop
+  op sell (k : Amount) dec a k

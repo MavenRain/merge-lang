@@ -30,6 +30,16 @@ static const struct {
   {"postulate", TOK_KW_POSTULATE},
   {"Type", TOK_KW_TYPE},
   {"Sigma", TOK_KW_SIGMA},
+  {"replicas", TOK_KW_REPLICAS},
+  {"atoms", TOK_KW_ATOMS},
+  {"replicated", TOK_KW_REPLICATED},
+  {"state", TOK_KW_STATE},
+  {"op", TOK_KW_OP},
+  {"invariant", TOK_KW_INVARIANT},
+  {"allocate", TOK_KW_ALLOCATE},
+  {"by", TOK_KW_BY},
+  {"escrow", TOK_KW_ESCROW},
+  {"init", TOK_KW_INIT},
 };
 
 /* The UTF-8 symbols. `ℕ` and `ℤ` are name tokens; tok_core_text gives Nat
@@ -44,6 +54,7 @@ static const struct {
   {"\xE2\x88\xA7", TOK_MEET},
   {"\xE2\x88\xA8", TOK_JOIN},
   {"\xE2\x86\xA6", TOK_MAPSTO},
+  {"\xE2\x88\xA3", TOK_BAR},
   {"\xE2\x84\x95", TOK_IDENT},
   {"\xE2\x84\xA4", TOK_IDENT},
 };
@@ -79,6 +90,17 @@ const char *tok_kind_name(TokKind kind) {
     case TOK_MAPSTO: return "'↦'";
     case TOK_KW_TYPE: return "'Type'";
     case TOK_KW_SIGMA: return "'Sigma'";
+    case TOK_BAR: return "'∣'";
+    case TOK_KW_REPLICAS: return "'replicas'";
+    case TOK_KW_ATOMS: return "'atoms'";
+    case TOK_KW_REPLICATED: return "'replicated'";
+    case TOK_KW_STATE: return "'state'";
+    case TOK_KW_OP: return "'op'";
+    case TOK_KW_INVARIANT: return "'invariant'";
+    case TOK_KW_ALLOCATE: return "'allocate'";
+    case TOK_KW_BY: return "'by'";
+    case TOK_KW_ESCROW: return "'escrow'";
+    case TOK_KW_INIT: return "'init'";
   }
   return "a token";
 }

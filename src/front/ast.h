@@ -48,8 +48,42 @@ typedef enum {
   DECL_DEF,    /* [rec] name : type, then the clause name args = body */
   DECL_AXIOM,  /* postulate name : type */
   DECL_FAMILY,  /* data name params : Type where, then one constructor a line */
-  DECL_COFAMILY /* codata name params : Type where, then the one corecursor clause */
+  DECL_COFAMILY, /* codata name params : Type where, then the one corecursor clause */
+  DECL_REPLICAS, /* replicas NAME+ (the names) */
+  DECL_ATOMS,    /* atoms name := m ∣ .. (the names: all names or all numerals) */
+  DECL_REPLICATED /* replicated name, then one item a line */
 } DeclKind;
+
+/* A name in a form, or a numeral when TEXT is NULL, with its position. */
+typedef struct {
+  const char *text;
+  uint64_t nat;
+  int line;
+  int col;
+} FormName;
+
+typedef enum {
+  ITEM_STATE,     /* state name : type [(init nat)] */
+  ITEM_OP,        /* op name params := body */
+  ITEM_INVARIANT, /* invariant body */
+  ITEM_ALLOCATE   /* allocate name by escrow (shares), each share NAME ↦ nat */
+} ItemKind;
+
+/* One item of a `replicated` form. */
+typedef struct {
+  ItemKind kind;
+  FormName name;
+  const Term *type;
+  int has_init;
+  uint64_t init;
+  const Field *params;
+  size_t param_count;
+  const Term *body;
+  const FormName *shares;
+  size_t share_count;
+  int line;
+  int col;
+} FormItem;
 
 /* A family is legal only in the domain file (rule R1). */
 typedef enum {
@@ -74,6 +108,10 @@ typedef struct {
   size_t index_count;
   const Ctor *ctors;
   size_t ctor_count;
+  const FormName *names; /* a replicas or atoms form */
+  size_t name_count;
+  const FormItem *items; /* a replicated form */
+  size_t item_count;
 } Decl;
 
 /* Domain declarations come first, then the program. */

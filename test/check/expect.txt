@@ -57,3 +57,4 @@ nat-motive-domain.lang TYPE_MISMATCH
 nat-motive-sort.lang TYPE_MISMATCH the binder type ℕ differs from the expected type
 elim-motive-domain.lang TYPE_MISMATCH
 sumfin-open.lang TYPE_REFL
+form.lang REFUSE_FORM replicas: the forms

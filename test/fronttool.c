@@ -70,7 +70,7 @@ static int json_encoding(void) {
 }
 
 static const char *const TERM_KINDS[] = {"var", "nat", "app", "lam", "pi", "sigma", "univ"};
-static const char *const DECL_KINDS[] = {"def", "postulate", "data", "codata"};
+static const char *const DECL_KINDS[] = {"def", "postulate", "data", "codata", "replicas", "atoms", "replicated"};
 
 static void dump_term(const char *role, const Term *t, int depth) {
   if (t == NULL) return;
@@ -139,6 +139,10 @@ int main(int argc, char **argv) {
     return 2;
   }
   int ok = json_encoding();
+  /* A nameless form must not interrupt unknown-name or forward-reference diagnostics. */
+  ok &= domain("value : Missing\nvalue = 0\n\nreplicas A B", "NAME_UNKNOWN");
+  ok &= domain("value : ℕ\nvalue = missing\n\nreplicas A B", "NAME_UNKNOWN");
+  ok &= domain("value : ℕ\nvalue = later\n\nreplicas A B\n\nlater : ℕ\nlater = 0", "REFUSE_REC");
   ok &= domain("data F : Type where\n  makeF : (field : ℕ) → (field : Bool) → F", "REFUSE_NAME");
   ok &= domain("data F : Type where\n  makeF : (makeF : ℕ) → F", "REFUSE_NAME");
   ok &= domain("data F : Type where\n  makeF : (firstField : ℕ) → (secondField : Bool) → F", NULL);

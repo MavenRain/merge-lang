@@ -9,3 +9,14 @@ fun-no-binder.lang PARSE_EXPECT
 type-no-level.lang PARSE_EXPECT
 deep.lang PARSE_DEPTH
 tilde-app.lang PARSE_EXPECT
+atoms-mix-nat.lang PARSE_EXPECT expected a Nat literal (the first member is a numeral)
+atoms-mix-name.lang PARSE_EXPECT expected a member name (the first member is a name)
+atoms-no-assign.lang PARSE_EXPECT expected ':=', found a Nat literal
+replicated-empty.lang PARSE_EXPECT expected an item on a new indented line
+replicated-column.lang PARSE_EXPECT 3:5: expected a new line after the declaration, found 'state'
+item-unknown.lang PARSE_EXPECT expected 'state', 'op', 'invariant' or 'allocate'
+state-init-name.lang PARSE_EXPECT 2:27: expected a Nat literal, found a name
+op-no-assign.lang PARSE_EXPECT expected a binder group or ':='
+allocate-no-by.lang PARSE_EXPECT expected 'by', found 'escrow'
+allocate-no-escrow.lang PARSE_EXPECT expected 'escrow', found '('
+share-no-mapsto.lang PARSE_EXPECT expected '↦', found a Nat literal

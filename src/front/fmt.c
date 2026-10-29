@@ -9,6 +9,7 @@
 #define SYM_MEET "\xE2\x88\xA7"   /* ∧ */
 #define SYM_JOIN "\xE2\x88\xA8"   /* ∨ */
 #define SYM_MAPSTO "\xE2\x86\xA6" /* ↦ */
+#define SYM_BAR "\xE2\x88\xA3"    /* ∣ */
 
 /* Precedence levels. A term below the level of its slot gets parentheses. */
 enum {
@@ -254,6 +255,74 @@ static void put_data(FmtText *out, const Decl *d) {
   for (size_t i = 0; i < d->ctor_count; i++) put_ctor(out, d, &d->ctors[i]);
 }
 
+/* A name, or a numeral when TEXT is NULL. */
+static void put_form_name(FmtText *out, const FormName *n) {
+  if (n->text != NULL) {
+    put_str(out, n->text);
+    return;
+  }
+  put_nat(out, n->nat);
+}
+
+/* The names of a `replicas` or `atoms` form, SEP between two. */
+static void put_names(FmtText *out, const Decl *d, const char *sep) {
+  for (size_t i = 0; i < d->name_count; i++) {
+    if (i > 0) put_str(out, sep);
+    put_form_name(out, &d->names[i]);
+  }
+}
+
+/* `(A ↦ 1, B ↦ 0)` */
+static void put_shares(FmtText *out, const FormItem *it) {
+  put_str(out, "(");
+  for (size_t i = 0; i < it->share_count; i++) {
+    if (i > 0) put_str(out, ", ");
+    put_str(out, it->shares[i].text);
+    put_str(out, " " SYM_MAPSTO " ");
+    put_nat(out, it->shares[i].nat);
+  }
+  put_str(out, ")");
+}
+
+/* `  state s : T (init n)`, `  op o (x : A) := t`, `  invariant t` or
+   `  allocate s by escrow (A ↦ n, ..)`. */
+static void put_item(FmtText *out, const FormItem *it) {
+  put_str(out, "\n  ");
+  switch (it->kind) {
+    case ITEM_STATE:
+      put_str(out, "state ");
+      put_str(out, it->name.text);
+      put_str(out, " : ");
+      put_term(out, it->type, LEVEL_BINDER);
+      if (it->has_init) {
+        put_str(out, " (init ");
+        put_nat(out, it->init);
+        put_str(out, ")");
+      }
+      break;
+    case ITEM_OP:
+      put_str(out, "op ");
+      put_str(out, it->name.text);
+      for (size_t i = 0; i < it->param_count; i++) {
+        put_str(out, " ");
+        put_group(out, it->params[i].name, it->params[i].type);
+      }
+      put_str(out, " := ");
+      put_term(out, it->body, LEVEL_BINDER);
+      break;
+    case ITEM_INVARIANT:
+      put_str(out, "invariant ");
+      put_term(out, it->body, LEVEL_BINDER);
+      break;
+    case ITEM_ALLOCATE:
+      put_str(out, "allocate ");
+      put_str(out, it->name.text);
+      put_str(out, " by escrow ");
+      put_shares(out, it);
+      break;
+  }
+}
+
 void fmt_decl(FmtText *out, const Decl *decl) {
   switch (decl->kind) {
     case DECL_DEF:
@@ -268,6 +337,21 @@ void fmt_decl(FmtText *out, const Decl *decl) {
     case DECL_FAMILY:
     case DECL_COFAMILY:
       put_data(out, decl);
+      break;
+    case DECL_REPLICAS:
+      put_str(out, "replicas ");
+      put_names(out, decl, " ");
+      break;
+    case DECL_ATOMS:
+      put_str(out, "atoms ");
+      put_str(out, decl->name);
+      put_str(out, " := ");
+      put_names(out, decl, " " SYM_BAR " ");
+      break;
+    case DECL_REPLICATED:
+      put_str(out, "replicated ");
+      put_str(out, decl->name);
+      for (size_t i = 0; i < decl->item_count; i++) put_item(out, &decl->items[i]);
       break;
   }
 }

@@ -1,13 +1,65 @@
 # merge-lang status
 
-The build implements slices S1, S1b, S2, S2b, S2c and S2d of
+The build implements slices S1, S1b, S2, S2b, S2c, S2d and S3a of
 `docs/PLAN.md` section 9: the port of the evolve-lang 1f87a5a surface and
 cubical kernel (S1), induction in the kernel (S1b), the merge-lang domain
 with the laws L1 to L4 as guest terms (S2), ℤ with the `stock` read
 (S2b), path constructors of dimension 2 with the `fold` over a higher
-inductive type (S2c), and `isSet` for each part with `mergeAll` on the
-program side (S2d). It does not complete M0. There is no merge engine, no replica simulator and no
+inductive type (S2c), `isSet` for each part with `mergeAll` on the
+program side (S2d), and the parse and `fmt` of the merge forms (S3a). It
+does not complete M0. There is no merge engine, no replica simulator and no
 coordination report yet.
+
+## S3a (2026-10-28)
+
+- Scope (`docs/PLAN.md` section 9, the S3a row; Q32 (a), Q34 (a)): the
+  parse and `fmt` of the forms `replicas`, `atoms`, `replicated`,
+  `state`, `op`, `invariant` and `allocate`. There is no elaboration
+  yet (S3e).
+- Lexer: the token `∣` (between the members of `atoms`) and 10 form
+  words: `replicas`, `atoms`, `replicated`, `state`, `op`, `invariant`,
+  `allocate`, `by`, `escrow` and `init`.
+- AST and parser: 3 Decl kinds (`DECL_REPLICAS`, `DECL_ATOMS`,
+  `DECL_REPLICATED`) with `FormName` and `FormItem`. A `replicated NAME`
+  body has one item a line at one column (the evolve-lang `protocol`
+  layout). The items are `state`, `op`, `invariant` and `allocate`. An
+  `atoms` domain with numerals and names is a parse refusal (Q34 (a)).
+- `fmt`: the printers for the 7 forms. `fmt` adds a blank line after
+  `replicas`.
+- `check`: a `replicas`, `atoms` or `replicated` form gets the new code
+  `REFUSE_FORM` until S3e (`docs/DIAGNOSTICS.md`, fixture
+  `test/json/REFUSE_FORM.lang`).
+- Tests: 11 parse refusals, one for each bad form shape, with the text
+  pinned in `test/parse/expect.txt`; `test/check/form.lang`; 6 pairs
+  `test/fmt/form-*.lang` and `.canon`. For each pair file, the gate also
+  checks that `langc check` stops with `REFUSE_FORM`.
+- Examples: `examples/tags.merge`, `owner.merge`, `inventory.merge` and
+  `inventory-escrow.merge`. A new gate loop checks that each
+  `examples/*.merge` is `fmt` canonical.
+- Gate: `make check` EXIT 0. Examples 13; parse refusals 22; check
+  refusals 60; evals 152; ir 13 lowered; wasm 16; differential 1230
+  cases, 0 mismatches; fmt 127 canonical, 12 non-canonical pairs; merge
+  examples 4 canonical; json 27 fixtures, diagnostics 39 codes (25 with
+  a fixture, 14 with no fixture); gate 0 failures; review, domain and
+  diagnostic edit regressions passed; cubical 46 checks, 38 round trips.
+- Count changes from S2d: parse refusals +11; check refusals +1; fmt +8
+  canonical, +6 pairs; json +1; diagnostics +1 code with a fixture; the
+  merge examples line is new. The other counts are the same.
+- Mutants (11, each KILLED by a gate test): the numeric member branch
+  of `atoms` takes a name (`atoms-mix-nat`); the first-name branch
+  messages swapped (`atoms-mix-name`); the `replicated` item loop takes
+  a column >= the item column (`replicated-column`); the `at_init` test
+  of `state` always true (`state-init-name`, 2 form pairs); the `↦` of
+  `allocate` optional (`share-no-mapsto`); `fmt` drops the `init` print
+  (the form pairs); the share separator `, ` as a space
+  (`form-replicated`, `inventory-escrow.merge`); the `∣` separator as a
+  space (`form-atoms-*`); the `REFUSE_FORM` test drops `atoms`,
+  `replicated` or `replicas` (3 mutants: the form pair branch,
+  `form.lang`).
+- Note for S3e: without the `REFUSE_FORM` test, `langc check` on a form
+  stops with SIGSEGV (exit 139), because the checker reads the form
+  Decl as a def. S3e must take the 3 form kinds before the generic Decl
+  path.
 
 ## S2d (2026-10-28)
 
@@ -286,12 +338,17 @@ checks and 38 round trips; the other S2d counts above are unchanged.
   numeral `c >= 1`, Q31 (a)); `isSet` for each part by a Hedberg port and
   `mergeAll : FMSet S → S` as program data in `test/eval/mergeall.lang`
   (Q29 (a), Q30 (b)).
+- S3a: the parse and `fmt` of the forms `replicas`, `atoms`,
+  `replicated`, `state`, `op`, `invariant` and `allocate` (Q32 (a), Q34
+  (a)); `langc check` refuses a form with `REFUSE_FORM`.
 
 ## Remaining M0 work
 
-1. S3: the forms `replicas`, `atoms`, `replicated`, `state`, `op`,
-   `invariant` and `allocate` (`docs/PLAN.md` section 9, the S3 row). It
-   needs the USER S2d commit.
+1. S3e: the elaboration of the 7 forms to guest terms and the codes
+   `REFUSE_NO_MERGE`, `REFUSE_OP_INFINITE_ARG`, `REFUSE_RAW_WRITE` and
+   `REFUSE_ALLOC_SUM` (`docs/PLAN.md` section 9, the S3e row; Q33 (a),
+   Q34 (a), Q35 (a)). It needs the USER S3a commit. Then S3x: the four
+   examples type with `langc check`, the docs and the S3 close.
 2. The later slices of `docs/PLAN.md` section 9. Each needs the slice
    before it.
 
@@ -317,6 +374,11 @@ checks and 38 round trips; the other S2d counts above are unchanged.
 - `nonneg` compares in ℕ. The signed `stock` read gives ℤ (S2b).
 - ℤ has only `natDiff` and `intLe`: there is no addition, subtraction or
   negation on ℤ. The print rule applies only to the domain data `ℤ`.
+- `langc check` refuses a `replicas`, `atoms` or `replicated` form with
+  `REFUSE_FORM` until S3e. The parser and `langc fmt` accept the forms.
+- The 10 form words (`replicas`, `atoms`, `replicated`, `state`, `op`,
+  `invariant`, `allocate`, `by`, `escrow`, `init`) are keywords: a
+  program cannot use them as names.
 
 ## Internal boundaries
 

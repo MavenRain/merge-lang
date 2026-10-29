@@ -49,7 +49,7 @@ reason. test/json/expect.txt holds the exact JSON lines of each fixture.
 
 | Code | Severity | Stage | Meaning | Fixture |
 |---|---|---|---|---|
-| `LEX_CHAR` | error | lex | A character outside a comment that starts no token: a non-ASCII character other than `→`, `λ`, `×`, `ℕ`, `∧`, `∨` and `↦`, or an ASCII character that the lexer does not use. | test/json/LEX_CHAR.lang |
+| `LEX_CHAR` | error | lex | A character outside a comment that starts no token: a non-ASCII character other than `→`, `λ`, `×`, `ℕ`, `∧`, `∨`, `↦` and `∣`, or an ASCII character that the lexer does not use. | test/json/LEX_CHAR.lang |
 | `LEX_NAT_RANGE` | error | lex | A numeral larger than 2^64-1. | test/json/LEX_NAT_RANGE.lang |
 | `PARSE_EXPECT` | error | parse | A token that the grammar does not permit at that position. | test/json/PARSE_EXPECT.lang |
 | `PARSE_DEPTH` | error | parse | The terms nest deeper than the parser limit. | test/json/PARSE_DEPTH.lang |
@@ -59,6 +59,7 @@ reason. test/json/expect.txt holds the exact JSON lines of each fixture.
 | `REFUSE_CELL` | error | check | A program data type with a type argument is not a cell signature (rule R1). A cell signature has only universe parameters and no type index. Each field is a type parameter (then it is the one field of its constructor), closed data, the family at its own parameters or a path in the family. Each type parameter has exactly one generator: a point constructor with one field of that type. A path constructor has the type `Path T s t`, where T is the family at its own parameters and s, t are point terms; S2 has dimension 1 only, so a square is refused. A program `codata` type is a cocell signature (the CC criterion): one type parameter, no index and one clause that is not a path constructor. Each field is the observation A, a field D A or a labelled field E → D A, where E is closed and E is in the universe of A. There is exactly one observation. | test/json/REFUSE_CELL.lang |
 | `REFUSE_AXIOM` | error | check | A program declares a postulate. | test/json/REFUSE_AXIOM.lang |
 | `REFUSE_REC` | error | check | A `rec` declaration, or a definition that refers to itself or to a later definition (rule R3). Use `fold`. | test/json/REFUSE_REC.lang |
+| `REFUSE_FORM` | error | check | A `replicas`, `atoms` or `replicated` form before slice S3e. The parser and `langc fmt` accept the forms; `langc check` does not check them yet. | test/json/REFUSE_FORM.lang |
 | `DOMAIN_FAMILY` | error | check | A family or a fold is outside the S2 data rules. A recursive field must have the type of its family, at the parameters of the family. A fold over an indexed family or a higher inductive family needs a dependent eliminator (S3). A path constructor is only in a cell signature. | test/json/DOMAIN_FAMILY.lang |
 | `REFUSE_NAME` | error | check | A declaration uses a core name, a domain name, a reserved word or a name that is already declared. A `codata` field must not be the type name, the clause name or a name that is already a field of the clause. | test/json/REFUSE_NAME.lang |
 | `TYPE_REFL` | error | check | `refl` where the two sides do not have the same normal form. The message gives the two normal forms. | test/json/TYPE_REFL.lang |

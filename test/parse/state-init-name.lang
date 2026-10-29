@@ -1,0 +1,2 @@
+replicated Shop
+  state a : Counter (init x)

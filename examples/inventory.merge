@@ -1,0 +1,10 @@
+-- Inventory (D5): two concurrent sell ops need coordination.
+replicas A B
+
+atoms Amount := 1 ∣ 2
+
+replicated Shop
+  state stock : Counter (init 1)
+  op sell (k : Amount) := dec stock k
+  op refill (k : Amount) := restock stock k
+  invariant nonneg stock

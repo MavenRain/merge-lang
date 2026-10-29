@@ -1,0 +1,3 @@
+replicated Shop
+  state a : GSet
+    state b : GSet

@@ -1,0 +1,8 @@
+-- Tags (D3): two concurrent tag ops are independent.
+replicas A B
+
+atoms Tag := urgent ∣ home ∣ work
+
+replicated Tags
+  state tags : GSet
+  op tag (t : Tag) := add tags t
