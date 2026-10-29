@@ -256,8 +256,9 @@ done
 echo "fmt: $canon canonical, $pairs non-canonical pairs"
 
 # Each examples/*.merge file is canonical and keeps its AST dump. `langc
-# check` refuses a form until slice S3e, so this loop runs fmt only.
+# check` elaborates its forms (S3e) and gives ok, exit 0 and no warning (S3x).
 merges=0
+merge_checks=0
 for f in examples/*.merge; do
   merges=$((merges + 1))
   status=0
@@ -269,8 +270,15 @@ for f in examples/*.merge; do
     echo "FAIL round trip $f: the AST dump changes after fmt"
     fail=$((fail + 1))
   fi
+  merge_checks=$((merge_checks + 1))
+  status=0
+  out=$(build/langc check "$f" 2>"$tmp/err") || status=$?
+  if [ "$status" -ne 0 ] || [ "$out" != "ok" ] || [ -s "$tmp/err" ]; then
+    echo "FAIL check $f: want ok, exit 0 and no warning, got $out|exit $status|$(head -n 1 "$tmp/err")"
+    fail=$((fail + 1))
+  fi
 done
-echo "merge examples: $merges canonical"
+echo "merge examples: $merges canonical, $merge_checks checked"
 
 # JSON shape: `langc check --json` on each test/json/*.lang gives the lines of
 # test/json/expect.txt exactly (with the exit code and any stderr line).

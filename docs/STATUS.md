@@ -1,15 +1,43 @@
 # merge-lang status
 
-The build implements slices S1, S1b, S2, S2b, S2c, S2d, S3a and S3e of
+The build implements slices S1, S1b, S2, S2b, S2c, S2d, S3a, S3e and S3x of
 `docs/PLAN.md` section 9: the port of the evolve-lang 1f87a5a surface and
 cubical kernel (S1), induction in the kernel (S1b), the merge-lang domain
 with the laws L1 to L4 as guest terms (S2), ℤ with the `stock` read
 (S2b), path constructors of dimension 2 with the `fold` over a higher
 inductive type (S2c), `isSet` for each part with `mergeAll` on the
-program side (S2d), the parse and `fmt` of the merge forms (S3a), and
-the elaboration of the forms to guest terms (S3e). It does not complete
+program side (S2d), the parse and `fmt` of the merge forms (S3a), the
+elaboration of the forms to guest terms (S3e), and the check of the four
+examples in the gate (S3x). It does not complete
 M0. There is no merge engine, no replica simulator and no coordination
 report yet.
+
+## S3x (2026-10-29)
+
+- Scope (`docs/PLAN.md` section 9, the S3x row): the four examples
+  `examples/*.merge` parse and type in the gate, the docs and the S3
+  close. The base is the USER S3e commit 2b4edf4.
+- Gate: the `examples/*.merge` loop of `test/gate.sh` runs `langc
+  check` on each file after `fmt`. It fails on an exit that is not 0,
+  an output that is not `ok`, or a stderr line (for example a `W_*`
+  warning). The count line is now `merge examples: 4 canonical, 4
+  checked`.
+- Mutants: 4/4 example mutants KILLED by the loop only. Each mutant
+  file stays canonical, so the `fmt` part passes: `write` on the GSet
+  of `tags.merge`, `add` on the MVReg of `owner.merge`, an `Escrow`
+  part with an init in `inventory.merge`, and the shares `(A ↦ 1, B ↦
+  1)` in `inventory-escrow.merge`. No `check.c` path is reached by the
+  examples only: the S3e tests also kill the `counterRestock` and the
+  allocate `over` mutants.
+- Gap: the swap of `n` (the atoms count) and `r` (the replica count) in
+  the `mvregWrite` term survives the gate. Each MVReg test and example
+  has 2 atoms and 2 replicas.
+- `make check` EXIT 0: examples 13 checked, 0 failed; parse refusals 22;
+  check refusals 70; evals 173; ir 13 lowered; wasm 16 modules valid;
+  differential 1230 cases, 0 mismatches; fmt 143 canonical, 12
+  non-canonical pairs; merge examples 4 canonical, 4 checked; json 30
+  fixtures, diagnostics 42 codes (28 with a fixture, 14 with no
+  fixture); cubical 63 checks, 38 round trips.
 
 ## S3e (2026-10-29)
 
@@ -46,7 +74,7 @@ report yet.
   binder group.
 - Examples: `tags.merge` and `owner.merge` name an atoms domain (Q36
   (a)). The four examples pass `langc check`. The `examples/*.merge`
-  gate loop is still fmt only (S3x adds `check`).
+  gate loop is still fmt only (S3x added `check`).
 - Tests: 10 new `test/check` fixtures (`alloc-missing`, `alloc-sum`,
   `alloc-twice`, `alloc-under`, `atoms-clash`, `form-invariant`,
   `op-arity`, `op-fin-open`, `raw-write`, `replicas-twice`) with the
@@ -412,9 +440,10 @@ checks and 38 round trips; the other S2d counts above are unchanged.
 
 ## Remaining M0 work
 
-1. S3x: the `examples/*.merge` gate loop runs `langc check` too (the
-   four examples GREEN), the docs and the S3 close (`docs/PLAN.md`
-   section 9, the S3x row). It needs the USER S3e commit.
+1. S3b: the kernel CM test admits a field `E → T A` with `E` closed
+   data, the library `Ops A`, and an `op` body as an `Ops` script of
+   part reads and part operations (`docs/PLAN.md` section 9, the S3b
+   row; Q15 (b), Q24 (a)). It needs the USER S3x commit.
 2. The later slices of `docs/PLAN.md` section 9. Each needs the slice
    before it.
 
@@ -442,7 +471,6 @@ checks and 38 round trips; the other S2d counts above are unchanged.
   negation on ℤ. The print rule applies only to the domain data `ℤ`.
 - An `op` body is one part operation, with no `requires` (Q35 (a)). An
   `invariant` body is `nonneg PART` only (Q37 (a)).
-- The `examples/*.merge` gate loop checks `fmt` only until S3x.
 - The 10 form words (`replicas`, `atoms`, `replicated`, `state`, `op`,
   `invariant`, `allocate`, `by`, `escrow`, `init`) are keywords: a
   program cannot use them as names.
