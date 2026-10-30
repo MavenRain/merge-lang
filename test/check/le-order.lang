@@ -1,0 +1,4 @@
+-- The L4 of a script of two writes has the steps in script order (S3b U4).
+-- The proof of add x then add y does not give add y then add x.
+addSwap : (n : ℕ) → (x : Fin n) → (y : Fin n) → (s : GSet n) → gsetLe n s (gsetAdd n x (gsetAdd n y s))
+addSwap n x y s = gsetLeTrans n s (gsetAdd n x s) (gsetAdd n y (gsetAdd n x s)) (gsetAddL4 n x s) (gsetAddL4 n y (gsetAdd n x s))

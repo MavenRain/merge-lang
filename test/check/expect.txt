@@ -32,7 +32,9 @@ cell-pair.lang REFUSE_CELL must be the one field of its constructor
 cell-ghost.lang REFUSE_CELL
 cell-type-index.lang REFUSE_CELL
 cell-value-param.lang REFUSE_CELL is not a universe
-cell-field.lang REFUSE_CELL
+cell-field.lang REFUSE_CELL (or a function from closed data to it)
+cell-arrow-self.lang REFUSE_CELL (or a function from closed data to it)
+cell-arrow-two.lang REFUSE_CELL (or a function from closed data to it)
 cell-two-gen.lang REFUSE_CELL
 cell-path-shape.lang REFUSE_CELL must have the type Path T s t
 cell-path-dim3.lang REFUSE_CELL has dimension 3
@@ -68,3 +70,6 @@ op-fin-open.lang REFUSE_OP_INFINITE_ARG Shop: the parameter k of op sell is not 
 alloc-under.lang REFUSE_ALLOC_SUM Shop: allocate stock: give each replica one share, and the shares sum to the Counter init 2
 alloc-missing.lang REFUSE_ALLOC_SUM Shop: allocate stock: give each replica one share, and the shares sum to the Counter init 1
 op-arity.lang REFUSE_RAW_WRITE Tags: the body of op tag is not one part operation
+stock-mvreg.lang REFUSE_RAW_WRITE Desk: the body of op claim is not one part operation
+read-counter.lang REFUSE_RAW_WRITE Shop: the body of op count is not one part operation
+le-order.lang TYPE_MISMATCH addSwap: expected a term of type PathP

@@ -1,0 +1,25 @@
+-- Q44 (a) (S3b U2): an MVReg part with 3 atoms and 2 replicas. Each other
+-- MVReg test has 2 atoms and 2 replicas, so a swap of n and r in the
+-- mvregWrite term of an op def did not fail. Here the swap is a type error.
+replicas A B
+
+atoms User := ana ∣ ben ∣ cy
+
+replicated Task
+  state owner : MVReg User
+  op assign (u : User) := write owner u
+
+run : Option Task → Task
+run o = elim (λ (p : Option Task) → Task) TaskBot (λ (s : Task) → s) o
+
+readVal : Read 3 → ℕ
+readVal v = fold 0 (λ (x : Fin 3) → natAdd (witness x) 1) (λ (c : (s : GSet 3) × Path Bool (natLe 2 (gsetCount 3 s)) true) → 100) v
+
+assigned : ℕ
+assigned = readVal (mvregRead 3 2 (run (TaskAssign A cy TaskBot)))
+
+conflict : ℕ
+conflict = mvregCount 3 2 (TaskMerge (run (TaskAssign A cy TaskBot)) (run (TaskAssign B ana TaskBot)))
+
+later : ℕ
+later = readVal (mvregRead 3 2 (run (TaskAssign B ben (TaskMerge (run (TaskAssign A cy TaskBot)) (run (TaskAssign B ana TaskBot))))))

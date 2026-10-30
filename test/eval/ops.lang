@@ -1,0 +1,25 @@
+-- Arrow fields (S3b U1, Q39 (a), Q40 (a)): a field E → Prog A with E closed
+-- data. E and a closed data field can name an earlier field (Fin progN).
+-- The fold at an arrow field k is λ e → fold (k e), so the case gets E → R.
+data Prog (A : Type 0) : Type where
+  progPure : (progOf : A) → Prog A
+  progRead : (progN : ℕ) → (progIx : Fin progN) → (progNext : Fin progN → Prog A) → Prog A
+  progStock : (progStockNext : ℤ → Prog A) → Prog A
+
+steps : Prog ℕ → ℕ
+steps s = fold (λ (a : ℕ) → a) (λ (n : ℕ) (r : Fin n) (k : Fin n → ℕ) → natAdd (k r) n) (λ (k : ℤ → ℕ) → natAdd (k (natDiff 5 2)) 1) s
+
+stock : ℕ
+stock = steps (progStock ℕ (λ (z : ℤ) → progPure ℕ 3))
+
+stockTwice : ℕ
+stockTwice = steps (progStock ℕ (λ (z : ℤ) → progStock ℕ (λ (y : ℤ) → progPure ℕ 3)))
+
+readFirst : ℕ
+readFirst = steps (progRead ℕ 1 (pack 0 refl) (λ (x : Fin 1) → progPure ℕ (witness x)))
+
+readThenStock : ℕ
+readThenStock = steps (progRead ℕ 2 (pack 1 refl) (λ (x : Fin 2) → progStock ℕ (λ (z : ℤ) → progPure ℕ 7)))
+
+readLast : ℕ
+readLast = steps (progRead ℕ 3 (pack 2 refl) (λ (x : Fin 3) → progPure ℕ (witness x)))

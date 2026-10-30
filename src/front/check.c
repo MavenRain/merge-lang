@@ -790,12 +790,13 @@ static const Value *star(Checker *c, uint32_t fam, const Value *const *cases, co
 static int family_has_path(const Machine *m, uint32_t fam);
 static const Core *path_body(const Core *t);
 
-/* The type of the fold case of CTOR over FAM, a family with a path
-   constructor: a Pi over the fields into RES at depth 0, else Path RES a*
-   b* (depth 1) or Path (Path RES x* y*) p* q* (depth 2), with the ends
-   through the earlier CASES. A recursive field has the type RES; a path
-   field Path FAM u v has the type Path RES u* v*. A field type sees the
-   earlier fields, so each field is a fresh variable in ENV. */
+/* The type of the fold case of CTOR over FAM, a cell monad: a Pi over the
+   fields into RES at depth 0, else Path RES a* b* (depth 1) or Path (Path
+   RES x* y*) p* q* (depth 2), with the ends through the earlier CASES. A
+   recursive field has the type RES; an arrow field E → FAM has the type
+   E → RES; a path field Path FAM u v has the type Path RES u* v*. The
+   fields of a cell monad are a telescope, so each field is a fresh
+   variable in ENV. */
 static const Value *hit_case_type(Checker *c, uint32_t fam, const CtorInfo *ctor, const Value *const *cases, const Env *env, const Value *res) {
   Machine *m = c->m;
   const Core **doms = arena_alloc(m->arena, ((size_t)ctor->field_count + 1u) * sizeof *doms);
@@ -812,7 +813,7 @@ static const Value *hit_case_type(Checker *c, uint32_t fam, const CtorInfo *ctor
   for (i = 0; i < n; i++) {
     const Core *t = ctor->fields[i].type;
     int path = !ctor->fields[i].recursive && is_family_core(path_body(t), fam);
-    dom = ctor->fields[i].recursive ? res : path ? NULL : eval_core(m, env, t);
+    dom = ctor->fields[i].recursive ? res : path ? NULL : ctor->fields[i].arrow ? val_arrow(m, eval_core(m, env, t->a), res) : eval_core(m, env, t);
     doms[i] = path ? path_core(c, c->level + i, quote_value(m, c->level + i + 1u, res), star(c, fam, cases, env, t->args[1]), star(c, fam, cases, env, t->args[2]))
               : dom == NULL ? NULL : quote_value(m, c->level + i, dom);
     env = env_push(m, env, val_var(m, c->level + i));
@@ -844,10 +845,10 @@ static const Core *fold_family(Call *k, const Core *s, const Value *st) {
     cores[0] = infer(c, k->args[0], &res);
   if (res == NULL)
     return nul(FAIL(c, "TYPE_INFER", "fold over %s needs a declared result type here", f->name));
-  /* a family with a path constructor gets the case types of
-     hit_case_type, whose ends go through the earlier cases (VALS) */
+  /* a cell monad gets the case types of hit_case_type (its fields are a
+     telescope), whose ends go through the earlier cases (VALS) */
   for (j = 0; j < f->ctor_count; j++) {
-    want = hit ? hit_case_type(c, st->inst, &m->ctors[f->first_ctor + j], vals, env, res) : case_type(c, &m->ctors[f->first_ctor + j], env, res);
+    want = f->r1 == FAMILY_CM ? hit_case_type(c, st->inst, &m->ctors[f->first_ctor + j], vals, env, res) : case_type(c, &m->ctors[f->first_ctor + j], env, res);
     cores[j] = cores[j] != NULL ? cores[j] : want == NULL ? NULL : check(c, k->args[j], want);
     vals[j] = cores[j] == NULL || !hit ? NULL : here(c, cores[j]);
     if (cores[j] == NULL || (hit && vals[j] == NULL))
@@ -1485,11 +1486,10 @@ static int check_params(Checker *c, const FamilyInfo *f, const Term *const *args
   return 1;
 }
 
-/* The fields of a constructor of an indexed family are a telescope: a field
-   type can use the earlier fields. A cell monad keeps fields in the context
-   of its parameters only. */
+/* The fields of a constructor of an indexed family or of a cell monad are a
+   telescope: a field type can use the earlier fields (rule F3, Q39). */
 static int telescope(const FamilyInfo *f) {
-  return f->index_count > 0u && f->r1 != FAMILY_CM;
+  return f->index_count > 0u || f->r1 == FAMILY_CM;
 }
 
 static const Core *family_app(Call *k, uint32_t fam) {
@@ -2032,11 +2032,13 @@ static int has_type_param(const FamilyInfo *f) {
 }
 
 /* The R1 class of a family, after normalizing its parameter types.
-   check_family refuses program base data and type indices. */
+   check_family refuses program base data and type indices. A domain
+   family with a type argument (Ops A, Q41 (a)) is a cell family too, so
+   its fields are a telescope and it can have arrow fields. */
 static FamilyClass family_class(const Decl *d, const FamilyInfo *f) {
-  if (d->origin == ORIGIN_DOMAIN)
-    return FAMILY_BASE;
-  return has_type_param(f) ? FAMILY_CM : FAMILY_INDEXED;
+  if (has_type_param(f))
+    return FAMILY_CM;
+  return d->origin == ORIGIN_DOMAIN ? FAMILY_BASE : FAMILY_INDEXED;
 }
 
 /* A field type is in the context of the family parameters only, so the
@@ -2239,17 +2241,18 @@ static const Core *path_body(const Core *t) {
 }
 
 /* A field of a cell monad: a type parameter (the one field of its
-   constructor), closed data, the family at its own parameters, or a path
-   in the family (under EARLIER fields). */
+   constructor), closed data, the family at its own parameters, a function
+   from closed data to it (an arrow field), or a path in the family (under
+   EARLIER fields). */
 static int cell_field(Checker *c, uint32_t fam, const FieldInfo *out, size_t field_count, uint32_t earlier) {
   const FamilyInfo *f = &c->m->families[fam];
   const Core *t = out->type;
   const Core *line = path_body(t);
   if (t != NULL && t->kind == CORE_VAR && t->index >= earlier && t->index - earlier < f->param_count)
     return field_count == 1u ? 1 : FAIL(c, "REFUSE_CELL", "%s is not a cell signature: the field %s has a type parameter as its type, so it must be the one field of its constructor (rule R1)", f->name, out->name);
-  if (own_family(c, fam, t, earlier) || (line != NULL && own_family(c, fam, line, earlier + 1u)) || (c->self_uses == 0u && cell_closed(t, earlier)))
+  if (out->arrow || own_family(c, fam, t, earlier) || (line != NULL && own_family(c, fam, line, earlier + 1u)) || (c->self_uses == 0u && cell_closed(t, earlier)))
     return 1;
-  return FAIL(c, "REFUSE_CELL", "%s is not a cell signature: the field %s must be a type parameter, closed data, %s at its own parameters or a path in %s (rule R1)", f->name, out->name, f->name, f->name);
+  return FAIL(c, "REFUSE_CELL", "%s is not a cell signature: the field %s must be a type parameter, closed data, %s at its own parameters (or a function from closed data to it) or a path in %s (rule R1)", f->name, out->name, f->name, f->name);
 }
 
 /* Each type parameter has one generator: one constructor with one field
@@ -2372,7 +2375,8 @@ static int check_field(Checker *c, uint32_t fam, const Field *field, size_t fiel
     c->m->families[fam].universe = level;
   out->name = field->name;
   out->type = t;
-  out->recursive = c->self_uses > 0u;
+  out->arrow = c->m->families[fam].r1 == FAMILY_CM && c->self_uses == 1u && t->kind == CORE_PI && own_family(c, fam, t->b, earlier + 1u) && cell_closed(t->a, earlier);
+  out->recursive = c->self_uses > 0u && !out->arrow;
   if (c->m->families[fam].r1 == FAMILY_CM && !cell_field(c, fam, out, field_count, earlier))
     return 0;
   if (c->m->families[fam].r1 == FAMILY_CM && own_family(c, fam, path_body(t), earlier + 1u))
@@ -3092,6 +3096,8 @@ static const char *op_binder(const Cogen *g, const FormItem *it, const char *bas
   size_t j;
   while (base != NULL && clash) {
     clash = name_owner(g->c, base) != NULL || term_has_name(it->body, base);
+    for (j = 0; j < it->step_count; j++)
+      clash = clash || term_has_name(it->steps[j].write, base) || (it->steps[j].name != NULL && strcmp(it->steps[j].name, base) == 0);
     for (j = 0; j < it->param_count; j++)
       clash = clash || strcmp(it->params[j].name, base) == 0 || term_has_name(it->params[j].type, base);
     if (clash)
@@ -3203,22 +3209,19 @@ static const Term *form_put(const Cogen *g, size_t k, size_t d, size_t j, const 
   return cg_spine(g, "pack", (const Term *const[]){here, form_put(g, k, d + 1u, j, cg_app(g, cg_var(g, "payload"), cur), x)}, 2);
 }
 
-/* The op result: a total part value V goes back into S under some; a
-   partial one (an Option) with one part is the result; else an Option
-   elim puts the new part back. */
+/* The op result under the continuation KC: a total part value V goes back
+   into S; a partial one (an Option) goes back under an Option elim, and
+   none stays none. */
 static const Term *op_result(const Cogen *g, const FormItem *it, const Part *p, uint64_t r, size_t k, size_t j, int partial,
-                             const Term *s, const Term *v) {
+                             const Term *s, const Term *kc, const Term *v) {
   const Term *shop = cg_var(g, g->d->name);
   const Term *pt = part_term(g, p, r, NULL);
   const char *o = op_binder(g, it, "o"), *x = op_binder(g, it, "x");
   if (!partial)
-    return cg_app(g, cg_var(g, "some"), form_put(g, k, 0, j, s, v));
-  if (k == 1u)
-    return v;
+    return cg_app(g, kc, form_put(g, k, 0, j, s, v));
   return cg_spine(g, "elim",
                   (const Term *const[]){cg_lam(g, o, cg_app(g, cg_var(g, "Option"), pt), cg_app(g, cg_var(g, "Option"), shop)),
-                                        cg_var(g, "none"),
-                                        cg_lam(g, x, pt, cg_app(g, cg_var(g, "some"), form_put(g, k, 0, j, s, cg_var(g, x)))), v},
+                                        cg_var(g, "none"), cg_lam(g, x, pt, cg_app(g, kc, form_put(g, k, 0, j, s, cg_var(g, x)))), v},
                   4);
 }
 
@@ -3234,19 +3237,238 @@ static const char *cg_word(const Cogen *g, const char *x) {
   return s;
 }
 
-/* An op line: NAMEWord : Replica → params → NAME → Option NAME (Q38
-   (a)). J1: REFUSE_OP_INFINITE_ARG at a parameter that is not finite.
-   J2: REFUSE_RAW_WRITE at the op word when the body is not one part
-   operation `WORD PART ARG..` of the part kind of PART (Q35 (a)). */
-static int form_op(const Cogen *g, const FormItem *it, const Part *parts, size_t k, uint64_t r) {
+/* Helpers must not take the public name of any op, including later ops. */
+static const char *op_helper(const Cogen *g, const FormItem *scope, const char *name) {
+  size_t j;
+  int clash = 1;
+  while (name != NULL && clash) {
+    clash = name_owner(g->c, name) != NULL;
+    for (j = 0; scope != NULL && j < scope->param_count && !clash; j++)
+      clash = strcmp(name, scope->params[j].name) == 0;
+    for (j = 0; j < g->d->item_count && !clash; j++) {
+      const FormItem *it = &g->d->items[j];
+      if (it->kind == ITEM_OP) {
+        const char *word = cg_word(g, it->name.text);
+        const char *op = word == NULL ? NULL : cg_join(g, g->d->name, word);
+        if (op == NULL)
+          return NULL;
+        clash = strcmp(name, op) == 0;
+      }
+    }
+    if (clash)
+      name = cg_join(g, name, "'");
+  }
+  return name;
+}
+
+/* The PART_OPS index of WORD on the part P (the count: none). */
+static size_t part_word(const char *word, const Part *p) {
+  size_t w, n = sizeof PART_OPS / sizeof PART_OPS[0], out = n;
+  for (w = 0; w < n && out == n; w++)
+    out = strcmp(PART_OPS[w].word, word) == 0 && PART_OPS[w].kind == p->kind && (p->kind != PART_ESCROW || p->split != NULL) ? w : n;
+  return out;
+}
+
+/* The index of the part NAME (K: none). */
+static size_t op_part(const Part *parts, size_t k, const char *name) {
+  size_t j, pj = k;
+  for (j = 0; j < k && pj == k; j++) pj = strcmp(parts[j].it->name.text, name) == 0 ? j : k;
+  return pj;
+}
+
+/* The fold NAMERun (Q41 (a)). The binders are fresh against the globals:
+   the cases have no source terms. */
+typedef struct {
+  const Part *parts;
+  size_t k;
+  uint64_t r;
+  const FormItem *blank;
+  const Term *i, *s, *p, *kc;
+  const char *b, *q, *y;
+} RunCtx;
+
+/* The readAt cast of V : Fin _ to Fin N: an elim on T = natLe (natAdd
+   (witness V) 1) N with the motive λ b → Path Bool T b → X. YES sees the
+   proof q of T = true (run_fin); NO is the false branch. */
+static const Term *run_cast(const Cogen *g, const RunCtx *u, const Term *v, const Term *n, const Term *x, const Term *yes,
+                            const Term *no) {
+  const Term *bool_t = cg_var(g, "Bool");
+  const Term *t = cg_spine(
+      g, "natLe", (const Term *const[]){cg_spine(g, "natAdd", (const Term *const[]){cg_app(g, cg_var(g, "witness"), v), cg_nat(g, 1)}, 2), n},
+      2);
+  const Term *path_b = cg_spine(g, "Path", (const Term *const[]){bool_t, t, cg_var(g, u->b)}, 3);
+  return cg_spine(g, "elim",
+                  (const Term *const[]){cg_lam(g, u->b, bool_t, cg_pi(g, NULL, path_b, x)),
+                                        cg_lam(g, u->q, cg_spine(g, "Path", (const Term *const[]){bool_t, t, cg_var(g, "true")}, 3), yes),
+                                        cg_lam(g, u->q, cg_spine(g, "Path", (const Term *const[]){bool_t, t, cg_var(g, "false")}, 3), no), t,
+                                        cg_var(g, "refl")},
+                  5);
+}
+
+/* pack (witness V) q: V cast in the true branch of run_cast. */
+static const Term *run_fin(const Cogen *g, const RunCtx *u, const Term *v) {
+  return cg_spine(g, "pack", (const Term *const[]){cg_app(g, cg_var(g, "witness"), v), cg_var(g, u->q)}, 2);
+}
+
+/* flagIf (natEq p J) HERE REST. */
+static const Term *run_if(const Cogen *g, const RunCtx *u, size_t j, const Term *here, const Term *rest) {
+  return cg_spine(g, "flagIf", (const Term *const[]){cg_spine(g, "natEq", (const Term *const[]){u->p, cg_nat(g, j)}, 2), here, rest}, 3);
+}
+
+/* A read case body: kc (the part at the index p as Read N, or as ℤ when
+   STOCK) s for each readable part, else none. A GSet or MVReg read casts
+   each y : Fin N to the part (false: false). */
+static const Term *run_read(const Cogen *g, const RunCtx *u, int stock, const Term *n) {
+  const Term *chain = cg_var(g, "none"), *rr = cg_nat(g, u->r), *y = cg_var(g, u->y);
+  size_t j;
+  for (j = u->k; j > 0; j--) {
+    const Part *p = &u->parts[j - 1u];
+    const Term *part = form_get(g, u->k, j - 1u, u->s), *nj = cg_nat(g, p->n), *got;
+    int want = stock ? p->kind == PART_COUNTER || (p->kind == PART_ESCROW && p->split != NULL)
+                     : p->kind == PART_GSET || p->kind == PART_MVREG;
+    if (!want)
+      continue;
+    got = stock ? (p->kind == PART_COUNTER ? cg_spine(g, "counterStock", (const Term *const[]){rr, cg_nat(g, p->s0), part}, 3)
+                                           : cg_spine(g, "escrowStock", (const Term *const[]){rr, cg_var(g, p->split), part}, 3))
+                : cg_spine(g, "gsetRead",
+                           (const Term *const[]){n, cg_lam(g, u->y, cg_app(g, cg_var(g, "Fin"), n),
+                                                           run_cast(g, u, y, nj, cg_var(g, "Bool"),
+                                                                    p->kind == PART_GSET
+                                                                        ? cg_app(g, part, run_fin(g, u, y))
+                                                                        : cg_spine(g, "mvregHas",
+                                                                                   (const Term *const[]){nj, rr, part, run_fin(g, u, y)}, 4),
+                                                                    cg_var(g, "false")))},
+                           2);
+    chain = run_if(g, u, j - 1u, cg_app(g, cg_app(g, u->kc, got), u->s), chain);
+  }
+  return chain;
+}
+
+/* A write case body for the part word WORD: the part operation on the
+   part at the index p, for each part with WORD, else none. V: the add or
+   write value (cast to Fin n of the part), else the amount; TO: the
+   transfer replica (cast to Fin r). A failed cast gives none. */
+static const Term *run_write(const Cogen *g, const RunCtx *u, const char *word, const Term *v, const Term *to) {
+  const Term *none = cg_var(g, "none"), *chain = none;
+  const Term *opt = cg_app(g, cg_var(g, "Option"), cg_var(g, g->d->name));
+  size_t j, w, n = sizeof PART_OPS / sizeof PART_OPS[0];
+  for (j = u->k; j > 0; j--) {
+    const Part *p = &u->parts[j - 1u];
+    const Term *here;
+    w = part_word(word, p);
+    if (w == n)
+      continue;
+    here = op_result(g, u->blank, p, u->r, u->k, j - 1u, PART_OPS[w].partial, u->s, u->kc,
+                     part_op(g, (PartWord)w, p, u->r, u->i, w == PW_TRANSFER ? run_fin(g, u, to) : NULL,
+                             w == PW_ADD || w == PW_WRITE ? run_fin(g, u, v) : v, form_get(g, u->k, j - 1u, u->s)));
+    here = w == PW_ADD || w == PW_WRITE ? run_cast(g, u, v, cg_nat(g, p->n), opt, here, none)
+           : w == PW_TRANSFER         ? run_cast(g, u, to, cg_nat(g, u->r), opt, here, none)
+                                      : here;
+    chain = run_if(g, u, j - 1u, here, chain);
+  }
+  return chain;
+}
+
+/* NAMERun : Replica → Ops Unit → NAME → Option NAME (Q41 (a)): the fold
+   over a script, once for each form with an op. */
+static int form_run(const Cogen *g, const Part *parts, size_t k, uint64_t r, const char *name) {
+  FormItem blank;
+  RunCtx u;
+  const char *ib, *ob, *sb, *pb, *kb, *nb, *vb, *ab, *tb, *rb;
+  const Term *shop = cg_var(g, g->d->name), *nat = cg_var(g, "Nat"), *unit = cg_var(g, "Unit");
+  const Term *res = cg_pi(g, NULL, shop, cg_app(g, cg_var(g, "Option"), shop));
+  const Term *ops = cg_app(g, cg_var(g, "Ops"), unit), *cases[9];
+  memset(&blank, 0, sizeof blank);
+  ib = op_binder(g, &blank, "i");
+  ob = op_binder(g, &blank, "o");
+  sb = op_binder(g, &blank, "s");
+  pb = op_binder(g, &blank, "p");
+  kb = op_binder(g, &blank, "k");
+  nb = op_binder(g, &blank, "n");
+  vb = op_binder(g, &blank, "v");
+  ab = op_binder(g, &blank, "a");
+  tb = op_binder(g, &blank, "t");
+  rb = op_binder(g, &blank, "r");
+  u.parts = parts;
+  u.k = k;
+  u.r = r;
+  u.blank = &blank;
+  u.i = cg_var(g, ib);
+  u.s = cg_var(g, sb);
+  u.p = cg_var(g, pb);
+  u.kc = cg_var(g, kb);
+  u.b = op_binder(g, &blank, "b");
+  u.q = op_binder(g, &blank, "q");
+  u.y = op_binder(g, &blank, "y");
+  cases[0] = cg_lam(g, ab, unit, cg_lam(g, sb, shop, cg_app(g, cg_var(g, "some"), u.s)));
+  cases[1] = cg_lam(g, nb, nat,
+                    cg_lam(g, pb, nat,
+                           cg_lam(g, kb, cg_pi(g, NULL, cg_app(g, cg_var(g, "Read"), cg_var(g, nb)), res),
+                                  cg_lam(g, sb, shop, run_read(g, &u, 0, cg_var(g, nb))))));
+  cases[2] = cg_lam(g, pb, nat, cg_lam(g, kb, cg_pi(g, NULL, cg_var(g, "ℤ"), res), cg_lam(g, sb, shop, run_read(g, &u, 1, NULL))));
+  cases[3] = cg_lam(g, pb, nat,
+                    cg_lam(g, nb, nat,
+                           cg_lam(g, vb, cg_app(g, cg_var(g, "Fin"), cg_var(g, nb)),
+                                  cg_lam(g, kb, res, cg_lam(g, sb, shop, run_write(g, &u, "add", cg_var(g, vb), NULL))))));
+  cases[4] = cg_lam(g, pb, nat,
+                    cg_lam(g, nb, nat,
+                           cg_lam(g, vb, cg_app(g, cg_var(g, "Fin"), cg_var(g, nb)),
+                                  cg_lam(g, kb, res, cg_lam(g, sb, shop, run_write(g, &u, "write", cg_var(g, vb), NULL))))));
+  cases[5] = cg_lam(g, pb, nat, cg_lam(g, ab, nat, cg_lam(g, kb, res, cg_lam(g, sb, shop, run_write(g, &u, "dec", cg_var(g, ab), NULL)))));
+  cases[6] =
+      cg_lam(g, pb, nat, cg_lam(g, ab, nat, cg_lam(g, kb, res, cg_lam(g, sb, shop, run_write(g, &u, "restock", cg_var(g, ab), NULL)))));
+  cases[7] = cg_lam(
+      g, pb, nat,
+      cg_lam(g, rb, nat,
+             cg_lam(g, tb, cg_app(g, cg_var(g, "Fin"), cg_var(g, rb)),
+                    cg_lam(g, ab, nat,
+                           cg_lam(g, kb, res, cg_lam(g, sb, shop, run_write(g, &u, "transfer", cg_var(g, ab), cg_var(g, tb))))))));
+  cases[8] = cg_var(g, ob);
+  return cg_def_origin(g, ORIGIN_PROGRAM, name, cg_pi(g, NULL, cg_var(g, "Replica"), cg_pi(g, NULL, ops, res)),
+                       cg_lam(g, ib, cg_var(g, "Replica"), cg_lam(g, ob, ops, cg_spine(g, "fold", cases, 9))));
+}
+
+/* One step of an op script: a write has the PART_OPS word W and the
+   scoped arguments, the last first; a read has the fresh name X. */
+typedef struct {
+  size_t w, pj;
+  int stock;
+  const Term *args[4];
+  const char *x;
+} OpPlan;
+
+/* The script constructor of the step S on the part P, then REST. */
+static const Term *op_step(const Cogen *g, const FormItem *it, const OpPlan *s, const Part *p, uint64_t r, const Term *rest) {
+  const Term *u = cg_var(g, "Unit"), *j = cg_nat(g, s->pj), *n = cg_nat(g, p->n);
+  if (s->x != NULL && s->stock)
+    return cg_spine(g, "opStock", (const Term *const[]){u, j, cg_lam(g, s->x, cg_var(g, "ℤ"), rest)}, 3);
+  if (s->x != NULL)
+    return cg_spine(g, "opRead", (const Term *const[]){u, n, j, cg_lam(g, s->x, cg_app(g, cg_var(g, "Read"), n), rest)}, 4);
+  if (s->w == PW_ADD || s->w == PW_WRITE)
+    return cg_spine(g, s->w == PW_ADD ? "opAdd" : "opWrite", (const Term *const[]){u, j, n, s->args[0], rest}, 5);
+  if (s->w == PW_TRANSFER)
+    return cg_spine(g, "opTransfer", (const Term *const[]){u, j, cg_nat(g, r), s->args[1], op_amount(g, it, s->args[0]), rest}, 6);
+  return cg_spine(g, s->w == PW_DEC || s->w == PW_ESCROW_DEC ? "opDec" : "opRestock",
+                  (const Term *const[]){u, j, op_amount(g, it, s->args[0]), rest}, 4);
+}
+
+/* An op line (Q41 (a)): NAMEWordScript : params → Ops Unit and NAMEWord :
+   Replica → params → NAME → Option NAME, the Run of the script (Q38 (a)).
+   J1: REFUSE_OP_INFINITE_ARG at a parameter that is not finite. J2:
+   REFUSE_RAW_WRITE at the op word when a write step is not one part
+   operation `WORD PART ARG..` of the part kind of PART (Q35 (a)), or a
+   read step does not read a GSet or an MVReg (read) or a Counter or an
+   allocated Counter (stock). */
+static int form_op(const Cogen *g, const FormItem *it, const Part *parts, size_t k, uint64_t r, const char *runner) {
   Checker *c = g->c;
   const FormItem *source = it;
   FormItem scoped;
-  const Term *args[4];
-  const Term *head, *part, *i, *s, *body, *type;
+  OpPlan *plan;
+  const Term *script, *stype, *call, *body, *type;
   const Term *replica = cg_var(g, "Replica"), *shop = cg_var(g, g->d->name);
-  size_t argc = 0, j, pj = k, w = sizeof PART_OPS / sizeof PART_OPS[0];
-  const char *ib, *sb;
+  size_t j, t, a, n = sizeof PART_OPS / sizeof PART_OPS[0];
+  const char *ib, *sb, *word = cg_word(g, it->name.text);
+  const char *script_name;
   for (j = 0; j < it->param_count; j++) {
     const Field *f = &it->params[j];
     if (!op_param_finite(c, f->type))
@@ -3257,53 +3479,91 @@ static int form_op(const Cogen *g, const FormItem *it, const Part *parts, size_t
   if (!op_scope(g, it, &scoped))
     return FAIL(c, "OOM", "out of memory");
   it = &scoped;
-  head = it->body;
-  for (; head != NULL && head->kind == TERM_APP && argc < 4u; argc++) {
-    args[argc] = head->right;
-    head = head->left;
-  }
-  part = argc > 0u ? args[argc - 1u] : NULL;
-  if (part != NULL && part->kind == TERM_VAR && head->kind == TERM_VAR) {
-    for (j = 0; j < k && pj == k; j++) pj = strcmp(parts[j].it->name.text, part->name) == 0 ? j : k;
-    if (pj == k)
-      return diag_fail_at(c->m->diag, "NAME_UNKNOWN", c->m->def, word_span(part->line, part->col, part->name), NULL, part->name, NULL,
-                          "unknown name %s; the part of an op is a state of this form", part->name);
-    for (j = 0; j < sizeof PART_OPS / sizeof PART_OPS[0]; j++) {
-      if (strcmp(PART_OPS[j].word, head->name) == 0 && PART_OPS[j].kind == parts[pj].kind && PART_OPS[j].args + 1u == argc &&
-          (parts[pj].kind != PART_ESCROW || parts[pj].split != NULL))
-        w = j;
+  script_name = word == NULL ? NULL : op_helper(g, it, cg_join(g, cg_join(g, g->d->name, word), "Script"));
+  plan = arena_alloc(c->m->arena, (it->step_count + 1u) * sizeof *plan);
+  if (plan == NULL || word == NULL || script_name == NULL)
+    return FAIL(c, "OOM", "out of memory");
+  for (t = 0; t <= it->step_count; t++) {
+    const OpStep *st = t < it->step_count ? &it->steps[t] : NULL;
+    const Term *head = st == NULL ? it->body : st->write, *part = NULL;
+    size_t argc = 0;
+    plan[t].w = n;
+    plan[t].pj = k;
+    plan[t].stock = st != NULL && st->stock;
+    plan[t].x = NULL;
+    if (st != NULL && st->name != NULL) {
+      const Part *p;
+      plan[t].pj = op_part(parts, k, st->part.text);
+      if (plan[t].pj == k)
+        return diag_fail_at(c->m->diag, "NAME_UNKNOWN", c->m->def, word_span(st->part.line, st->part.col, st->part.text), NULL,
+                            st->part.text, NULL, "unknown name %s; the part of an op is a state of this form", st->part.text);
+      p = &parts[plan[t].pj];
+      plan[t].w = (st->stock ? p->kind == PART_COUNTER || (p->kind == PART_ESCROW && p->split != NULL)
+                             : p->kind == PART_GSET || p->kind == PART_MVREG)
+                      ? 0
+                      : n;
+      plan[t].x = op_binder(g, it, st->name);
+      /* Earlier reads already have fresh names, absent from the source. */
+      for (a = 0; plan[t].x != NULL && a < t;) {
+        if (plan[a].x != NULL && strcmp(plan[t].x, plan[a].x) == 0) {
+          plan[t].x = op_binder(g, it, cg_join(g, plan[t].x, "'"));
+          a = 0;
+        } else {
+          a++;
+        }
+      }
+      if (plan[t].x == NULL)
+        return FAIL(c, "OOM", "out of memory");
+    }
+    for (; plan[t].x == NULL && head != NULL && head->kind == TERM_APP && argc < 4u; argc++) {
+      plan[t].args[argc] = head->right;
+      head = head->left;
+    }
+    part = argc > 0u ? plan[t].args[argc - 1u] : NULL;
+    if (part != NULL && part->kind == TERM_VAR && head->kind == TERM_VAR) {
+      plan[t].pj = op_part(parts, k, part->name);
+      if (plan[t].pj == k)
+        return diag_fail_at(c->m->diag, "NAME_UNKNOWN", c->m->def, word_span(part->line, part->col, part->name), NULL, part->name,
+                            NULL, "unknown name %s; the part of an op is a state of this form", part->name);
+      plan[t].w = part_word(head->name, &parts[plan[t].pj]);
+      plan[t].w = plan[t].w < n && PART_OPS[plan[t].w].args + 1u == argc ? plan[t].w : n;
+    }
+    if (plan[t].w == n)
+      return diag_fail_at(c->m->diag, "REFUSE_RAW_WRITE", c->m->def, word_span(it->line, it->col, "op"), NULL, NULL, NULL,
+                          "the body of op %s is not one part operation (Q35 (a)): add p x on a GSet, write p x on an MVReg, dec p k "
+                          "or restock p k on a Counter, dec p k, transfer p j k or restock p k on an allocated Counter; x ← read p "
+                          "reads a GSet or an MVReg and x ← stock p a Counter or an allocated Counter",
+                          it->name.text);
+    /* WORD and PART are form labels. Only the argument expressions are in
+       the scope of the parameters and the earlier reads, with the last
+       binder first. */
+    for (j = 0; plan[t].x == NULL && j < PART_OPS[plan[t].w].args; j++) {
+      for (a = t; a > 0; a--)
+        plan[t].args[j] = plan[a - 1u].x == NULL ? plan[t].args[j]
+                                                 : op_rename(g, plan[t].args[j], it->steps[a - 1u].name, plan[a - 1u].x);
+      for (a = it->param_count; a > 0; a--)
+        plan[t].args[j] = op_rename(g, plan[t].args[j], source->params[a - 1u].name, it->params[a - 1u].name);
+      if (plan[t].args[j] == NULL)
+        return FAIL(c, "OOM", "out of memory");
     }
   }
-  if (w == sizeof PART_OPS / sizeof PART_OPS[0])
-    return diag_fail_at(c->m->diag, "REFUSE_RAW_WRITE", c->m->def, word_span(it->line, it->col, "op"), NULL, NULL, NULL,
-                        "the body of op %s is not one part operation (Q35 (a)): add p x on a GSet, write p x on an MVReg, dec p k "
-                        "or restock p k on a Counter, dec p k, transfer p j k or restock p k on an allocated Counter",
-                        it->name.text);
-  /* WORD and PART are form labels. Only the argument expressions are in
-     the parameter scope, with the last repeated name binding first. */
-  for (j = 0; j < PART_OPS[w].args; j++) {
-    size_t a;
-    for (a = it->param_count; a > 0; a--)
-      args[j] = op_rename(g, args[j], source->params[a - 1u].name, it->params[a - 1u].name);
-    if (args[j] == NULL)
-      return FAIL(c, "OOM", "out of memory");
-  }
+  script = cg_spine(g, "opPure", (const Term *const[]){cg_var(g, "Unit"), cg_var(g, "unit")}, 2);
+  for (t = it->step_count + 1u; t > 0; t--) script = op_step(g, it, &plan[t - 1u], &parts[plan[t - 1u].pj], r, script);
+  stype = cg_app(g, cg_var(g, "Ops"), cg_var(g, "Unit"));
   ib = op_binder(g, it, "i");
   sb = op_binder(g, it, "s");
-  i = cg_var(g, ib);
-  s = cg_var(g, sb);
-  body = op_result(g, it, &parts[pj], r, k, pj, PART_OPS[w].partial, s,
-                   part_op(g, (PartWord)w, &parts[pj], r, i, PART_OPS[w].args == 2u ? args[1] : NULL,
-                           w == PW_ADD || w == PW_WRITE ? args[0] : op_amount(g, it, args[0]),
-                           form_get(g, k, pj, s)));
-  body = cg_lam(g, sb, shop, body);
+  call = cg_var(g, script_name);
+  for (j = 0; j < it->param_count; j++) call = cg_app(g, call, cg_var(g, it->params[j].name));
+  body = cg_lam(g, sb, shop, cg_spine(g, runner, (const Term *const[]){cg_var(g, ib), call, cg_var(g, sb)}, 3));
   type = cg_pi(g, NULL, shop, cg_app(g, cg_var(g, "Option"), shop));
   for (j = it->param_count; j > 0; j--) {
     body = cg_lam(g, it->params[j - 1u].name, it->params[j - 1u].type, body);
     type = cg_pi(g, it->params[j - 1u].name, it->params[j - 1u].type, type);
+    script = cg_lam(g, it->params[j - 1u].name, it->params[j - 1u].type, script);
+    stype = cg_pi(g, it->params[j - 1u].name, it->params[j - 1u].type, stype);
   }
-  return cg_def_origin(g, ORIGIN_PROGRAM, cg_join(g, g->d->name, cg_word(g, it->name.text)), cg_pi(g, NULL, replica, type),
-                       cg_lam(g, ib, replica, body));
+  return cg_def_origin(g, ORIGIN_PROGRAM, script_name, stype, script) &&
+         cg_def_origin(g, ORIGIN_PROGRAM, cg_join(g, g->d->name, word), cg_pi(g, NULL, replica, type), cg_lam(g, ib, replica, body));
 }
 
 /* The part J of the K parts with the state name NAME, else K. */
@@ -3407,6 +3667,7 @@ static int check_replicated(Checker *c, const Decl *d) {
   const Decl *replicas = form_decl(c, DECL_REPLICAS, NULL);
   const FormItem *first = NULL;
   const Term *inv = NULL, *shop, *s;
+  const char *runner = NULL;
   size_t k = 0, j;
   Cogen g;
   if (parts == NULL)
@@ -3447,6 +3708,10 @@ static int check_replicated(Checker *c, const Decl *d) {
       return 0;
   }
   shop = cg_var(&g, d->name);
+  for (j = 0; j < d->item_count && d->items[j].kind != ITEM_OP; j++) {}
+  if (j < d->item_count &&
+      ((runner = op_helper(&g, NULL, cg_join(&g, d->name, "Run"))) == NULL || !form_run(&g, parts, k, replicas->name_count, runner)))
+    return 0;
   s = cg_var(&g, "s");
   for (j = 0; j < d->item_count; j++) {
     const FormItem *it = &d->items[j];
@@ -3454,7 +3719,7 @@ static int check_replicated(Checker *c, const Decl *d) {
     c->m->def = d->name;
     g.line = it->line;
     g.col = it->col;
-    if (it->kind == ITEM_OP && !form_op(&g, it, parts, k, replicas->name_count))
+    if (it->kind == ITEM_OP && !form_op(&g, it, parts, k, replicas->name_count, runner))
       return 0;
     if (it->kind == ITEM_INVARIANT && !form_inv(&g, it, parts, k, replicas->name_count, s, &t))
       return 0;

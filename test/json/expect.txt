@@ -44,7 +44,7 @@
 {"code":"REFUSE_OP_INFINITE_ARG","severity":"error","span":{"file":"test/json/REFUSE_OP_INFINITE_ARG.lang","line":5,"col":9,"end_line":5,"end_col":10},"expected":null,"found":null,"fix":null,"retry":true,"message":"the parameter k of op o is not finite; an op parameter type is an atoms name, Replica or Fin m"}
 {"parsed":"2 of 2","typed":"1 of 2","affine":"0 of 0","laws":"0 of 0"}
 == REFUSE_RAW_WRITE.lang exit 1
-{"code":"REFUSE_RAW_WRITE","severity":"error","span":{"file":"test/json/REFUSE_RAW_WRITE.lang","line":7,"col":3,"end_line":7,"end_col":5},"expected":null,"found":null,"fix":null,"retry":true,"message":"the body of op tag is not one part operation (Q35 (a)): add p x on a GSet, write p x on an MVReg, dec p k or restock p k on a Counter, dec p k, transfer p j k or restock p k on an allocated Counter"}
+{"code":"REFUSE_RAW_WRITE","severity":"error","span":{"file":"test/json/REFUSE_RAW_WRITE.lang","line":7,"col":3,"end_line":7,"end_col":5},"expected":null,"found":null,"fix":null,"retry":true,"message":"the body of op tag is not one part operation (Q35 (a)): add p x on a GSet, write p x on an MVReg, dec p k or restock p k on a Counter, dec p k, transfer p j k or restock p k on an allocated Counter; x ← read p reads a GSet or an MVReg and x ← stock p a Counter or an allocated Counter"}
 {"parsed":"3 of 3","typed":"2 of 3","affine":"0 of 0","laws":"0 of 0"}
 == REFUSE_REC.lang exit 1
 {"code":"REFUSE_REC","severity":"error","span":{"file":"test/json/REFUSE_REC.lang","line":1,"col":1,"end_line":2,"end_col":16},"expected":null,"found":null,"fix":null,"retry":true,"message":"a rec declaration is refused (rule R3); use fold"}

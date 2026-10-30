@@ -49,6 +49,7 @@ static const struct {
   TokKind kind;
 } SYMBOLS[] = {
   {"\xE2\x86\x92", TOK_ARROW},
+  {"\xE2\x86\x90", TOK_LARROW},
   {"\xCE\xBB", TOK_LAMBDA},
   {"\xC3\x97", TOK_TIMES},
   {"\xE2\x88\xA7", TOK_MEET},
@@ -88,6 +89,8 @@ const char *tok_kind_name(TokKind kind) {
     case TOK_RBRACK: return "']'";
     case TOK_COMMA: return "','";
     case TOK_MAPSTO: return "'↦'";
+    case TOK_LARROW: return "'←'";
+    case TOK_SEMI: return "';'";
     case TOK_KW_TYPE: return "'Type'";
     case TOK_KW_SIGMA: return "'Sigma'";
     case TOK_BAR: return "'∣'";
@@ -285,6 +288,11 @@ static int lex_symbol(Lexer *lx) {
     case '[': kind = TOK_LBRACK; break;
     case ']': kind = TOK_RBRACK; break;
     case ',': kind = TOK_COMMA; break;
+    case ';': kind = TOK_SEMI; break;
+    case '<':
+      kind = next == '-' ? TOK_LARROW : TOK_EOF;
+      width = 2;
+      break;
     case '\\': kind = TOK_LAMBDA; break;
     case ':':
       kind = next == '=' ? TOK_DEFINE : TOK_COLON;

@@ -1,0 +1,28 @@
+-- L4 for a script (S3b U4, Q43 (a)). A step gives Le from its state to the
+-- next state: a read step by Idem, a write step by the op L4. LeTrans joins
+-- two steps, so the script result is above the start state.
+addTwo : (n : ℕ) → (x : Fin n) → (y : Fin n) → (s : GSet n) → gsetLe n s (gsetAdd n y (gsetAdd n x s))
+addTwo n x y s = gsetLeTrans n s (gsetAdd n x s) (gsetAdd n y (gsetAdd n x s)) (gsetAddL4 n x s) (gsetAddL4 n y (gsetAdd n x s))
+
+readAdd : (n : ℕ) → (x : Fin n) → (s : GSet n) → gsetLe n s (gsetAdd n x s)
+readAdd n x s = gsetLeTrans n s s (gsetAdd n x s) (gsetIdem n s) (gsetAddL4 n x s)
+
+writeTwo : (n : ℕ) → (r : ℕ) → (i : Fin r) → (x : Fin n) → (y : Fin n) → (s : MVReg n r) → mvregLe n r s (mvregWrite n r i y (mvregWrite n r i x s))
+writeTwo n r i x y s = mvregLeTrans n r s (mvregWrite n r i x s) (mvregWrite n r i y (mvregWrite n r i x s)) (mvregWriteL4 n r i x s) (mvregWriteL4 n r i y (mvregWrite n r i x s))
+
+g0 : GSet 3
+g0 = λ (x : Fin 3) → false
+
+-- The two ends of addTwo: merge g0 (add 2 (add 0 g0)) and add 2 (add 0 g0).
+addTwoStart : ℕ
+addTwoStart = gsetCount 3 (addTwo 3 (pack 0 refl) (pack 2 refl) g0 i0)
+
+addTwoEnd : ℕ
+addTwoEnd = gsetCount 3 (addTwo 3 (pack 0 refl) (pack 2 refl) g0 i1)
+
+m0 : MVReg 2 2
+m0 = pack (λ (j : Fin 2) (y : Fin 2) → 0) (λ (j : Fin 2) → 0)
+
+-- The end of writeTwo: replica 0 writes 0, then 1, so ctx 0 is 2.
+writeTwoCtx : ℕ
+writeTwoCtx = payload (writeTwo 2 2 (pack 0 refl) (pack 0 refl) (pack 1 refl) m0 i1) (pack 0 refl)

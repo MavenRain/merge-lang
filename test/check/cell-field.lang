@@ -1,3 +1,3 @@
 data W (A : Type 0) : Type where
   w : (a : A) → W A
-  bad : (k : ℕ → W A) → W A
+  bad : (k : A → W A) → W A

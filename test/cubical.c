@@ -61,6 +61,48 @@ done:
 
 int main(void) {
   static const struct { const char *label; const char *source; const char *code; } checks[] = {
+    {"fold maps path fields without path constructors",
+     "data W (A : Type 0) : Type where\n"
+     "  wPure : (wOf : A) → W A\n"
+     "  wLink : (wLeft : W A) → (wProof : Path (W A) wLeft wLeft) → W A\n\n"
+     "extract : I → W ℕ → ℕ\n"
+     "extract i s = fold (λ (a : ℕ) → a) (λ (x : ℕ) (p : Path ℕ x x) → p i) s\n\n"
+     "value : I → ℕ\nvalue i = extract i (wLink ℕ (wPure ℕ 3) refl)\n\n"
+     "claimed : (i : I) → Path ℕ (value i) 3\nclaimed i = refl\n", NULL},
+    {"read binders stay distinct and preserve shadowing",
+     "replicas A B\n\natoms User := ana ∣ ben ∣ cy\n\n"
+     "pick : Read 3 → User\n"
+     "pick v = fold ana (λ (x : Fin 3) → x) (λ (c : (s : GSet 3) × Path Bool (natLe 2 (gsetCount 3 s)) true) → cy) v\n\n"
+     "replicated Desk\n  state owner : MVReg User\n  state tags : GSet User\n"
+     "  op claim := x ← read owner; x' ← read tags; add tags (pick x)\n"
+     "  op shadow := x ← read owner; x ← read tags; add tags (pick x)\n"
+     "  op bind (x : User) := x' ← read owner; x'' ← read tags; add tags x\n"
+     "  op assign := write owner ben\n\n"
+     "run : Option Desk → Desk\nrun o = elim (λ (p : Option Desk) → Desk) DeskBot (λ (s : Desk) → s) o\n\n"
+     "claimed : Path Bool (payload (run (DeskClaim A (run (DeskAssign A DeskBot)))) ben) true\nclaimed = refl\n\n"
+     "shadowed : Path Bool (payload (run (DeskShadow A (run (DeskAssign A DeskBot)))) ana) true\nshadowed = refl\n\n"
+     "bound : Path Bool (payload (run (DeskBind A cy DeskBot)) cy) true\nbound = refl\n", NULL},
+    {"runner helpers preserve public run operations",
+     "replicas A B\n\natoms Tag := red ∣ blue\n\nreplicated Tags\n"
+     "  state tags : GSet Tag\n  op run := add tags red\n  op run' := add tags blue\n\n"
+     "first : Path (Option Tags) (TagsRun A TagsBot) (some (gsetAdd 2 red (gsetBot 2)))\nfirst = refl\n\n"
+     "second : Path (Option Tags) (TagsRun' B TagsBot) (some (gsetAdd 2 blue (gsetBot 2)))\nsecond = refl\n", NULL},
+    {"script helpers preserve later public operations",
+     "replicas A B\n\natoms Tag := red ∣ blue\n\nreplicated Tags\n"
+     "  state tags : GSet Tag\n  op tag := add tags red\n"
+     "  op tagScript := add tags blue\n  op tagScript' := add tags blue\n\n"
+     "first : Path (Option Tags) (TagsTag A TagsBot) (some (gsetAdd 2 red (gsetBot 2)))\nfirst = refl\n\n"
+     "second : Path (Option Tags) (TagsTagScript B TagsBot) (some (gsetAdd 2 blue (gsetBot 2)))\nsecond = refl\n\n"
+     "third : Path (Option Tags) (TagsTagScript' B TagsBot) (some (gsetAdd 2 blue (gsetBot 2)))\nthird = refl\n", NULL},
+    {"script helpers preserve earlier public operations",
+     "replicas A B\n\natoms Tag := red ∣ blue\n\nreplicated Tags\n"
+     "  state tags : GSet Tag\n  op tagScript := add tags blue\n  op tag := add tags red\n\n"
+     "value : Path (Option Tags) (TagsTag A TagsBot) (some (gsetAdd 2 red (gsetBot 2)))\nvalue = refl\n", NULL},
+    {"fresh script helpers cannot capture scoped parameters",
+     "replicas A B\n\natoms Tag := red ∣ blue\n\nreplicated Tags\n"
+     "  state tags : GSet Tag\n  op tag (TagsTagScript : Tag) := add tags TagsTagScript\n"
+     "  op tagScript := add tags blue\n\n"
+     "value : Path (Option Tags) (TagsTag A blue TagsBot) (some (gsetAdd 2 blue (gsetBot 2)))\nvalue = refl\n", NULL},
     {"duplicate state names refused",
      "replicas A B\n\nreplicated Shop\n"
      "  state stock : Counter (init 1)\n  state stock : Counter (init 7)\n"

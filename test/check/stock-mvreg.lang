@@ -1,0 +1,8 @@
+replicas A B
+
+atoms User := ana ∣ ben
+
+replicated Desk
+  state owner : MVReg User
+  state tags : GSet User
+  op claim := x ← stock owner; add tags ana

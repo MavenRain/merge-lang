@@ -7,9 +7,9 @@ state that replicas change while they are disconnected and merge when they
 reconnect. Do not use it for text co-editing, server-only databases or
 Redis scripts.
 
-## Status (S3x)
+## Status (S3b)
 
-S1, S1b, S2, S2b, S2c, S2d, S3a, S3e and S3x are built: the port of the evolve-lang
+S1, S1b, S2, S2b, S2c, S2d, S3a, S3e, S3x and S3b are built: the port of the evolve-lang
 1f87a5a surface and cubical kernel (S1), induction in the kernel (S1b:
 `natMax`, a `fold` over ℕ with a motive, `elim` for Bool and `Option`,
 and `sumFin`), the domain with the laws L1 to L4 as guest terms (S2:
@@ -25,8 +25,11 @@ the parse and `fmt` of the merge forms (S3a: `replicas`, `atoms`,
 `replicated`, `state`, `op`, `invariant`, `allocate`), the
 elaboration of the forms to guest terms (S3e: `langc check` types the
 forms, with `REFUSE_NO_MERGE`, `REFUSE_OP_INFINITE_ARG`,
-`REFUSE_RAW_WRITE` and `REFUSE_ALLOC_SUM`), and the check of the four
-examples in the gate (S3x; `docs/STATUS.md`).
+`REFUSE_RAW_WRITE` and `REFUSE_ALLOC_SUM`), the check of the four
+examples in the gate (S3x), and `op` scripts (S3b: a cell monad field
+`E → T A` with `E` closed data, the library `Ops A` with the runner
+`NAMERun`, the script syntax `x ← read PART; ...`, and `PLe` with
+`PLeTrans` for each part; `docs/STATUS.md`).
 `langc check --json` and `langc fmt` work.
 `langc sim`, the Wasm merge engine, the JSON
 coordination report, `langc mcp`, `SKILL.md` and the graded examples are

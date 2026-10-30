@@ -925,6 +925,8 @@ static int family_fold(Low *l, Buf *b, const Value *v, Operand *out) {
     recs[i] = NO_REC;
     /* a path constructor has no arm and no recursive field */
     for (k = 0; k < c->field_count && c->depth == 0u; k++) {
+      if (c->fields[k].arrow)
+        return diag_fail(l->m->diag, "REFUSE_RUNTIME_TREE", l->m->def, "a fold over %s through a function field must exist at run time (HOST-LIMIT)", fam->name);
       here += c->fields[k].recursive ? 1u : 0u;
       recs[i] = c->fields[k].recursive ? k : recs[i];
     }

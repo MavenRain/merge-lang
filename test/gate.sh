@@ -227,14 +227,14 @@ for f in test/fmt/*.lang; do
   fi
   same_dump "$f" "$c" || { echo "FAIL round trip $f: the AST dump differs from $c"; fail=$((fail + 1)); }
   case "$f" in
-    test/fmt/form-op.lang | test/fmt/form-replicated.lang | test/fmt/form-state.lang)
+    test/fmt/form-op.lang | test/fmt/form-op-steps.lang | test/fmt/form-replicated.lang | test/fmt/form-state.lang)
       for g in "$f" "$c"; do
         status=0
         build/langc check "$g" >/dev/null 2>"$tmp/err" || status=$?
         first=$(head -n 1 "$tmp/err")
         case "$f|$status|$first" in
           "test/fmt/form-replicated.lang|1|langc: REFUSE_OP_INFINITE_ARG: "*) ;;
-          "test/fmt/form-op.lang|1|langc: REFUSE_NO_MERGE: "* | "test/fmt/form-state.lang|1|langc: REFUSE_NO_MERGE: "*) ;;
+          "test/fmt/form-op.lang|1|langc: REFUSE_NO_MERGE: "* | "test/fmt/form-op-steps.lang|1|langc: REFUSE_NO_MERGE: "* | "test/fmt/form-state.lang|1|langc: REFUSE_NO_MERGE: "*) ;;
           *) echo "FAIL check $g: want exit 1 and the pinned code, got $status|$first"; fail=$((fail + 1)) ;;
         esac
       done

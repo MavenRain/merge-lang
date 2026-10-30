@@ -297,6 +297,34 @@ mvregWrite n r i x s = mvregMerge n r s (mvregDelta n r i x s)
 mvregWriteL4 : (n : ℕ) → (r : ℕ) → (i : Fin r) → (x : Fin n) → (s : MVReg n r) → Path (MVReg n r) (mvregMerge n r s (mvregWrite n r i x s)) (mvregWrite n r i x s)
 mvregWriteL4 n r i x s = mvregL4 n r s (mvregDelta n r i x s)
 
+-- The order of a part (S3b U4, Q43 (a)): s ≤ t when merge s t ≡ t. LeTrans
+-- is by associativity: merge s u ≡ merge s (merge t u) ≡ merge (merge s t) u
+-- ≡ merge t u ≡ u. For a script, a read step gives Le s s (Idem), a write
+-- step gives Le s (op s) (the op L4), and LeTrans joins the steps.
+gsetLe : (n : ℕ) → (s : GSet n) → (t : GSet n) → Type 0
+gsetLe n s t = Path (GSet n) (gsetMerge n s t) t
+
+gsetLeTrans : (n : ℕ) → (s : GSet n) → (t : GSet n) → (u : GSet n) → (p : gsetLe n s t) → (q : gsetLe n t u) → gsetLe n s u
+gsetLeTrans n s t u p q = trans (cong (λ (x : GSet n) → gsetMerge n s x) (symm q)) (trans (symm (gsetAssoc n s t u)) (trans (cong (λ (x : GSet n) → gsetMerge n x u) p) q))
+
+counterLe : (r : ℕ) → (s : Counter r) → (t : Counter r) → Type 0
+counterLe r s t = Path (Counter r) (counterMerge r s t) t
+
+counterLeTrans : (r : ℕ) → (s : Counter r) → (t : Counter r) → (u : Counter r) → (p : counterLe r s t) → (q : counterLe r t u) → counterLe r s u
+counterLeTrans r s t u p q = trans (cong (λ (x : Counter r) → counterMerge r s x) (symm q)) (trans (symm (counterAssoc r s t u)) (trans (cong (λ (x : Counter r) → counterMerge r x u) p) q))
+
+escrowLe : (r : ℕ) → (s : Escrow r) → (t : Escrow r) → Type 0
+escrowLe r s t = Path (Escrow r) (escrowMerge r s t) t
+
+escrowLeTrans : (r : ℕ) → (s : Escrow r) → (t : Escrow r) → (u : Escrow r) → (p : escrowLe r s t) → (q : escrowLe r t u) → escrowLe r s u
+escrowLeTrans r s t u p q = trans (cong (λ (x : Escrow r) → escrowMerge r s x) (symm q)) (trans (symm (escrowAssoc r s t u)) (trans (cong (λ (x : Escrow r) → escrowMerge r x u) p) q))
+
+mvregLe : (n : ℕ) → (r : ℕ) → (s : MVReg n r) → (t : MVReg n r) → Type 0
+mvregLe n r s t = Path (MVReg n r) (mvregMerge n r s t) t
+
+mvregLeTrans : (n : ℕ) → (r : ℕ) → (s : MVReg n r) → (t : MVReg n r) → (u : MVReg n r) → (p : mvregLe n r s t) → (q : mvregLe n r t u) → mvregLe n r s u
+mvregLeTrans n r s t u p q = trans (cong (λ (x : MVReg n r) → mvregMerge n r s x) (symm q)) (trans (symm (mvregAssoc n r s t u)) (trans (cong (λ (x : MVReg n r) → mvregMerge n r x u) p) q))
+
 mvregLive : (n : ℕ) → (r : ℕ) → (s : MVReg n r) → (j : Fin r) → (x : Fin n) → Bool
 mvregLive n r s j x = and (natEq (witness s j x) (natMul 2 (payload s j))) (natLe 1 (payload s j))
 
@@ -329,6 +357,22 @@ gsetRead n s = elim (λ (b : Bool) → Path Bool (natLe 2 (gsetCount n s)) b →
 
 mvregRead : (n : ℕ) → (r : ℕ) → (s : MVReg n r) → Read n
 mvregRead n r s = gsetRead n (λ (x : Fin n) → mvregHas n r s x)
+
+-- Ops A (S3b, Q41 (a)): a script of part operations. Each read and write
+-- names its part by the part index. A read gives its answer to a function
+-- (Read n for read, ℤ for stock). A write has its arguments and the next
+-- step. A value of a set or a register and the replica of a transfer are a
+-- Fin of an earlier field. A runner answers each read from the state and
+-- applies each write (one elim, Q40 (a)).
+data Ops (A : Type 0) : Type where
+  opPure : (opOf : A) → Ops A
+  opRead : (readN : ℕ) → (readPart : ℕ) → (readNext : Read readN → Ops A) → Ops A
+  opStock : (stockPart : ℕ) → (stockNext : ℤ → Ops A) → Ops A
+  opAdd : (addPart : ℕ) → (addN : ℕ) → (addValue : Fin addN) → (addNext : Ops A) → Ops A
+  opWrite : (writePart : ℕ) → (writeN : ℕ) → (writeValue : Fin writeN) → (writeNext : Ops A) → Ops A
+  opDec : (decPart : ℕ) → (decAmount : ℕ) → (decNext : Ops A) → Ops A
+  opRestock : (restockPart : ℕ) → (restockAmount : ℕ) → (restockNext : Ops A) → Ops A
+  opTransfer : (transferPart : ℕ) → (transferR : ℕ) → (transferTo : Fin transferR) → (transferAmount : ℕ) → (transferNext : Ops A) → Ops A
 
 -- The product join (PLAN 4.1 and J3): a state is the Sigma of its parts. The
 -- merge of a pair is the merge of each part. L1 to L3 of the pair follow from

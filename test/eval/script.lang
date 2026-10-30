@@ -1,0 +1,33 @@
+-- S3b U3: op scripts with more than one step. x ← read owner binds x to the
+-- read of the MVReg part (Read 3). A step sees the writes of the earlier
+-- steps of the same op, so the read in both sees the write before it.
+replicas A B
+
+atoms User := ana ∣ ben ∣ cy
+
+pick : Read 3 → User
+pick v = fold ana (λ (x : Fin 3) → x) (λ (c : (s : GSet 3) × Path Bool (natLe 2 (gsetCount 3 s)) true) → cy) v
+
+replicated Desk
+  state owner : MVReg User
+  state tags : GSet User
+  op claim := x ← read owner; add tags (pick x)
+  op both (u : User) := write owner u; x ← read owner; add tags (pick x)
+
+run : Option Desk → Desk
+run o = elim (λ (p : Option Desk) → Desk) DeskBot (λ (s : Desk) → s) o
+
+claimBot : ℕ
+claimBot = gsetCount 3 (payload (run (DeskClaim A DeskBot)))
+
+claimBotAna : ℕ
+claimBotAna = flagIf (payload (run (DeskClaim A DeskBot)) ana) 1 0
+
+bothBen : ℕ
+bothBen = gsetCount 3 (payload (run (DeskBoth B ben DeskBot)))
+
+bothBenTag : ℕ
+bothBenTag = flagIf (payload (run (DeskBoth B ben DeskBot)) ben) 1 0
+
+claimConflict : ℕ
+claimConflict = gsetCount 3 (payload (run (DeskClaim A (DeskMerge (run (DeskBoth A ana DeskBot)) (run (DeskBoth B ben DeskBot))))))

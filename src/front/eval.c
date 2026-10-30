@@ -469,6 +469,47 @@ static const Value *fold_path_field(Machine *m, uint32_t family, const Value *co
   return val_make(m, OP_PLAM, 0, 1u, val_closure(m, VAL_LAM, "i", NULL, env, body), NULL, NULL);
 }
 
+/* An arrow field K : E → FAM through the fold (Q40 (a)): λ e → fold
+   cases... (K e), with K and the cases in an environment. */
+static const Value *fold_arrow_field(Machine *m, uint32_t family, const Value *const *cases, uint32_t ncases, const Value *k) {
+  const Env *env = env_push(m, NULL, k);
+  const Core **args = arena_alloc(m->arena, ((size_t)ncases + 1u) * sizeof *args);
+  Core *app = new_core(m, CORE_APP);
+  Core *body = new_core(m, CORE_OP);
+  Core *fn = new_core(m, CORE_VAR);
+  Core *arg = new_core(m, CORE_VAR);
+  Core *var;
+  uint32_t i;
+  if (args == NULL || app == NULL || body == NULL || fn == NULL || arg == NULL)
+    return oom(m);
+  for (i = 0; i < ncases && env != NULL; i++) {
+    env = env_push(m, env, cases[i]);
+    var = new_core(m, CORE_VAR);
+    if (var == NULL)
+      return NULL;
+    var->index = ncases - i;
+    args[i] = var;
+  }
+  if (env == NULL)
+    return NULL;
+  fn->index = ncases + 1u;
+  arg->index = 0;
+  app->a = fn;
+  app->b = arg;
+  args[ncases] = app;
+  body->op = OP_FOLD_FAMILY;
+  body->inst = family;
+  body->args = args;
+  body->argc = ncases + 1u;
+  return val_closure(m, VAL_LAM, "e", NULL, env, body);
+}
+
+/* A field through the fold: an arrow field as above, a recursive field
+   folded, any other field as it is. */
+static const Value *fold_field(Machine *m, uint32_t family, const Value *const *cases, uint32_t ncases, const FieldInfo *info, const Value *field) {
+  return info->arrow ? fold_arrow_field(m, family, cases, ncases, field) : info->recursive ? fold_family(m, family, cases, ncases, field) : field;
+}
+
 /* fold case... x at a path constructor X: at depth 1, the case of X
    applied to the fields (a recursive field folded), at the interval arg,
    with the folded declared ends (so i0 and i1 give the fold of an end). A
@@ -492,7 +533,7 @@ static const Value *fold_pctor(Machine *m, uint32_t family, const Value *const *
   for (i = 0; i < p + ci->field_count; i++)
     env = env_push(m, env, x->args[i]);
   for (i = 0; i < ci->field_count && acc != NULL; i++)
-    acc = apply_value(m, acc, ci->fields[i].recursive ? fold_family(m, family, cases, ncases, x->args[p + i]) : x->args[p + i]);
+    acc = apply_value(m, acc, fold_field(m, family, cases, ncases, &ci->fields[i], x->args[p + i]));
   pa[0] = acc;
   pa[1] = x->args[p + ci->field_count];
   pa[2] = fold_family(m, family, cases, ncases, eval_core(m, env, ci->ends[0]));
@@ -533,8 +574,7 @@ static const Value *fold_family(Machine *m, uint32_t family, const Value *const 
     return internal(m, "a fold of a constructor of another family");
   if (!enter(m))
     return NULL;
-  for (i = 0; i < fam->ctor_count; i++)
-    hit = hit || m->ctors[fam->first_ctor + i].depth != 0u;
+  hit = fam->r1 == FAMILY_CM;
   for (i = 0; i < fam->param_count; i++) {
     env = env_push(m, env, x->args[i]);
     if (env == NULL) {
@@ -547,11 +587,18 @@ static const Value *fold_family(Machine *m, uint32_t family, const Value *const 
     field = x->args[fam->param_count + i];
     t = ctor->fields[i].type;
     line = t != NULL && t->kind == CORE_OP && t->op == OP_PATHP && t->argc == 3u && t->args[0] != NULL && t->args[0]->kind == CORE_LAM ? t->args[0]->b : NULL;
-    if (ctor->fields[i].recursive)
-      field = fold_family(m, family, cases, ncases, field);
+    if (ctor->fields[i].recursive || ctor->fields[i].arrow)
+      field = fold_field(m, family, cases, ncases, &ctor->fields[i], field);
     else if (hit && line != NULL && line->kind == CORE_OP && line->op == OP_FAMILY && line->inst == family)
       field = fold_path_field(m, family, cases, ncases, field, eval_core(m, env, t));
     acc = apply_value(m, acc, field);
+    /* Cell monad fields are a telescope, even without path constructors,
+       so the next field type sees this field. */
+    env = hit ? env_push(m, env, x->args[fam->param_count + i]) : env;
+    if (hit && env == NULL) {
+      m->depth--;
+      return NULL;
+    }
   }
   m->depth--;
   return acc;

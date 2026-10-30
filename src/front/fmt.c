@@ -286,6 +286,17 @@ static void put_shares(FmtText *out, const FormItem *it) {
 
 /* `  state s : T (init n)`, `  op o (x : A) := t`, `  invariant t` or
    `  allocate s by escrow (A ↦ n, ..)`. */
+/* One op step before the last: `x ← read P`, `x ← stock P` or a write. */
+static void put_step(FmtText *out, const OpStep *s) {
+  if (s->name == NULL) {
+    put_term(out, s->write, LEVEL_BINDER);
+    return;
+  }
+  put_str(out, s->name);
+  put_str(out, s->stock ? " ← stock " : " ← read ");
+  put_str(out, s->part.text);
+}
+
 static void put_item(FmtText *out, const FormItem *it) {
   put_str(out, "\n  ");
   switch (it->kind) {
@@ -308,6 +319,10 @@ static void put_item(FmtText *out, const FormItem *it) {
         put_group(out, it->params[i].name, it->params[i].type);
       }
       put_str(out, " := ");
+      for (size_t i = 0; i < it->step_count; i++) {
+        put_step(out, &it->steps[i]);
+        put_str(out, "; ");
+      }
       put_term(out, it->body, LEVEL_BINDER);
       break;
     case ITEM_INVARIANT:

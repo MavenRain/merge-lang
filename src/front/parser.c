@@ -207,6 +207,8 @@ static int starts_atom(TokKind kind) {
     case TOK_RBRACK:
     case TOK_COMMA:
     case TOK_MAPSTO:
+    case TOK_LARROW:
+    case TOK_SEMI:
     case TOK_BAR:
     case TOK_KW_REPLICAS:
     case TOK_KW_ATOMS:
@@ -464,6 +466,8 @@ static const Term *parse_atom(Parser *p) {
     case TOK_RBRACK:
     case TOK_COMMA:
     case TOK_MAPSTO:
+    case TOK_LARROW:
+    case TOK_SEMI:
       break;
   }
   fail_at(p, tok, "a term");
@@ -889,14 +893,49 @@ static int parse_state(Parser *p, FormItem *it) {
   return expect(p, TOK_RPAREN, "')'");
 }
 
-/* `op NAME (x : A) .. := body`: the body is one part operation
-   (Q35 (a)). */
+/* One op step: `x ← read P`, `x ← stock P` or a write term. `read` and
+   `stock` are names, not words. */
+static int parse_step(Parser *p, OpStep *s) {
+  s->line = cur(p)->line;
+  s->col = cur(p)->col;
+  if (!at(p, TOK_IDENT) || peek_at(p, 1)->kind != TOK_LARROW) {
+    s->write = parse_term(p);
+    return s->write != NULL;
+  }
+  s->name = take_name(p, "a name");
+  bump(p);
+  const Token *word = cur(p);
+  const char *text = take_name(p, "'read' or 'stock'");
+  if (text == NULL) return 0;
+  if (strcmp(text, "read") != 0 && strcmp(text, "stock") != 0) return fail_at(p, word, "'read' or 'stock'");
+  s->stock = strcmp(text, "stock") == 0;
+  return take_form_name(p, &s->part, "a state name");
+}
+
+/* `op NAME (x : A) .. := STEP; ..; WRITE`: each step is a read or one part
+   operation, and the last step is a write (Q35 (a), Q41 (a)). */
 static int parse_op(Parser *p, FormItem *it) {
   if (!take_form_name(p, &it->name, "an operation name") || !parse_fields(p, &it->params, &it->param_count)
       || !expect(p, TOK_DEFINE, "a binder group or ':='"))
     return 0;
-  it->body = parse_term(p);
-  return it->body != NULL;
+  OpStep *steps = NULL;
+  size_t count = 0;
+  size_t cap = 0;
+  OpStep last;
+  int more = 0;
+  do {
+    memset(&last, 0, sizeof last);
+    if (!parse_step(p, &last)) return 0;
+    more = eat(p, TOK_SEMI);
+    steps = more ? grow(p, steps, count, &cap, sizeof *steps) : steps;
+    if (more && steps == NULL) return 0;
+    if (more) steps[count++] = last;
+  } while (more);
+  if (last.write == NULL) return fail_at(p, cur(p), "';' and a write step");
+  it->steps = steps;
+  it->step_count = count;
+  it->body = last.write;
+  return 1;
 }
 
 static int parse_invariant(Parser *p, FormItem *it) {
@@ -1013,6 +1052,8 @@ static int parse_decl_body(Parser *p, Decl *d) {
     case TOK_RBRACK:
     case TOK_COMMA:
     case TOK_MAPSTO:
+    case TOK_LARROW:
+    case TOK_SEMI:
       break;
   }
   return fail_at(p, cur(p), "a signature, 'rec', 'postulate', 'data', 'codata', 'replicas', 'atoms' or 'replicated'");

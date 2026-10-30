@@ -10,7 +10,7 @@ resource allocation rule. The host is TinyCC. The planned targets are a
 Wasm merge engine, a deterministic replica simulator (`langc sim`) and a
 JSON coordination report.
 
-## Status (S3x)
+## Status (S3b)
 
 This repository is the tcc-wasm kit seed of lang-template, the design, the
 plan, slice S1 (the port of the evolve-lang 1f87a5a surface and cubical
@@ -27,9 +27,11 @@ FMSet S → S` as program data), slice S3a (the parse and `fmt` of the
 forms `replicas`, `atoms`, `replicated`, `state`, `op`, `invariant` and
 `allocate`), slice S3e (`langc check` elaborates the forms to guest
 terms, with the codes `REFUSE_NO_MERGE`, `REFUSE_OP_INFINITE_ARG`,
-`REFUSE_RAW_WRITE` and `REFUSE_ALLOC_SUM`) and slice S3x (the gate
-runs `langc check` on the four examples `examples/*.merge`;
-`docs/STATUS.md`). There is no merge
+`REFUSE_RAW_WRITE` and `REFUSE_ALLOC_SUM`), slice S3x (the gate
+runs `langc check` on the four examples `examples/*.merge`) and slice
+S3b (a cell monad field `E → T A` with `E` closed data, the library
+`Ops A`, an `op` body as a script of part reads and part operations,
+and `PLe` with `PLeTrans` for each part; `docs/STATUS.md`). There is no merge
 engine, no replica simulator and no coordination report yet.
 `make check` passes. `docs/PLAN.md` section 9 gives the slices.
 

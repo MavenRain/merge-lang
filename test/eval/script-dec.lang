@@ -1,0 +1,27 @@
+-- S3b U5: a partial step (dec) before a later step (add). The add step
+-- runs only when the dec step gives some, so the tag shows that it ran.
+replicas A B
+
+atoms Tag := urgent ∣ home
+
+atoms Amount := 1 ∣ 2
+
+replicated Till
+  state stock : Counter (init 3)
+  state tags : GSet Tag
+  op sell (k : Amount) := dec stock k; add tags urgent
+
+run : Option Till → Till
+run o = elim (λ (p : Option Till) → Till) TillBot (λ (s : Till) → s) o
+
+isNone : Option Till → Bool
+isNone o = elim (λ (p : Option Till) → Bool) true (λ (s : Till) → false) o
+
+soldTagged : ℕ
+soldTagged = gsetCount 2 (payload (run (TillSell A (pack 1 refl) TillBot)))
+
+soldStock : ℤ
+soldStock = counterStock 2 3 (witness (run (TillSell A (pack 1 refl) TillBot)))
+
+oversold : Bool
+oversold = isNone (TillSell A (pack 1 refl) (run (TillSell B (pack 1 refl) TillBot)))

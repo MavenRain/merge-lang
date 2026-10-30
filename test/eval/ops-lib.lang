@@ -1,0 +1,54 @@
+-- The library Ops A (S3b U2, Q41 (a)): a fold over a script. opsCount counts
+-- the reads and the writes. opsSum adds the part indices, the values and the
+-- amounts. A read gets readAt of its fields and a stock read gets pos of its
+-- part index, so a later step can use the answer.
+readVal : (n : ℕ) → Read n → ℕ
+readVal n v = fold 0 (λ (x : Fin n) → natAdd (witness x) 1) (λ (c : (s : GSet n) × Path Bool (natLe 2 (gsetCount n s)) true) → 100) v
+
+opsCount : Ops ℕ → ℕ
+opsCount s = fold (λ (a : ℕ) → 0) (λ (n : ℕ) (p : ℕ) (k : Read n → ℕ) → natAdd (k (readEmpty n)) 1) (λ (p : ℕ) (k : ℤ → ℕ) → natAdd (k (pos 0)) 1) (λ (p : ℕ) (n : ℕ) (x : Fin n) (k : ℕ) → natAdd k 1) (λ (p : ℕ) (n : ℕ) (x : Fin n) (k : ℕ) → natAdd k 1) (λ (p : ℕ) (a : ℕ) (k : ℕ) → natAdd k 1) (λ (p : ℕ) (a : ℕ) (k : ℕ) → natAdd k 1) (λ (p : ℕ) (r : ℕ) (j : Fin r) (a : ℕ) (k : ℕ) → natAdd k 1) s
+
+opsSum : Ops ℕ → ℕ
+opsSum s = fold (λ (a : ℕ) → a) (λ (n : ℕ) (p : ℕ) (k : Read n → ℕ) → k (readAt n p)) (λ (p : ℕ) (k : ℤ → ℕ) → k (pos p)) (λ (p : ℕ) (n : ℕ) (x : Fin n) (k : ℕ) → natAdd (natAdd p (witness x)) k) (λ (p : ℕ) (n : ℕ) (x : Fin n) (k : ℕ) → natAdd (natAdd p (witness x)) k) (λ (p : ℕ) (a : ℕ) (k : ℕ) → natAdd (natAdd p a) k) (λ (p : ℕ) (a : ℕ) (k : ℕ) → natAdd (natAdd p a) k) (λ (p : ℕ) (r : ℕ) (j : Fin r) (a : ℕ) (k : ℕ) → natAdd (natAdd p (natAdd (witness j) a)) k) s
+
+tagSell : Ops ℕ
+tagSell = opAdd ℕ 0 3 (pack 2 refl) (opDec ℕ 1 4 (opPure ℕ 0))
+
+readWrite : Ops ℕ
+readWrite = opRead ℕ 3 1 (λ (v : Read 3) → opWrite ℕ 0 3 (pack 1 refl) (opPure ℕ (natAdd (readVal 3 v) 10)))
+
+readMiss : Ops ℕ
+readMiss = opRead ℕ 3 5 (λ (v : Read 3) → opPure ℕ (natAdd (readVal 3 v) 10))
+
+stockRestock : Ops ℕ
+stockRestock = opStock ℕ 2 (λ (z : ℤ) → opRestock ℕ 2 (flagIf (intLe (pos 2) z) 5 9) (opPure ℕ 0))
+
+transferRestock : Ops ℕ
+transferRestock = opTransfer ℕ 1 2 (pack 1 refl) 3 (opRestock ℕ 1 2 (opPure ℕ 4))
+
+allOps : Ops ℕ
+allOps = opRead ℕ 2 0 (λ (v : Read 2) → opStock ℕ 1 (λ (z : ℤ) → opAdd ℕ 2 2 (pack 1 refl) (opWrite ℕ 3 2 (pack 0 refl) (opDec ℕ 4 1 (opRestock ℕ 5 1 (opTransfer ℕ 6 2 (pack 1 refl) 1 (opPure ℕ 0)))))))
+
+countAll : ℕ
+countAll = opsCount allOps
+
+countReadWrite : ℕ
+countReadWrite = opsCount readWrite
+
+sumAll : ℕ
+sumAll = opsSum allOps
+
+sumTagSell : ℕ
+sumTagSell = opsSum tagSell
+
+sumReadWrite : ℕ
+sumReadWrite = opsSum readWrite
+
+sumReadMiss : ℕ
+sumReadMiss = opsSum readMiss
+
+sumStock : ℕ
+sumStock = opsSum stockRestock
+
+sumTransfer : ℕ
+sumTransfer = opsSum transferRestock

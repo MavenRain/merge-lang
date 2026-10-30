@@ -145,6 +145,7 @@ typedef struct {
   const char *name;
   const Core *type; /* in the context of the family parameters (and the earlier fields of an indexed family) */
   int recursive;    /* the field type is the family itself */
+  int arrow;        /* a cell monad field E → the family, with closed data E (Q39, Q40) */
 } FieldInfo;
 
 typedef struct {

@@ -1,0 +1,5 @@
+replicas A B
+
+replicated Shop
+  state left : Counter
+  op count := n ← read left; dec left 1

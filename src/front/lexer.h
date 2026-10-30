@@ -33,6 +33,8 @@ typedef enum {
   TOK_COMMA,    /* , (between the cells of a system) */
   TOK_MAPSTO,   /* ↦ */
   TOK_BAR,      /* ∣ (between the members of `atoms`) */
+  TOK_LARROW,   /* ← or the alias <- (a read step of an op) */
+  TOK_SEMI,     /* ; (between the steps of an op) */
   TOK_KW_REPLICAS, /* the form words (Q32 (a)) */
   TOK_KW_ATOMS,
   TOK_KW_REPLICATED,

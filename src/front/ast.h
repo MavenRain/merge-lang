@@ -69,7 +69,19 @@ typedef enum {
   ITEM_ALLOCATE   /* allocate name by escrow (shares), each share NAME ↦ nat */
 } ItemKind;
 
-/* One item of a `replicated` form. */
+/* One step of an op script (Q41 (a)): `x ← read P` or `x ← stock P`
+   (NAME is the read variable) or a write term (NAME is NULL). */
+typedef struct {
+  const char *name;
+  int stock;
+  FormName part;
+  const Term *write;
+  int line;
+  int col;
+} OpStep;
+
+/* One item of a `replicated` form. STEPS are the op steps before the last;
+   BODY is the last step, a write. */
 typedef struct {
   ItemKind kind;
   FormName name;
@@ -79,6 +91,8 @@ typedef struct {
   const Field *params;
   size_t param_count;
   const Term *body;
+  const OpStep *steps;
+  size_t step_count;
   const FormName *shares;
   size_t share_count;
   int line;

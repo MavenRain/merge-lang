@@ -534,7 +534,7 @@ on the new checks, docs, close (stage, commit message, next prompt).
 | S3a | parse and `fmt` of the forms `replicas`, `atoms`, `replicated`, `state`, `op`, `invariant`, `allocate` (Q32 (a)): the lexer token `∣` and the form keywords; the form AST; the parser blocks (the evolve-lang `protocol` layout: a `replicated NAME` body has one item a line at one column); `fmt` of the 7 forms; a domain with numerals and names is a parse refusal (Q34 (a)); `check` of a form refuses with a kit code until S3e; `examples/tags.merge`, `owner.merge`, `inventory.merge`, `inventory-escrow.merge` parse and fmt (a gate loop for `examples/*.merge`, fmt only) | `fmt` round trip on the forms; one parse refusal per bad form shape; the four examples fmt canonical; mutants on the parse refusals and the fmt printers DONE 2026-10-28: `make check` EXIT 0: examples 13 checked, 0 failed; parse refusals 22 (11 form refusals, the text pinned); check refusals 60 (`test/check/form.lang`, `REFUSE_FORM`); evals 152; ir 13 lowered; wasm 16 modules valid; differential 1230 cases, 0 mismatches; fmt 127 canonical, 12 non-canonical pairs (6 `test/fmt/form-*` pairs); merge examples 4 canonical (the new gate loop); json 27 fixtures, diagnostics 39 codes (25 with a fixture, 14 with no fixture; the new code `REFUSE_FORM`); gate 0 failures; review, domain and diagnostic edit regressions passed; cubical 46 checks, 38 round trips. The 11 mutants KILLED by a gate test: the numeric member branch of `atoms` takes a name (`atoms-mix-nat`); the first-name branch messages swapped (`atoms-mix-name`); the `replicated` item loop takes a column >= the item column (`replicated-column`); the `at_init` test of `state` always true (`state-init-name`, 2 form pairs); the `↦` of `allocate` optional (`share-no-mapsto`); `fmt` drops the `init` print (the form pairs); the share separator `, ` as a space (`form-replicated`, `inventory-escrow.merge`); the `∣` separator as a space (`form-atoms-*`); the `REFUSE_FORM` test drops `atoms`, `replicated` or `replicas` (3 mutants: the form pair branch, `form.lang`) |
 | S3e | the 7 forms elaborated to guest terms (Q9) on the S2 domain parts and the S2d `mergeAll`, by the evolve-lang route (Q33 (a): synthetic `DECL_DEF` nodes, a type error points at the form word); a numeric atom domain also gives `NAMEValue : NAME → ℕ` (Q34 (a)); an `op` body is one part operation, no `requires` (Q35 (a)); `REFUSE_NO_MERGE`, `REFUSE_OP_INFINITE_ARG`, `REFUSE_RAW_WRITE`, `REFUSE_ALLOC_SUM` with their docs/DIAGNOSTICS.md rows | one fixture per code; mutants on each J1 and J2 test DONE 2026-10-29: `make check` EXIT 0: examples 13 checked, 0 failed; parse refusals 22; check refusals 70 (10 new `test/check` fixtures, the text pinned); evals 173 (`test/eval/replicas.lang`, `shop.lang`, `escrow.lang`, 7 rows each); ir 13 lowered; wasm 16 modules valid; differential 1230 cases, 0 mismatches; fmt 143 canonical, 12 non-canonical pairs; merge examples 4 canonical; json 30 fixtures, diagnostics 42 codes (28 with a fixture, 14 with no fixture; `REFUSE_FORM` and its fixture removed, the 4 new codes each with a fixture `test/json/CODE.lang`); gate 0 failures; review, domain and diagnostic edit regressions passed; cubical 46 checks, 38 round trips. The four examples pass `langc check` (`tags.merge` and `owner.merge` name an atoms domain, Q36 (a)); the gate loop is still fmt only (S3x). 14/14 mutants KILLED (4 after new fixtures): the J1 `REFUSE_NO_MERGE` head test (`REFUSE_NO_MERGE.lang`); the `REFUSE_OP_INFINITE_ARG` call (json, the `form-replicated` pair), its `Fin` numeral test (new `op-fin-open`) and its `Replica` test (eval escrow); the parser Field span (the json column); the `REFUSE_ALLOC_SUM` `over` test (`alloc-sum`), the sum under the init (new `alloc-under`) and the share count (new `alloc-missing`); the J2 `REFUSE_RAW_WRITE` word test and part kind test (`raw-write`, eval shop) and arity test (new `op-arity`); `cg_value` names and `natEq` (eval replicas); `op_amount` (eval shop) |
 | S3x | the four examples parse and type (`check` GREEN; the `examples/*.merge` gate loop runs `check` too); the docs; the S3 close | the four examples GREEN DONE 2026-10-29 (on the USER S3e commit 2b4edf4): `make check` EXIT 0: examples 13 checked, 0 failed; parse refusals 22; check refusals 70; evals 173; ir 13 lowered; wasm 16 modules valid; differential 1230 cases, 0 mismatches; fmt 143 canonical, 12 non-canonical pairs; merge examples 4 canonical, 4 checked (the line text is new: the loop runs `langc check` on each file and fails on an exit that is not 0, an output that is not `ok`, or a stderr line); json 30 fixtures, diagnostics 42 codes (28 with a fixture, 14 with no fixture); cubical 63 checks, 38 round trips. 4/4 example mutants KILLED by the loop only (each file stays canonical, so the `fmt` part passes): `write` on the GSet of `tags.merge` and `add` on the MVReg of `owner.merge` (`REFUSE_RAW_WRITE`), an `Escrow` part with an init in `inventory.merge` (`REFUSE_NO_MERGE`), the shares `(A ↦ 1, B ↦ 1)` in `inventory-escrow.merge` (`REFUSE_ALLOC_SUM`). No `check.c` path is reached by the examples only: the loop also kills `counterRestock` to `escrowRestock` and the `over` test `>` to `>=`, but `test/eval/shop.lang`, `escrow.lang` and `alloc-twice` kill them too. The swap of `n` and `r` in `mvregWrite` survives the gate: each MVReg test has 2 atoms and 2 replicas |
-| S3b | kernel: the CM test admits a field `E → T A` with `E` closed data (the mandate-lang 4.6 R1 rule, its domain.lang `IO`); library `Ops A`; an `op` body can be an `Ops` script of part reads and part operations, one step at one replica (Q15 (b), Q24 (a)); L4 for scripts by composition | a fixture for the new field rule and a refused fixture where `E` mentions `A`; an eval test of a script that reads, then writes; mutants on the closed test of `E` and on the script step order |
+| S3b | kernel: the CM test admits a field `E → T A` with `E` closed data (the mandate-lang 4.6 R1 rule, its domain.lang `IO`); library `Ops A`; an `op` body can be an `Ops` script of part reads and part operations, one step at one replica (Q15 (b), Q24 (a)); L4 for scripts by composition | a fixture for the new field rule and a refused fixture where `E` mentions `A`; an eval test of a script that reads, then writes; mutants on the closed test of `E` and on the script step order. DONE 2026-10-29 (on the USER S3x commit a6d7a56; Q39 (a) to Q44 (a)): `make check` EXIT 0: examples 13 checked, 0 failed; parse refusals 22; check refusals 75 (5 new `test/check` fixtures: `cell-arrow-self`, `cell-arrow-two`, `read-counter`, `stock-mvreg`, `le-order`; the `REFUSE_CELL` text adds "or a function from closed data to it"); evals 200 (`test/eval/ops-lib.lang`, `ops.lang`, `owner3.lang`, `script.lang`, `script-dec.lang`, `le.lang`); ir 13 lowered; wasm 16 modules valid; differential 1230 cases, 0 mismatches; fmt 155 canonical, 13 non-canonical pairs (`form-op-steps`); merge examples 4 canonical, 4 checked; json 30 fixtures, diagnostics 42 codes (28 with a fixture, 14 with no fixture); gate 0 failures; review, domain and diagnostic edit regressions passed; cubical 63 checks, 38 round trips. U1 the arrow field rule and the catamorphism `fold` at the field (`cell-field.lang` refuses `E = A`); U2 `Ops A` and the runner `NAMERun` (Q44 (a): `owner3.lang` closes the S3x `n` and `r` swap gap); U3 the script syntax `x ← read PART; ...`; U4 `PLe` and `PLeTrans` for each part, the L4 of three scripts of two steps in `le.lang` (Q43 (b), a `NAMEOPL4` term for each script op, is not done). 10/10 mutants KILLED by a test: M1 the closed test of `E` (`cell-field`); M2 `self_uses == 1u` to `>= 1u` (`cell-arrow-two`); M3b `fold_arrow_field` returns `k` (eval `ops`); M4 the telescope; M5 `family_class`; M6 the script step order (eval `script claimBot`); M7 the read part index (`stock-mvreg`, eval `shop tagged`); M8b the `run_cast` false branch (`raw-write`); M9a the total `kc` (eval `script bothBen`); M9b the partial `kc` (eval `script-dec soldTagged`) |
 | S4 | the checker: J4 to J6, the bounded search core in C (shared with S5), `REFUSE_NEEDS_COORDINATION`, `REFUSE_RULE_MISMATCH`, `REFUSE_READ_WINNER`, `W_BOUNDED`; L5, L5r, L6a, L6b, L7, L8; the `Replica S` cofamily with `Event = local Op ∣ recv S` (Q16 (b), Q25 (a)); `laws` and `pairs` counts in `check --json` | one test per code with its JSON shape; `inventory.merge` refused, `inventory-escrow.merge` GREEN with L7 proved; L5r proved or bounded, never proved by a bounded run; mutants on each class test and on L7 |
 | S5 | `langc sim`: schedules, order, reduction, transcript; golden `test/sim/*.out` (the demo); determinism gate | the demo transcript equals its golden file; two runs byte-identical; mutants on the order and on the minimality test |
 | S6 | JSON report: port of `json.c`, `NAME.report.json`, the 5.3 schema shared with `check --json` | golden reports; mutants on the class map |
@@ -794,3 +794,54 @@ RULED (letter) is a USER ruling.
   word. (b) names with a `.` (`Shop.sell`) that a program cannot write,
   as the cofamily ctor names. The reason for (a): S4 and a program (a
   test, an eval) use them by name.
+- Q39 "closed" for the domain `E` of a cell monad field `E → T A` (S3b
+  Unit 0, 2026-10-29). RULED (a). (a) the merge-lang
+  `cell_closed(E, earlier)`: `E` names no parameter and no family, but
+  can name an earlier field (`opRead (n : ℕ) (k : Read n → Ops A)`), as
+  the closed data field rule. (b) the mandate-lang test
+  `cell_closed(E, 0)`: no free variable at all; then `Read n` needs a
+  numeral `n`, so a library `Ops` cannot read an `MVReg` of any size.
+  The reason for (a): it is the merge-lang closed data rule, and the
+  `Read n` response needs it.
+- Q40 the fold at an arrow field (S3b Unit 0, 2026-10-29). RULED (a).
+  (a) the catamorphism: the method gets `E → R` (`fold_family` gives
+  `λ e → fold (k e)`, the method type is `E → res`); kernel work in
+  eval, check and the IR lowering of `elim`. (b) the mandate-lang rule:
+  the field as it is, with no induction hypothesis (no new code); a
+  runner takes fuel, the step count. The reason for (a): a script
+  runner is one `elim` and has no fuel argument.
+- Q41 `Ops A` and the `op` route (S3b Unit 0, 2026-10-29). RULED (a).
+  (a) library `Ops (A : Type 0)`: `opPure (opOf : A)`, the reads
+  `opRead (readN : ℕ) (readPart : ℕ) (readNext : Read readN → Ops A)`
+  and `opStock (stockPart : ℕ) (stockNext : ℤ → Ops A)`, and the writes
+  `opAdd`, `opWrite`, `opDec`, `opRestock`, `opTransfer` (part index,
+  arguments, `next : Ops A`). The elaboration gives the script value
+  `NAMEOPScript` and one runner per form `NAMERun` that answers a read
+  from the current state and applies a write (a `natEq` chain on the
+  part index); with Q40 (a) the runner is one `elim` with no fuel. The
+  op definition applies `NAMERun` to the replica, the script and the
+  state. (b) a direct composition: a script elaborates to state passing,
+  with no `Ops` value. (c) one family per form `NAMEOps` and `NAMERun`;
+  no library `Ops`. The reason for (a): the script is a first class
+  value, as the Q15 (b) text says.
+- Q42 the script syntax (S3b Unit 0, 2026-10-29). RULED (a). (a) one
+  line, steps joined by `;`, a read binds with `←` (and the ASCII
+  `<-`): `op sell (t : Tag) := x ← read owner; add tags (readOr t x)`.
+  The read words are `read PART` (a `GSet` or `MVReg` part, `Read n`)
+  and `stock PART` (a `Counter` or an `Escrow` part, `ℤ`). A write
+  argument is a guest term in the scope of the parameters and the
+  earlier read variables (check_def types it). fmt prints `; ` between
+  steps. (b) a step per line under the `op` line (layout); a bigger
+  parser change. The reason for (a): a small lexer and parser change.
+- Q43 L4 by composition (S3b Unit 0, 2026-10-29). RULED (a). (a)
+  library: `le` per part as the Path `merge s t ≡ t`, a transitivity
+  lemma per part (from associativity and the part L4), and a two step
+  guest proof (a fixture: the L4 of one sample script of two writes)
+  that type-checks; the claim for all scripts is induction on the step
+  count, in the design text. (b) the elaboration also gives `NAMEOPL4`
+  for each script op, a proof term checked by check_def. The reason for
+  (a): (b) is a proof producing elaboration, more than one slice unit.
+- Q44 the S3x known gap, the `n` and `r` swap in `mvregWrite` (S3b Unit
+  0, 2026-10-29). RULED (a). (a) a side fixture in U2 with 3 atoms or 3
+  replicas, and a STATUS line. (b) not in S3b. The reason for (a): one
+  fixture kills a live mutant.

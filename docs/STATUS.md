@@ -1,16 +1,96 @@
 # merge-lang status
 
-The build implements slices S1, S1b, S2, S2b, S2c, S2d, S3a, S3e and S3x of
-`docs/PLAN.md` section 9: the port of the evolve-lang 1f87a5a surface and
-cubical kernel (S1), induction in the kernel (S1b), the merge-lang domain
-with the laws L1 to L4 as guest terms (S2), ℤ with the `stock` read
-(S2b), path constructors of dimension 2 with the `fold` over a higher
-inductive type (S2c), `isSet` for each part with `mergeAll` on the
-program side (S2d), the parse and `fmt` of the merge forms (S3a), the
-elaboration of the forms to guest terms (S3e), and the check of the four
-examples in the gate (S3x). It does not complete
+The build implements slices S1, S1b, S2, S2b, S2c, S2d, S3a, S3e, S3x and
+S3b of `docs/PLAN.md` section 9: the port of the evolve-lang 1f87a5a
+surface and cubical kernel (S1), induction in the kernel (S1b), the
+merge-lang domain with the laws L1 to L4 as guest terms (S2), ℤ with the
+`stock` read (S2b), path constructors of dimension 2 with the `fold` over
+a higher inductive type (S2c), `isSet` for each part with `mergeAll` on
+the program side (S2d), the parse and `fmt` of the merge forms (S3a), the
+elaboration of the forms to guest terms (S3e), the check of the four
+examples in the gate (S3x), and an `op` body as an `Ops` script of part
+reads and part operations (S3b). It does not complete
 M0. There is no merge engine, no replica simulator and no coordination
 report yet.
+
+## S3b (2026-10-29)
+
+- Scope (`docs/PLAN.md` section 9, the S3b row; Q39 (a) to Q44 (a)):
+  the kernel CM test admits a field `E → T A` with `E` closed data, the
+  library `Ops A`, an `op` body as an `Ops` script of part reads and
+  part operations, and L4 for scripts by composition. The base is the
+  USER S3x commit a6d7a56.
+- U1 (Q39 (a), Q40 (a)): the CM test admits an arrow field `E → T A`
+  when `E` is closed data and the field has one use of the family. `E`
+  names no parameter and no family, but it can name an earlier field
+  (`opRead (readN : ℕ) (readPart : ℕ) (readNext : Read readN → Ops A)`).
+  The `fold` at an arrow field is the catamorphism: the method gets `E
+  → R`, in eval, check and the IR lowering of `elim`. The `REFUSE_CELL`
+  text adds "or a function from closed data to it". Refused fixtures in
+  `test/check`: `cell-field.lang` (`E` is the parameter `A`),
+  `cell-arrow-self.lang` (`W A → W A`) and `cell-arrow-two.lang` (two
+  uses of the family in one field).
+- U2 (Q41 (a), Q44 (a)): `domain/domain.lang` has `Ops (A : Type 0)`
+  with `opPure`, the reads `opRead` and `opStock`, and the writes
+  `opAdd`, `opWrite`, `opDec`, `opRestock` and `opTransfer` (part index,
+  arguments, next script). A form with a script op gets the script
+  value `NAMEOPScript` and one runner `NAMERun`. The runner answers a
+  read from the current state and applies a write; it is one `elim`
+  with no fuel. Tests: `test/eval/ops-lib.lang` and `test/eval/ops.lang`.
+  `test/eval/owner3.lang` has 3 atoms and 2 replicas, so the swap of `n`
+  and `r` in `mvregWrite` is now a TYPE_MISMATCH (the S3x gap is
+  closed).
+- U3 (Q42 (a)): a script is one line of steps joined by `;`. A read
+  binds with `←` (or `<-`): `x ← read PART` (a `GSet` or `MVReg` part,
+  `Read n`) or `x ← stock PART` (a `Counter` or `Escrow` part, `ℤ`). A
+  write argument can use the parameters and the earlier read names.
+  `fmt` prints `; ` between steps (`test/fmt/form-op-steps.lang`). Tests:
+  `test/eval/script.lang` (a read, then a write), `script-dec.lang` (a
+  partial `dec` step: a `none` step stops the script),
+  `test/check/read-counter.lang` and `stock-mvreg.lang` (a read word on
+  the wrong part kind: `REFUSE_RAW_WRITE`).
+- U4 (Q43 (a)): for each part `P` (gset, counter, escrow, mvreg),
+  `domain/domain.lang` has `PLe s t = Path P (merge s t) t` and
+  `PLeTrans : PLe s t → PLe t u → PLe s u` (from associativity and the
+  part L4). `test/eval/le.lang` proves the L4 of three scripts of two
+  steps; `test/check/le-order.lang` gives the two steps in the other
+  order and gets TYPE_MISMATCH. The L4 for all scripts is an induction
+  on the step count (the S3b design text): each step gives `PLe s(i-1)
+  si` (`PIdem` for a read or for a step on a different part, the op L4
+  for a write), and `PLeTrans` joins them.
+- U5 mutants: 10/10 KILLED by a test. M1 the closed test of `E`
+  (`cell-field.lang`); M2 `self_uses == 1u` to `>= 1u`
+  (`cell-arrow-two.lang`); M3b `fold_arrow_field` returns `k` (16 FAIL
+  lines, first `test/eval/ops stock`); M4 the telescope (388 FAIL); M5
+  `family_class` (388 FAIL); M6 the script step order (`script
+  claimBot`); M7 the read part index `j - 1u` to `j % u->k`
+  (`stock-mvreg.lang`, `shop tagged`); M8b the `run_cast` false branch
+  to `yes` (35 FAIL lines, first `raw-write.lang`); M9a the total `kc`
+  to `some` (`script bothBen`); M9b the partial `kc` to `some`
+  (`script-dec soldTagged`). The first forms of M3 and M8 were KILLED
+  by `check-clang` only (an unused name), so M3b and M8b replace them.
+- Known edges:
+  - Q43 (b) is not done: the elaboration does not give a `NAMEOPL4`
+    term for each script op.
+  - `langc check domain/domain.lang` gives rc 1 (`REFUSE_NAME` on
+    `Verdict`). The gate only does the `fmt` check of the domain. This
+    is older than S3b.
+- Review fixes (2026-10-30): read binders are fresh against earlier
+  generated read binders, preserving distinct names and lexical shadowing.
+  Runner and script helpers append primes when needed to preserve public
+  operation names (`run`, `run'`, `tagScript`) and scoped parameters.
+  The default names remain `NAMERun` and `NAMEOPScript`. A fold maps path
+  fields in every cell monad, including one with no path constructors.
+  Six C regressions in `test/cubical.c` cover these cases: 69 checks and
+  38 round trips pass.
+- `make check` EXIT 0: examples 13 checked, 0 failed; parse refusals 22;
+  check refusals 75; evals 200; ir 13 lowered; wasm 16 modules valid;
+  differential 1230 cases, 0 mismatches; fmt 155 canonical, 13
+  non-canonical pairs; merge examples 4 canonical, 4 checked; json 30
+  fixtures, diagnostics 42 codes (28 with a fixture, 14 with no
+  fixture); review, domain and diagnostic edit regressions passed;
+  cubical 63 checks, 38 round trips. The S3x counts were check 70,
+  evals 173, fmt 143 and 12 pairs.
 
 ## S3x (2026-10-29)
 
@@ -31,7 +111,9 @@ report yet.
   allocate `over` mutants.
 - Gap: the swap of `n` (the atoms count) and `r` (the replica count) in
   the `mvregWrite` term survives the gate. Each MVReg test and example
-  has 2 atoms and 2 replicas.
+  has 2 atoms and 2 replicas. S3b U2 (Q44 (a)) closes the gap:
+  `test/eval/owner3.lang` has 3 atoms and 2 replicas, so the swap is a
+  TYPE_MISMATCH there.
 - `make check` EXIT 0: examples 13 checked, 0 failed; parse refusals 22;
   check refusals 70; evals 173; ir 13 lowered; wasm 16 modules valid;
   differential 1230 cases, 0 mismatches; fmt 143 canonical, 12
@@ -437,13 +519,22 @@ checks and 38 round trips; the other S2d counts above are unchanged.
   Q38 (a)) with the codes `REFUSE_NO_MERGE`, `REFUSE_OP_INFINITE_ARG`,
   `REFUSE_RAW_WRITE` and `REFUSE_ALLOC_SUM`; `counterNonneg` and
   `escrowNonneg` in the domain.
+- S3x: the gate runs `langc check` on the four examples
+  `examples/*.merge`.
+- S3b: the CM test admits a field `E → T A` with `E` closed data, with
+  the catamorphism `fold` at the field (Q39 (a), Q40 (a)); the library
+  `Ops A` and the form runner `NAMERun` (Q41 (a)); an `op` body as a
+  script of reads and part operations joined by `;` (Q42 (a)); `PLe`
+  and `PLeTrans` for each part (Q43 (a)).
 
 ## Remaining M0 work
 
-1. S3b: the kernel CM test admits a field `E → T A` with `E` closed
-   data, the library `Ops A`, and an `op` body as an `Ops` script of
-   part reads and part operations (`docs/PLAN.md` section 9, the S3b
-   row; Q15 (b), Q24 (a)). It needs the USER S3x commit.
+1. S4: the checker: J4 to J6, the bounded search core in C (shared
+   with S5), `REFUSE_NEEDS_COORDINATION`, `REFUSE_RULE_MISMATCH`,
+   `REFUSE_READ_WINNER`, `W_BOUNDED`; L5, L5r, L6a, L6b, L7, L8; the
+   `Replica S` cofamily with `Event = local Op ∣ recv S` (Q16 (b), Q25
+   (a)); `laws` and `pairs` counts in `check --json` (`docs/PLAN.md`
+   section 9, the S4 row). It needs the USER S3b commit.
 2. The later slices of `docs/PLAN.md` section 9. Each needs the slice
    before it.
 
@@ -469,8 +560,10 @@ checks and 38 round trips; the other S2d counts above are unchanged.
 - `nonneg` compares in ℕ. The signed `stock` read gives ℤ (S2b).
 - ℤ has only `natDiff` and `intLe`: there is no addition, subtraction or
   negation on ℤ. The print rule applies only to the domain data `ℤ`.
-- An `op` body is one part operation, with no `requires` (Q35 (a)). An
+- An `op` body is one part operation or a script of reads and part
+  operations on one line (Q42 (a)), with no `requires` (Q35 (a)). An
   `invariant` body is `nonneg PART` only (Q37 (a)).
+- The elaboration gives no L4 term for a script op (Q43 (b)).
 - The 10 form words (`replicas`, `atoms`, `replicated`, `state`, `op`,
   `invariant`, `allocate`, `by`, `escrow`, `init`) are keywords: a
   program cannot use them as names.

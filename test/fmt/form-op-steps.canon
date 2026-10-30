@@ -1,0 +1,6 @@
+replicated Claims
+  state owner : MVReg
+  state tags : GSet
+  op claim := x ← read owner; add tags (pick x)
+  op both (u : User) := write owner u; x ← read owner; add tags (pick x)
+  op count := n ← stock left; dec left n
