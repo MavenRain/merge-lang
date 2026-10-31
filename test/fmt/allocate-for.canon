@@ -1,0 +1,11 @@
+-- An allocate line with a for clause: fmt puts one space before for and
+-- one after it.
+replicas A B
+
+atoms Amount := 1 ∣ 2
+
+replicated Shop
+  state stock : Counter (init 1)
+  op sell (k : Amount) := dec stock k
+  invariant nonneg stock
+  allocate stock by escrow (A ↦ 1, B ↦ 0) for nonneg stock

@@ -1,17 +1,131 @@
 # merge-lang status
 
-The build implements slices S1, S1b, S2, S2b, S2c, S2d, S3a, S3e, S3x and
-S3b of `docs/PLAN.md` section 9: the port of the evolve-lang 1f87a5a
+The build implements slices S1, S1b, S2, S2b, S2c, S2d, S3a, S3e, S3x,
+S3b and S4 of `docs/PLAN.md` section 9: the port of the evolve-lang 1f87a5a
 surface and cubical kernel (S1), induction in the kernel (S1b), the
 merge-lang domain with the laws L1 to L4 as guest terms (S2), ℤ with the
 `stock` read (S2b), path constructors of dimension 2 with the `fold` over
 a higher inductive type (S2c), `isSet` for each part with `mergeAll` on
 the program side (S2d), the parse and `fmt` of the merge forms (S3a), the
 elaboration of the forms to guest terms (S3e), the check of the four
-examples in the gate (S3x), and an `op` body as an `Ops` script of part
-reads and part operations (S3b). It does not complete
+examples in the gate (S3x), an `op` body as an `Ops` script of part
+reads and part operations (S3b), and the checker: the classes, the
+bounded search, the coordination codes and the laws L5 to L8 (S4). It
+does not complete
 M0. There is no merge engine, no replica simulator and no coordination
 report yet.
+
+## S4 (2026-10-31)
+
+- Scope (`docs/PLAN.md` section 9, the S4 row; Q45 (a), Q46 (b), Q47
+  (a), Q48 (a), Q49 (b), Q50 (a), Q51 (a), Q52 (a), Q53 (b), Q54 (c),
+  Q55 (a)): the `Replica` machine, the pair search, four new codes, and
+  the laws L5 to L7. The base is the USER S3b commit 263cf6d.
+- U1 (Q51 (a), Q45 (a)): `FMSet`, `IsSet`, `mergeAll` and the Hedberg
+  set proofs move from `test/eval/mergeall.lang` to `domain/domain.lang`
+  (`collBoolT`, `collNat`, `gsetIsSet`, `counterIsSet`, `escrowIsSet`,
+  `mvregIsSet`). Each form gets `NAMEL5 : FMSet NAME → NAME`, which is
+  `mergeAll NAME NAMEBot NAMEMerge`. `form_machine` adds `NAMEOp` (one
+  `NAMEOpWord` per op), `NAMEEvent` (`NAMELocal` with `.i : Replica` and
+  `.o : NAMEOp`, `NAMERecv` with `.s : NAME`), the codata `NAMEMachine
+  (S : Type 0)` with `NAMEMachineMk` (`NAMEEps`, `NAMEStep`), and
+  `NAMEReplicaOf : NAME → NAMEMachine NAME`. Tests:
+  `test/eval/machine.lang` (5 evals, the last is `ShopL5` on a two
+  element `FMSet`) and `test/check/machine-open.lang` (a written `Event
+  S`: `REFUSE_CELL`).
+- U2 (Q47 (a), Q48 (a)): `src/front/search.c` and `search.h`. The
+  function `search_pair` runs a depth first search in the 5.2 order with
+  the bounds 1, 2 and N and `SEARCH_CAP` 100000. A pair that L7, L6a or
+  L6b covers skips it. A pair that the search keeps gets the new code
+  `W_BOUNDED`: a warning record in `check --json`, one stderr line in
+  text mode, rc 0, stdout `ok`. Test: `test/json/W_BOUNDED.lang`
+  (`refill` on a plain Counter, K = 108).
+- U3 (Q49 (b)): the new code `REFUSE_NEEDS_COORDINATION` comes from
+  `form_violation` (J6): the message names the pair and the schedule,
+  and `found` is the merged state. An `allocate` line takes the clause
+  `for nonneg d`. It is optional and its default is `nonneg c`. The new
+  code `REFUSE_RULE_MISMATCH` is raised at `for` when `d` is not `c`.
+  The new code `REFUSE_READ_WINNER` comes from `op_reader`: an `MVReg`
+  read name used as a write argument. Fixtures:
+  `REFUSE_NEEDS_COORDINATION.lang`, `REFUSE_RULE_MISMATCH.lang` and
+  `REFUSE_READ_WINNER.lang` in `test/json`, `test/fmt/allocate-for.lang`
+  with its `.canon`, and `test/parse/allocate-for-no-body.lang`.
+  `inventory.merge` is now refused (`sell ∥ sell`): merge examples 4
+  canonical, 3 checked, 1 refused. The `Stock` form left
+  `test/eval/escrow.lang`.
+- L5r (Q46 (b), Q54 (c)): `NAMERecvN`, `NAMEL5rM` (an ℕ fold: base
+  `refl`, step `cong deliver ih`) and `NAMEL5r : Path NAME (NAMEEps NAME
+  (NAMERecvN (NAMEReplicaOf s) f n)) (mergeSeq NAME NAMEMerge s f n)`.
+  The domain has `fmOf`, `mergeSeq` and `mergeSeqAll`. The multiset step
+  is `mergeSeqAll` at an abstract `S`. It is not applied for each form.
+  Evidence: `firstA`, `firstB`, `orderAB`, `orderBA` and `deliveredAB`
+  in `test/eval/machine.lang`.
+- L6a (Q53 (b)): the domain has `orTrueR`, `gsetHasMergeL` and
+  `gsetHasMergeR`. The instance is the domain lemma at the `n` of the
+  part. A form has no `NAMEL6a` def.
+- L6b (Q55 (a)): the domain has `mvregWf`, `mvregBotWf`, `mvregMergeWf`,
+  `mvregWriteWf` and `mvregConflict n r i j x y s wf hij hxy : T (natLe
+  2 (mvregCount n r (mvregConc n r i j x y s)))`. The lemma holds at
+  each `s` with `mvregWf n r s`. The instance is the domain lemma at the
+  `n` and `r` of the part.
+- L7 (Q52 (a)): the domain has `EscrowOwn`, `escrowRightsMerge`,
+  `escrowRightsDec`, `escrowRightsTransfer`, `escrowRightsRestock`,
+  `escrowNonnegSum`, `escrowStep`, `escrowReconnect`, the bundles
+  `escrowDecOk`, `escrowTransferOk` and `escrowRestockOk`, `escrowL7`
+  and the type `EscrowL7Law r split`. Each allocated part gets
+  `NAMEPARTL7` (for example `ShopStockL7`). L7 scope: the proof covers
+  the 5.2 shape (the base, one prefix op, one op per branch, the merge),
+  not all schedules. The other merge order is the same lemma with `i`
+  and `j` swapped. Evidence: `examples/inventory-escrow.merge` checks
+  `ok`.
+- Builtin ℕ lemmas (Q53 (b); typing rules only, no reduction; 25 in all).
+  U4k: `natEqRefl`, `natEqSound`, `natLeRefl`, `natLeTrans`,
+  `natLeMaxL`, `natLeMaxR`, `natMaxLeast`, `natLeAddMono`, `natLeSucc`,
+  `natEqSuccNe`, `sumFinMono`. L6b: `natLeMulTwo`, `natLeAntisym`,
+  `natEqSym`, `natMulTwoSucc`, `sumFinLe`, `sumFinLeTwo`. L7:
+  `natAddAssoc`, `natAddComm`, `sumFinBumpLe`, `sumFinAdd`,
+  `sumFinSwap`, `natLeAddCancel`, `sumFinZero`, `finEqSound`.
+  `finEqSound` is a `Fin` fact, not an ℕ fact.
+- U5 (Q50 (a)): `check --json` prints the progress object in the 5.3
+  form, with `affine` removed. `laws` counts L1 to L4, L5 and L5r (6 for
+  each form), one L6a or L6b for each `GSet` or `MVReg` part, one L7 for
+  each allocated part, and one L8 for each pair no rule covers (a
+  proved, bounded or refuted mark). `pairs` counts classified pairs. New
+  fixture: `test/json/pair-law.lang` (laws 14 of 14 proved).
+- U6 mutants: 12/12 KILLED by a test, `check-clang` rc 0 on each. C1 and
+  C2 `pair_covered` (`test/json/pair-law.lang`; first run they survived,
+  because no fixture had that pair kind). C3 l7 term false
+  (`inventory-escrow.merge` `W_BOUNDED` `sell ∥ refill`). C4
+  `SEARCH_VIOLATION` test false (`inventory.merge` exit 0, json
+  `REFUSE_NEEDS_COORDINATION.lang`). N1 `natLeTrans` arity 4 (review,
+  cubical, the row `natLeTrans`, the domain `escrowRightsMerge`
+  `TYPE_MISMATCH`). L1 `escrowStep` `hs i` (domain `TYPE_MISMATCH`). L2
+  `form_l7` `r + 1u` (`ShopStockL7` `TYPE_MISMATCH`). R1 `d != c` test
+  (`test/json/REFUSE_RULE_MISMATCH.lang`). F1 fmt clause (fmt on
+  `REFUSE_RULE_MISMATCH.lang`, `allocate-for.canon`). O1 `op_reader`
+  (`test/json/REFUSE_READ_WINNER.lang`). V1 `form_violation` (merge loop
+  and json). U1 `law_refuted` (json progress line).
+- Review fixes: L6b skips the search only when both ops write MVReg
+  parts exclusively, so a concurrent Counter decrement is still checked.
+  The checker reserves both generated definitions per op and allocate
+  line. Builtin natural-number proofs print with their surface names and
+  keep those names free of binder capture. C regressions cover the mixed
+  write, table capacities and proof source round trips.
+- Known edges:
+  - L7 has no branch of two ops at one replica, and no empty branch.
+  - Each allocated part gets one `NAMEPARTL7`, not one `NAMEL7`.
+  - `finEqSound` grows the trust base by a `Fin` fact.
+  - Q54 (d), a kernel `conv` shortcut for two stuck folds, is open.
+- `make check` EXIT 0: examples 13 checked, 0 failed; parse refusals 23;
+  check refusals 76; evals 206; ir 13 lowered; wasm 16 modules valid;
+  differential 1230 cases, 0 mismatches; fmt 163 canonical, 14
+  non-canonical pairs; merge examples 4 canonical, 3 checked, 1 refused;
+  json 35 fixtures, diagnostics 46 codes (32 with a fixture, 14 with no
+  fixture); gate 0 failures; review, domain and diagnostic edit
+  regressions passed; cubical 124 checks, 41 round trips. The S3b counts
+  were parse 22, check 75, evals 200, fmt 155 and 13 pairs, merge
+  examples 4 checked, json 30, diagnostics 42 codes (28 with a fixture),
+  cubical 69 checks.
 
 ## S3b (2026-10-29)
 
@@ -526,15 +640,20 @@ checks and 38 round trips; the other S2d counts above are unchanged.
   `Ops A` and the form runner `NAMERun` (Q41 (a)); an `op` body as a
   script of reads and part operations joined by `;` (Q42 (a)); `PLe`
   and `PLeTrans` for each part (Q43 (a)).
+- S4: the classes J4 to J6 and the bounded search core in C
+  (`src/front/search.c`, Q48 (a)); the codes
+  `REFUSE_NEEDS_COORDINATION`, `REFUSE_RULE_MISMATCH`,
+  `REFUSE_READ_WINNER` and `W_BOUNDED`; the `Replica S` machine per
+  form (Q45 (a)); L5 and L5r per form, with `mergeSeqAll` in the domain
+  (Q46 (b), Q51 (a), Q54 (c)); L6a and L6b as domain lemmas (Q55 (a));
+  L7 per allocated part (Q52 (a)); 25 builtin ℕ lemmas (Q53 (b)); the
+  `laws` and `pairs` counts of `check --json`.
 
 ## Remaining M0 work
 
-1. S4: the checker: J4 to J6, the bounded search core in C (shared
-   with S5), `REFUSE_NEEDS_COORDINATION`, `REFUSE_RULE_MISMATCH`,
-   `REFUSE_READ_WINNER`, `W_BOUNDED`; L5, L5r, L6a, L6b, L7, L8; the
-   `Replica S` cofamily with `Event = local Op ∣ recv S` (Q16 (b), Q25
-   (a)); `laws` and `pairs` counts in `check --json` (`docs/PLAN.md`
-   section 9, the S4 row). It needs the USER S3b commit.
+1. S5: `langc sim`: schedules, order, reduction, transcript; golden
+   `test/sim/*.out` (the demo); the determinism gate (`docs/PLAN.md`
+   section 9, the S5 row). It needs the USER S4 commit.
 2. The later slices of `docs/PLAN.md` section 9. Each needs the slice
    before it.
 
@@ -567,6 +686,14 @@ checks and 38 round trips; the other S2d counts above are unchanged.
 - The 10 form words (`replicas`, `atoms`, `replicated`, `state`, `op`,
   `invariant`, `allocate`, `by`, `escrow`, `init`) are keywords: a
   program cannot use them as names.
+- The L7 proof covers the 5.2 shape (the base, one prefix op, one op per
+  branch, the merge), not all schedules.
+- `NAMEL5r` is stated at `NAMEReplicaOf s`, not at each machine `m`. The
+  multiset step is the domain lemma `mergeSeqAll`, not a term per form
+  (Q54 (c)).
+- J4 reads the classes statically: an L6b pair skips the search, even
+  when its ops also change a `nonneg` Counter.
+- A pair that the search keeps is bounded (`W_BOUNDED`), not proved.
 
 ## Internal boundaries
 

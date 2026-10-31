@@ -208,6 +208,17 @@ gsetAdd n x s = gsetMerge n s (λ (y : Fin n) → finEq n y x)
 gsetAddL4 : (n : ℕ) → (x : Fin n) → (s : GSet n) → Path (GSet n) (gsetMerge n s (gsetAdd n x s)) (gsetAdd n x s)
 gsetAddL4 n x s = gsetL4 n s (λ (y : Fin n) → finEq n y x)
 
+-- L6a (D3): the merge of add x a and add y b has x and has y. finEq n x x is
+-- natEq of one witness (natEqRefl), and or b true is true for each b.
+orTrueR : (b : Bool) → Path Bool (or b true) true
+orTrueR b = elim (λ (c : Bool) → Path Bool (or c true) true) refl refl b
+
+gsetHasMergeL : (n : ℕ) → (x : Fin n) → (y : Fin n) → (a : GSet n) → (b : GSet n) → Path Bool (gsetMerge n (gsetAdd n x a) (gsetAdd n y b) x) true
+gsetHasMergeL n x y a b = trans (cong (λ (e : Bool) → or (or (a x) e) (gsetAdd n y b x)) (natEqRefl (witness x))) (cong (λ (e : Bool) → or e (gsetAdd n y b x)) (orTrueR (a x)))
+
+gsetHasMergeR : (n : ℕ) → (x : Fin n) → (y : Fin n) → (a : GSet n) → (b : GSet n) → Path Bool (gsetMerge n (gsetAdd n x a) (gsetAdd n y b) y) true
+gsetHasMergeR n x y a b = trans (trans (cong (λ (e : Bool) → or (gsetAdd n x a y) (or (b y) e)) (natEqRefl (witness y))) (cong (λ (e : Bool) → or (gsetAdd n x a y) e) (orTrueR (b y)))) (orTrueR (gsetAdd n x a y))
+
 -- Counter r: restock i k adds k to p i; dec i k adds k to d i when the
 -- total uses stay at or below s0 plus the total restock (nonneg).
 counterL4 : (r : ℕ) → (s : Counter r) → (d : Counter r) → Path (Counter r) (counterMerge r s (counterMerge r s d)) (counterMerge r s d)
@@ -281,6 +292,136 @@ escrowStock r split s = natDiff (natAdd (sumFin r split) (sumFin r (λ (j : Fin 
 escrowNonneg : (r : ℕ) → (split : Fin r → ℕ) → (s : Escrow r) → Bool
 escrowNonneg r split s = intLe (pos 0) (escrowStock r split s)
 
+-- L7 (D5), Q52 (a): the rights of replica i are not negative:
+-- out i + U i <= split i + R i i + in i. escrowCan is this test with k more.
+-- EscrowOwn r i s t: row i of R and U i in t are at most those in s. A merge
+-- with such a t, and an op of a replica j that is not i, keep the rights of i.
+escrowRights : (r : ℕ) → (split : Fin r → ℕ) → (i : Fin r) → (s : Escrow r) → Bool
+escrowRights r split i s = natLe (natAdd (escrowOut r s i) (payload s i)) (natAdd (natAdd (split i) (witness s i i)) (escrowIn r s i))
+
+EscrowOwn : (r : ℕ) → (i : Fin r) → (s : Escrow r) → (t : Escrow r) → Type 0
+EscrowOwn r i s t = ((j : Fin r) → Path Bool (natLe (witness t i j) (witness s i j)) true) × Path Bool (natLe (payload t i) (payload s i)) true
+
+natLeFlagZ : (b : Bool) → (x : ℕ) → (y : ℕ) → (p : Path Bool (natLe x y) true) → Path Bool (natLe (flagIf b 0 x) (flagIf b 0 y)) true
+natLeFlagZ b x y p = elim (λ (e : Bool) → Path Bool (natLe (flagIf e 0 x) (flagIf e 0 y)) true) refl p b
+
+escrowOutMerge : (r : ℕ) → (i : Fin r) → (s : Escrow r) → (t : Escrow r) → (own : EscrowOwn r i s t) → Path Bool (natLe (escrowOut r (escrowMerge r s t) i) (escrowOut r s i)) true
+escrowOutMerge r i s t own = sumFinMono r (λ (j : Fin r) → flagIf (finEq r j i) 0 (natMax (witness s i j) (witness t i j))) (λ (j : Fin r) → flagIf (finEq r j i) 0 (witness s i j)) (λ (j : Fin r) → natLeFlagZ (finEq r j i) (natMax (witness s i j) (witness t i j)) (witness s i j) (natMaxLeast (witness s i j) (witness t i j) (witness s i j) (natLeRefl (witness s i j)) (witness own j)))
+
+escrowInMerge : (r : ℕ) → (i : Fin r) → (s : Escrow r) → (t : Escrow r) → Path Bool (natLe (escrowIn r s i) (escrowIn r (escrowMerge r s t) i)) true
+escrowInMerge r i s t = sumFinMono r (λ (j : Fin r) → flagIf (finEq r j i) 0 (witness s j i)) (λ (j : Fin r) → flagIf (finEq r j i) 0 (natMax (witness s j i) (witness t j i))) (λ (j : Fin r) → natLeFlagZ (finEq r j i) (witness s j i) (natMax (witness s j i) (witness t j i)) (natLeMaxL (witness s j i) (witness t j i)))
+
+escrowRightsMerge : (r : ℕ) → (split : Fin r → ℕ) → (i : Fin r) → (s : Escrow r) → (t : Escrow r) → (own : EscrowOwn r i s t) → (h : Path Bool (escrowRights r split i s) true) → Path Bool (escrowRights r split i (escrowMerge r s t)) true
+escrowRightsMerge r split i s t own h = natLeTrans (natAdd (escrowOut r (escrowMerge r s t) i) (payload (escrowMerge r s t) i)) (natAdd (escrowOut r s i) (payload s i)) (natAdd (natAdd (split i) (witness (escrowMerge r s t) i i)) (escrowIn r (escrowMerge r s t) i)) (natLeAddMono (escrowOut r (escrowMerge r s t) i) (escrowOut r s i) (payload (escrowMerge r s t) i) (payload s i) (escrowOutMerge r i s t own) (natMaxLeast (payload s i) (payload t i) (payload s i) (natLeRefl (payload s i)) (payload own))) (natLeTrans (natAdd (escrowOut r s i) (payload s i)) (natAdd (natAdd (split i) (witness s i i)) (escrowIn r s i)) (natAdd (natAdd (split i) (witness (escrowMerge r s t) i i)) (escrowIn r (escrowMerge r s t) i)) h (natLeAddMono (natAdd (split i) (witness s i i)) (natAdd (split i) (witness (escrowMerge r s t) i i)) (escrowIn r s i) (escrowIn r (escrowMerge r s t) i) (natLeAddMono (split i) (split i) (witness s i i) (witness (escrowMerge r s t) i i) (natLeRefl (split i)) (natLeMaxL (witness s i i) (witness t i i))) (escrowInMerge r i s t)))
+
+escrowOwnDec : (r : ℕ) → (i : Fin r) → (j : Fin r) → (k : ℕ) → (s : Escrow r) → (hij : Path Bool (finEq r i j) false) → EscrowOwn r i s (pack (witness s) (vecBump r (payload s) j k))
+escrowOwnDec r i j k s hij = pack (λ (m : Fin r) → natLeRefl (witness s i m)) (trans (cong (λ (e : Bool) → natLe (flagIf e (natAdd (payload s i) k) (payload s i)) (payload s i)) hij) (natLeRefl (payload s i)))
+
+escrowOwnBump : (r : ℕ) → (i : Fin r) → (j : Fin r) → (l : Fin r) → (k : ℕ) → (s : Escrow r) → (hij : Path Bool (finEq r i j) false) → EscrowOwn r i s (pack (matBump r r (witness s) j l k) (payload s))
+escrowOwnBump r i j l k s hij = pack (λ (m : Fin r) → trans (cong (λ (e : Bool) → natLe (flagIf (and e (finEq r m l)) (natAdd (witness s i m) k) (witness s i m)) (witness s i m)) hij) (natLeRefl (witness s i m))) (natLeRefl (payload s i))
+
+-- L7 group A: an op of replica i keeps the rights of i. natLe 0 k is stuck
+-- for a neutral k, so natLeZ is a fold.
+natAddZero : (m : ℕ) → Path ℕ (natAdd m 0) m
+natAddZero m = fold (λ (k : ℕ) → Path ℕ (natAdd k 0) k) (λ (k : ℕ) (ih : Path ℕ (natAdd k 0) k) → refl) refl m
+
+natLeZ : (k : ℕ) → Path Bool (natLe 0 k) true
+natLeZ k = fold (λ (m : ℕ) → Path Bool (natLe 0 m) true) (λ (m : ℕ) (ih : Path Bool (natLe 0 m) true) → natLeTrans 0 1 (natAdd m 1) refl (natLeSucc m)) refl k
+
+natLeAddR : (u : ℕ) → (k : ℕ) → Path Bool (natLe u (natAdd u k)) true
+natLeAddR u k = trans (cong (λ (x : ℕ) → natLe x (natAdd u k)) (symm (natAddZero u))) (natLeAddMono u u 0 k (natLeRefl u) (natLeZ k))
+
+escrowRightsDec : (r : ℕ) → (split : Fin r → ℕ) → (i : Fin r) → (k : ℕ) → (s : Escrow r) → (h : Path Bool (escrowCan r split i k s) true) → Path Bool (escrowRights r split i (escrowMerge r s (pack (witness s) (vecBump r (payload s) i k)))) true
+escrowRightsDec r split i k s h = natLeTrans (natAdd (escrowOut r (escrowMerge r s (pack (witness s) (vecBump r (payload s) i k))) i) (natMax (payload s i) (flagIf (finEq r i i) (natAdd (payload s i) k) (payload s i)))) (natAdd (escrowOut r s i) (natAdd (payload s i) k)) (natAdd (natAdd (split i) (natMax (witness s i i) (witness s i i))) (escrowIn r (escrowMerge r s (pack (witness s) (vecBump r (payload s) i k))) i)) (natLeAddMono (escrowOut r (escrowMerge r s (pack (witness s) (vecBump r (payload s) i k))) i) (escrowOut r s i) (natMax (payload s i) (flagIf (finEq r i i) (natAdd (payload s i) k) (payload s i))) (natAdd (payload s i) k) (sumFinMono r (λ (j : Fin r) → flagIf (finEq r j i) 0 (natMax (witness s i j) (witness s i j))) (λ (j : Fin r) → flagIf (finEq r j i) 0 (witness s i j)) (λ (j : Fin r) → natLeFlagZ (finEq r j i) (natMax (witness s i j) (witness s i j)) (witness s i j) (natMaxLeast (witness s i j) (witness s i j) (witness s i j) (natLeRefl (witness s i j)) (natLeRefl (witness s i j))))) (natMaxLeast (payload s i) (flagIf (finEq r i i) (natAdd (payload s i) k) (payload s i)) (natAdd (payload s i) k) (natLeAddR (payload s i) k) (trans (cong (λ (e : Bool) → natLe (flagIf e (natAdd (payload s i) k) (payload s i)) (natAdd (payload s i) k)) (natEqRefl (witness i))) (natLeRefl (natAdd (payload s i) k))))) (natLeTrans (natAdd (escrowOut r s i) (natAdd (payload s i) k)) (natAdd (natAdd (split i) (witness s i i)) (escrowIn r s i)) (natAdd (natAdd (split i) (natMax (witness s i i) (witness s i i))) (escrowIn r (escrowMerge r s (pack (witness s) (vecBump r (payload s) i k))) i)) (trans (cong (λ (x : ℕ) → natLe x (natAdd (natAdd (split i) (witness s i i)) (escrowIn r s i))) (symm (natAddAssoc (escrowOut r s i) (payload s i) k))) h) (natLeAddMono (natAdd (split i) (witness s i i)) (natAdd (split i) (natMax (witness s i i) (witness s i i))) (escrowIn r s i) (escrowIn r (escrowMerge r s (pack (witness s) (vecBump r (payload s) i k))) i) (natLeAddMono (split i) (split i) (witness s i i) (natMax (witness s i i) (witness s i i)) (natLeRefl (split i)) (natLeMaxL (witness s i i) (witness s i i))) (escrowInMerge r i s (pack (witness s) (vecBump r (payload s) i k)))))
+
+-- A transfer of k from i to j: out i goes up by at most k (sumFinBumpLe).
+escrowBumpRow : (a : Bool) → (b : Bool) → (x : ℕ) → (k : ℕ) → Path Bool (natLe (flagIf a 0 (natMax x (flagIf b (natAdd x k) x))) (flagIf b (natAdd (flagIf a 0 x) k) (flagIf a 0 x))) true
+escrowBumpRow a b x k = elim (λ (e : Bool) → Path Bool (natLe (flagIf e 0 (natMax x (flagIf b (natAdd x k) x))) (flagIf b (natAdd (flagIf e 0 x) k) (flagIf e 0 x))) true) (natLeZ (flagIf b (natAdd 0 k) 0)) (elim (λ (e : Bool) → Path Bool (natLe (natMax x (flagIf e (natAdd x k) x)) (flagIf e (natAdd x k) x)) true) (natMaxLeast x (natAdd x k) (natAdd x k) (natLeAddR x k) (natLeRefl (natAdd x k))) (natMaxLeast x x x (natLeRefl x) (natLeRefl x)) b) a
+
+escrowOutBump : (r : ℕ) → (i : Fin r) → (j : Fin r) → (k : ℕ) → (s : Escrow r) → Path Bool (natLe (escrowOut r (escrowMerge r s (pack (matBump r r (witness s) i j k) (payload s))) i) (natAdd (escrowOut r s i) k)) true
+escrowOutBump r i j k s = natLeTrans (escrowOut r (escrowMerge r s (pack (matBump r r (witness s) i j k) (payload s))) i) (sumFin r (λ (l : Fin r) → flagIf (finEq r l j) (natAdd (flagIf (finEq r l i) 0 (witness s i l)) k) (flagIf (finEq r l i) 0 (witness s i l)))) (natAdd (escrowOut r s i) k) (sumFinMono r (λ (l : Fin r) → flagIf (finEq r l i) 0 (natMax (witness s i l) (flagIf (and (finEq r i i) (finEq r l j)) (natAdd (witness s i l) k) (witness s i l)))) (λ (l : Fin r) → flagIf (finEq r l j) (natAdd (flagIf (finEq r l i) 0 (witness s i l)) k) (flagIf (finEq r l i) 0 (witness s i l))) (λ (l : Fin r) → trans (cong (λ (e : Bool) → natLe (flagIf (finEq r l i) 0 (natMax (witness s i l) (flagIf (and e (finEq r l j)) (natAdd (witness s i l) k) (witness s i l)))) (flagIf (finEq r l j) (natAdd (flagIf (finEq r l i) 0 (witness s i l)) k) (flagIf (finEq r l i) 0 (witness s i l)))) (natEqRefl (witness i))) (escrowBumpRow (finEq r l i) (finEq r l j) (witness s i l) k))) (sumFinBumpLe r (λ (l : Fin r) → flagIf (finEq r l i) 0 (witness s i l)) j k)
+
+escrowRightsTransfer : (r : ℕ) → (split : Fin r → ℕ) → (i : Fin r) → (j : Fin r) → (k : ℕ) → (s : Escrow r) → (h : Path Bool (escrowCan r split i k s) true) → Path Bool (escrowRights r split i (escrowMerge r s (pack (matBump r r (witness s) i j k) (payload s)))) true
+escrowRightsTransfer r split i j k s h = natLeTrans (natAdd (escrowOut r (escrowMerge r s (pack (matBump r r (witness s) i j k) (payload s))) i) (payload (escrowMerge r s (pack (matBump r r (witness s) i j k) (payload s))) i)) (natAdd (natAdd (escrowOut r s i) (payload s i)) k) (natAdd (natAdd (split i) (witness (escrowMerge r s (pack (matBump r r (witness s) i j k) (payload s))) i i)) (escrowIn r (escrowMerge r s (pack (matBump r r (witness s) i j k) (payload s))) i)) (natLeTrans (natAdd (escrowOut r (escrowMerge r s (pack (matBump r r (witness s) i j k) (payload s))) i) (payload (escrowMerge r s (pack (matBump r r (witness s) i j k) (payload s))) i)) (natAdd (natAdd (escrowOut r s i) k) (payload s i)) (natAdd (natAdd (escrowOut r s i) (payload s i)) k) (natLeAddMono (escrowOut r (escrowMerge r s (pack (matBump r r (witness s) i j k) (payload s))) i) (natAdd (escrowOut r s i) k) (payload (escrowMerge r s (pack (matBump r r (witness s) i j k) (payload s))) i) (payload s i) (escrowOutBump r i j k s) (natMaxLeast (payload s i) (payload s i) (payload s i) (natLeRefl (payload s i)) (natLeRefl (payload s i)))) (trans (cong (λ (x : ℕ) → natLe x (natAdd (natAdd (escrowOut r s i) (payload s i)) k)) (trans (natAddAssoc (escrowOut r s i) k (payload s i)) (trans (cong (λ (x : ℕ) → natAdd (escrowOut r s i) x) (natAddComm k (payload s i))) (symm (natAddAssoc (escrowOut r s i) (payload s i) k))))) (natLeRefl (natAdd (natAdd (escrowOut r s i) (payload s i)) k)))) (natLeTrans (natAdd (natAdd (escrowOut r s i) (payload s i)) k) (natAdd (natAdd (split i) (witness s i i)) (escrowIn r s i)) (natAdd (natAdd (split i) (witness (escrowMerge r s (pack (matBump r r (witness s) i j k) (payload s))) i i)) (escrowIn r (escrowMerge r s (pack (matBump r r (witness s) i j k) (payload s))) i)) h (natLeAddMono (natAdd (split i) (witness s i i)) (natAdd (split i) (witness (escrowMerge r s (pack (matBump r r (witness s) i j k) (payload s))) i i)) (escrowIn r s i) (escrowIn r (escrowMerge r s (pack (matBump r r (witness s) i j k) (payload s))) i) (natLeAddMono (split i) (split i) (witness s i i) (witness (escrowMerge r s (pack (matBump r r (witness s) i j k) (payload s))) i i) (natLeRefl (split i)) (natLeMaxL (witness s i i) (matBump r r (witness s) i j k i i))) (escrowInMerge r i s (pack (matBump r r (witness s) i j k) (payload s)))))
+
+-- A restock at i bumps R i i only: out i does not go up, so the rights of i stay.
+escrowRestockRow : (b : Bool) → (x : ℕ) → (k : ℕ) → Path Bool (natLe (flagIf b 0 (natMax x (flagIf b (natAdd x k) x))) (flagIf b 0 x)) true
+escrowRestockRow b x k = elim (λ (e : Bool) → Path Bool (natLe (flagIf e 0 (natMax x (flagIf e (natAdd x k) x))) (flagIf e 0 x)) true) refl (natMaxLeast x x x (natLeRefl x) (natLeRefl x)) b
+
+escrowOutRestock : (r : ℕ) → (i : Fin r) → (k : ℕ) → (s : Escrow r) → Path Bool (natLe (escrowOut r (escrowRestock r i k s) i) (escrowOut r s i)) true
+escrowOutRestock r i k s = sumFinMono r (λ (l : Fin r) → flagIf (finEq r l i) 0 (natMax (witness s i l) (flagIf (and (finEq r i i) (finEq r l i)) (natAdd (witness s i l) k) (witness s i l)))) (λ (l : Fin r) → flagIf (finEq r l i) 0 (witness s i l)) (λ (l : Fin r) → trans (cong (λ (e : Bool) → natLe (flagIf (finEq r l i) 0 (natMax (witness s i l) (flagIf (and e (finEq r l i)) (natAdd (witness s i l) k) (witness s i l)))) (flagIf (finEq r l i) 0 (witness s i l))) (natEqRefl (witness i))) (escrowRestockRow (finEq r l i) (witness s i l) k))
+
+escrowRightsRestock : (r : ℕ) → (split : Fin r → ℕ) → (i : Fin r) → (k : ℕ) → (s : Escrow r) → (h : Path Bool (escrowRights r split i s) true) → Path Bool (escrowRights r split i (escrowRestock r i k s)) true
+escrowRightsRestock r split i k s h = natLeTrans (natAdd (escrowOut r (escrowRestock r i k s) i) (payload (escrowRestock r i k s) i)) (natAdd (escrowOut r s i) (payload s i)) (natAdd (natAdd (split i) (witness (escrowRestock r i k s) i i)) (escrowIn r (escrowRestock r i k s) i)) (natLeAddMono (escrowOut r (escrowRestock r i k s) i) (escrowOut r s i) (payload (escrowRestock r i k s) i) (payload s i) (escrowOutRestock r i k s) (natMaxLeast (payload s i) (payload s i) (payload s i) (natLeRefl (payload s i)) (natLeRefl (payload s i)))) (natLeTrans (natAdd (escrowOut r s i) (payload s i)) (natAdd (natAdd (split i) (witness s i i)) (escrowIn r s i)) (natAdd (natAdd (split i) (witness (escrowRestock r i k s) i i)) (escrowIn r (escrowRestock r i k s) i)) h (natLeAddMono (natAdd (split i) (witness s i i)) (natAdd (split i) (witness (escrowRestock r i k s) i i)) (escrowIn r s i) (escrowIn r (escrowRestock r i k s) i) (natLeAddMono (split i) (split i) (witness s i i) (witness (escrowRestock r i k s) i i) (natLeRefl (split i)) (natLeMaxL (witness s i i) (matBump r r (witness s) i i k i i))) (escrowInMerge r i s (pack (matBump r r (witness s) i i k) (payload s)))))
+
+-- L7 sum lemma: the rights of each i give escrowNonneg (sum of out = sum of in).
+natLeCast : (a : ℕ) → (b : ℕ) → (a' : ℕ) → (b' : ℕ) → (pa : Path ℕ a a') → (pb : Path ℕ b b') → (h : Path Bool (natLe a b) true) → Path Bool (natLe a' b') true
+natLeCast a b a' b' pa pb h = trans (cong (λ (x : ℕ) → natLe x b') (symm pa)) (trans (cong (λ (y : ℕ) → natLe a y) (symm pb)) h)
+
+escrowInSym : (r : ℕ) → (s : Escrow r) → Path ℕ (sumFin r (λ (i : Fin r) → sumFin r (λ (j : Fin r) → flagIf (natEq (witness i) (witness j)) 0 (witness s j i)))) (sumFin r (λ (i : Fin r) → escrowIn r s i))
+escrowInSym r s k = sumFin r (λ (i : Fin r) → sumFin r (λ (j : Fin r) → flagIf (natEqSym (witness i) (witness j) k) 0 (witness s j i)))
+
+escrowOutIn : (r : ℕ) → (s : Escrow r) → Path ℕ (sumFin r (λ (i : Fin r) → escrowOut r s i)) (sumFin r (λ (i : Fin r) → escrowIn r s i))
+escrowOutIn r s = trans (sumFinSwap r (λ (a : Fin r) (b : Fin r) → flagIf (finEq r b a) 0 (witness s a b))) (escrowInSym r s)
+
+escrowSumLe : (r : ℕ) → (split : Fin r → ℕ) → (s : Escrow r) → (h : (i : Fin r) → Path Bool (escrowRights r split i s) true) → Path Bool (natLe (sumFin r (payload s)) (natAdd (sumFin r split) (sumFin r (λ (j : Fin r) → witness s j j)))) true
+escrowSumLe r split s h = natLeAddCancel (sumFin r (payload s)) (natAdd (sumFin r split) (sumFin r (λ (j : Fin r) → witness s j j))) (sumFin r (λ (i : Fin r) → escrowIn r s i)) (natLeCast (natAdd (sumFin r (λ (i : Fin r) → escrowOut r s i)) (sumFin r (payload s))) (natAdd (natAdd (sumFin r split) (sumFin r (λ (j : Fin r) → witness s j j))) (sumFin r (λ (i : Fin r) → escrowIn r s i))) (natAdd (sumFin r (payload s)) (sumFin r (λ (i : Fin r) → escrowIn r s i))) (natAdd (natAdd (sumFin r split) (sumFin r (λ (j : Fin r) → witness s j j))) (sumFin r (λ (i : Fin r) → escrowIn r s i))) (trans (natAddComm (sumFin r (λ (i : Fin r) → escrowOut r s i)) (sumFin r (payload s))) (cong (λ (x : ℕ) → natAdd (sumFin r (payload s)) x) (escrowOutIn r s))) refl (natLeCast (sumFin r (λ (i : Fin r) → natAdd (escrowOut r s i) (payload s i))) (sumFin r (λ (i : Fin r) → natAdd (natAdd (split i) (witness s i i)) (escrowIn r s i))) (natAdd (sumFin r (λ (i : Fin r) → escrowOut r s i)) (sumFin r (payload s))) (natAdd (natAdd (sumFin r split) (sumFin r (λ (j : Fin r) → witness s j j))) (sumFin r (λ (i : Fin r) → escrowIn r s i))) (sumFinAdd r (λ (i : Fin r) → escrowOut r s i) (payload s)) (trans (sumFinAdd r (λ (i : Fin r) → natAdd (split i) (witness s i i)) (λ (i : Fin r) → escrowIn r s i)) (cong (λ (x : ℕ) → natAdd x (sumFin r (λ (i : Fin r) → escrowIn r s i))) (sumFinAdd r split (λ (j : Fin r) → witness s j j)))) (sumFinMono r (λ (i : Fin r) → natAdd (escrowOut r s i) (payload s i)) (λ (i : Fin r) → natAdd (natAdd (split i) (witness s i i)) (escrowIn r s i)) h)))
+
+escrowNonnegSum : (r : ℕ) → (split : Fin r → ℕ) → (s : Escrow r) → (h : (i : Fin r) → Path Bool (escrowRights r split i s) true) → Path Bool (escrowNonneg r split s) true
+escrowNonnegSum r split s h = trans (cong (λ (e : Bool) → intLe (pos 0) (flagIf e (pos (natSub (natAdd (sumFin r split) (sumFin r (λ (j : Fin r) → witness s j j))) (sumFin r (payload s)))) (negsuc (natSub (sumFin r (payload s)) (natAdd (natAdd (sumFin r split) (sumFin r (λ (j : Fin r) → witness s j j))) 1))))) (escrowSumLe r split s h)) (natLeZ (natSub (natAdd (sumFin r split) (sumFin r (λ (j : Fin r) → witness s j j))) (sumFin r (payload s))))
+
+-- L7 base: at escrowBot the out and in of i are 0 (a per-j path under sumFin, then sumFinZero).
+escrowBotRow : (b : Bool) → Path ℕ (flagIf b 0 0) 0
+escrowBotRow b = elim (λ (e : Bool) → Path ℕ (flagIf e 0 0) 0) refl refl b
+
+escrowBotSum : (r : ℕ) → (i : Fin r) → Path ℕ (sumFin r (λ (j : Fin r) → flagIf (finEq r j i) 0 0)) (sumFin r (λ (j : Fin r) → 0))
+escrowBotSum r i k = sumFin r (λ (j : Fin r) → escrowBotRow (finEq r j i) k)
+
+escrowBotOut : (r : ℕ) → (i : Fin r) → Path ℕ (sumFin r (λ (j : Fin r) → flagIf (finEq r j i) 0 0)) 0
+escrowBotOut r i = trans (escrowBotSum r i) (sumFinZero r)
+
+escrowRightsBot : (r : ℕ) → (split : Fin r → ℕ) → (i : Fin r) → Path Bool (escrowRights r split i (escrowBot r)) true
+escrowRightsBot r split i = natLeCast 0 (natAdd (natAdd (split i) 0) 0) (natAdd (escrowOut r (escrowBot r) i) 0) (natAdd (natAdd (split i) 0) (escrowIn r (escrowBot r) i)) (symm (cong (λ (x : ℕ) → natAdd x 0) (escrowBotOut r i))) (symm (cong (λ (x : ℕ) → natAdd (natAdd (split i) 0) x) (escrowBotOut r i))) (natLeZ (natAdd (natAdd (split i) 0) 0))
+
+-- L7 reconnect helpers: move rights along finEqSound; EscrowOwn is transitive; a merge is above s and, with an EscrowOwn, below s at row i.
+escrowRightsAt : (r : ℕ) → (split : Fin r → ℕ) → (l : Fin r) → (i : Fin r) → (s : Escrow r) → (e : Path Bool (finEq r l i) true) → (h : Path Bool (escrowRights r split i s) true) → Path Bool (escrowRights r split l s) true
+escrowRightsAt r split l i s e h = trans (cong (λ (x : Fin r) → escrowRights r split x s) (finEqSound r l i e)) h
+
+escrowOwnTrans : (r : ℕ) → (i : Fin r) → (a : Escrow r) → (b : Escrow r) → (c : Escrow r) → (p : EscrowOwn r i a b) → (q : EscrowOwn r i b c) → EscrowOwn r i a c
+escrowOwnTrans r i a b c p q = pack (λ (m : Fin r) → natLeTrans (witness c i m) (witness b i m) (witness a i m) (witness q m) (witness p m)) (natLeTrans (payload c i) (payload b i) (payload a i) (payload q) (payload p))
+
+escrowOwnMergeGe : (r : ℕ) → (i : Fin r) → (s : Escrow r) → (t : Escrow r) → EscrowOwn r i (escrowMerge r s t) s
+escrowOwnMergeGe r i s t = pack (λ (m : Fin r) → natLeMaxL (witness s i m) (witness t i m)) (natLeMaxL (payload s i) (payload t i))
+
+escrowOwnMergeLe : (r : ℕ) → (i : Fin r) → (s : Escrow r) → (t : Escrow r) → (own : EscrowOwn r i s t) → EscrowOwn r i s (escrowMerge r s t)
+escrowOwnMergeLe r i s t own = pack (λ (m : Fin r) → natMaxLeast (witness s i m) (witness t i m) (witness s i m) (natLeRefl (witness s i m)) (witness own m)) (natMaxLeast (payload s i) (payload t i) (payload s i) (natLeRefl (payload s i)) (payload own))
+
+-- L7 (Q52 (a)): an op of replica i keeps all rights (escrowStep); a reconnect of two branches keeps escrowNonneg. EscrowStepOk is what each op (dec, transfer, restock) gives. escrowL7 is the 5.2 shape: the base, one prefix op, one op per branch, then the merge (the other merge order: swap i and j).
+escrowStep : (r : ℕ) → (split : Fin r → ℕ) → (i : Fin r) → (s : Escrow r) → (d : Escrow r) → (hs : (l : Fin r) → Path Bool (escrowRights r split l s) true) → (hi : Path Bool (escrowRights r split i (escrowMerge r s d)) true) → (own : (l : Fin r) → (e : Path Bool (finEq r l i) false) → EscrowOwn r l s d) → (l : Fin r) → Path Bool (escrowRights r split l (escrowMerge r s d)) true
+escrowStep r split i s d hs hi own l = elim (λ (b : Bool) → Path Bool (finEq r l i) b → Path Bool (escrowRights r split l (escrowMerge r s d)) true) (λ (e : Path Bool (finEq r l i) true) → escrowRightsAt r split l i (escrowMerge r s d) e hi) (λ (e : Path Bool (finEq r l i) false) → escrowRightsMerge r split l s d (own l e) (hs l)) (finEq r l i) refl
+
+escrowReconnect : (r : ℕ) → (split : Fin r → ℕ) → (i : Fin r) → (j : Fin r) → (s : Escrow r) → (di : Escrow r) → (dj : Escrow r) → (hji : Path Bool (finEq r j i) false) → (hs : (l : Fin r) → Path Bool (escrowRights r split l s) true) → (hi : Path Bool (escrowRights r split i (escrowMerge r s di)) true) → (hj : Path Bool (escrowRights r split j (escrowMerge r s dj)) true) → (owni : (l : Fin r) → (e : Path Bool (finEq r l i) false) → EscrowOwn r l s di) → (ownj : (l : Fin r) → (e : Path Bool (finEq r l j) false) → EscrowOwn r l s dj) → Path Bool (escrowNonneg r split (escrowMerge r (escrowMerge r s di) (escrowMerge r s dj))) true
+escrowReconnect r split i j s di dj hji hs hi hj owni ownj = escrowNonnegSum r split (escrowMerge r (escrowMerge r s di) (escrowMerge r s dj)) (λ (l : Fin r) → elim (λ (b : Bool) → Path Bool (finEq r l j) b → Path Bool (escrowRights r split l (escrowMerge r (escrowMerge r s di) (escrowMerge r s dj))) true) (λ (e : Path Bool (finEq r l j) true) → escrowRightsAt r split l j (escrowMerge r (escrowMerge r s di) (escrowMerge r s dj)) e (trans (cong (λ (x : Escrow r) → escrowRights r split j x) (escrowComm r (escrowMerge r s di) (escrowMerge r s dj))) (escrowRightsMerge r split j (escrowMerge r s dj) (escrowMerge r s di) (escrowOwnTrans r j (escrowMerge r s dj) s (escrowMerge r s di) (escrowOwnMergeGe r j s dj) (escrowOwnMergeLe r j s di (owni j hji))) hj))) (λ (e : Path Bool (finEq r l j) false) → escrowRightsMerge r split l (escrowMerge r s di) (escrowMerge r s dj) (escrowOwnTrans r l (escrowMerge r s di) s (escrowMerge r s dj) (escrowOwnMergeGe r l s di) (escrowOwnMergeLe r l s dj (ownj l e))) (escrowStep r split i s di hs hi owni l)) (finEq r l j) refl)
+
+EscrowStepOk : (r : ℕ) → (split : Fin r → ℕ) → (i : Fin r) → (s : Escrow r) → (d : Escrow r) → Type 0
+EscrowStepOk r split i s d = Path Bool (escrowRights r split i (escrowMerge r s d)) true × ((l : Fin r) → (e : Path Bool (finEq r l i) false) → EscrowOwn r l s d)
+
+escrowDecOk : (r : ℕ) → (split : Fin r → ℕ) → (i : Fin r) → (k : ℕ) → (s : Escrow r) → (h : Path Bool (escrowCan r split i k s) true) → EscrowStepOk r split i s (pack (witness s) (vecBump r (payload s) i k))
+escrowDecOk r split i k s h = pack (escrowRightsDec r split i k s h) (λ (l : Fin r) (e : Path Bool (finEq r l i) false) → escrowOwnDec r l i k s e)
+
+escrowTransferOk : (r : ℕ) → (split : Fin r → ℕ) → (i : Fin r) → (j : Fin r) → (k : ℕ) → (s : Escrow r) → (h : Path Bool (escrowCan r split i k s) true) → EscrowStepOk r split i s (pack (matBump r r (witness s) i j k) (payload s))
+escrowTransferOk r split i j k s h = pack (escrowRightsTransfer r split i j k s h) (λ (l : Fin r) (e : Path Bool (finEq r l i) false) → escrowOwnBump r l i j k s e)
+
+escrowRestockOk : (r : ℕ) → (split : Fin r → ℕ) → (i : Fin r) → (k : ℕ) → (s : Escrow r) → (h : Path Bool (escrowRights r split i s) true) → EscrowStepOk r split i s (pack (matBump r r (witness s) i i k) (payload s))
+escrowRestockOk r split i k s h = pack (escrowRightsRestock r split i k s h) (λ (l : Fin r) (e : Path Bool (finEq r l i) false) → escrowOwnBump r l i i k s e)
+
+escrowL7 : (r : ℕ) → (split : Fin r → ℕ) → (p : Fin r) → (i : Fin r) → (j : Fin r) → (d0 : Escrow r) → (di : Escrow r) → (dj : Escrow r) → (hji : Path Bool (finEq r j i) false) → (ok0 : EscrowStepOk r split p (escrowBot r) d0) → (oki : EscrowStepOk r split i (escrowMerge r (escrowBot r) d0) di) → (okj : EscrowStepOk r split j (escrowMerge r (escrowBot r) d0) dj) → Path Bool (escrowNonneg r split (escrowMerge r (escrowMerge r (escrowMerge r (escrowBot r) d0) di) (escrowMerge r (escrowMerge r (escrowBot r) d0) dj))) true
+escrowL7 r split p i j d0 di dj hji ok0 oki okj = escrowReconnect r split i j (escrowMerge r (escrowBot r) d0) di dj hji (escrowStep r split p (escrowBot r) d0 (escrowRightsBot r split) (witness ok0) (payload ok0)) (witness oki) (witness okj) (payload oki) (payload okj)
+
+-- EscrowL7Law r split is the type of escrowL7 at r and split: the checker emits NAMEPARTL7 : EscrowL7Law r NAMEPARTSplit for each allocated part (U5 law count).
+EscrowL7Law : (r : ℕ) → (split : Fin r → ℕ) → Type 0
+EscrowL7Law r split = (p : Fin r) → (i : Fin r) → (j : Fin r) → (d0 : Escrow r) → (di : Escrow r) → (dj : Escrow r) → (hji : Path Bool (finEq r j i) false) → (ok0 : EscrowStepOk r split p (escrowBot r) d0) → (oki : EscrowStepOk r split i (escrowMerge r (escrowBot r) d0) di) → (okj : EscrowStepOk r split j (escrowMerge r (escrowBot r) d0) dj) → Path Bool (escrowNonneg r split (escrowMerge r (escrowMerge r (escrowMerge r (escrowBot r) d0) di) (escrowMerge r (escrowMerge r (escrowBot r) d0) dj))) true
+
 -- MVReg n r: write i x takes the dot (i, ctx i + 1), sets x present (even) and
 -- the other values absent (odd) at that dot, and sets absent each dot of the
 -- other replicas that the context covers. x is live at j when m j x is
@@ -333,6 +474,75 @@ mvregHas n r s x = natLe 1 (sumFin r (λ (j : Fin r) → flagIf (mvregLive n r s
 
 mvregCount : (n : ℕ) → (r : ℕ) → (s : MVReg n r) → ℕ
 mvregCount n r s = sumFin n (λ (x : Fin n) → flagIf (mvregHas n r s x) 1 0)
+
+-- L6b (D4), Q55 (a): an MVReg state is wf when each witness is at most
+-- 2 ctx + 1. mvregBot is wf, and merge and write keep wf.
+mvregWf : (n : ℕ) → (r : ℕ) → (s : MVReg n r) → Type 0
+mvregWf n r s = (j : Fin r) → (y : Fin n) → Path Bool (natLe (witness s j y) (natAdd (natMul 2 (payload s j)) 1)) true
+
+mvregBotWf : (n : ℕ) → (r : ℕ) → mvregWf n r (mvregBot n r)
+mvregBotWf n r = λ (j : Fin r) (y : Fin n) → refl
+
+mvregStep : (c : ℕ) → (m : ℕ) → (p : Path Bool (natLe c m) true) → Path Bool (natLe (natAdd (natMul 2 c) 1) (natAdd (natMul 2 m) 1)) true
+mvregStep c m p = natLeAddMono (natMul 2 c) (natMul 2 m) 1 1 (natLeMulTwo c m p) (natLeRefl 1)
+
+mvregBound : (a : ℕ) → (b : ℕ) → (c : ℕ) → (d : ℕ) → (p : Path Bool (natLe a (natAdd (natMul 2 c) 1)) true) → (q : Path Bool (natLe b (natAdd (natMul 2 d) 1)) true) → Path Bool (natLe (natMax a b) (natAdd (natMul 2 (natMax c d)) 1)) true
+mvregBound a b c d p q = natMaxLeast a b (natAdd (natMul 2 (natMax c d)) 1) (natLeTrans a (natAdd (natMul 2 c) 1) (natAdd (natMul 2 (natMax c d)) 1) p (mvregStep c (natMax c d) (natLeMaxL c d))) (natLeTrans b (natAdd (natMul 2 d) 1) (natAdd (natMul 2 (natMax c d)) 1) q (mvregStep d (natMax c d) (natLeMaxR c d)))
+
+mvregMergeWf : (n : ℕ) → (r : ℕ) → (s : MVReg n r) → (t : MVReg n r) → (ws : mvregWf n r s) → (wt : mvregWf n r t) → mvregWf n r (mvregMerge n r s t)
+mvregMergeWf n r s t ws wt = λ (j : Fin r) (y : Fin n) → mvregBound (witness s j y) (witness t j y) (payload s j) (payload t j) (ws j y) (wt j y)
+
+mvregTop : (m : ℕ) → (e : Bool) → Path Bool (natLe (natAdd m (flagIf e 0 1)) (natAdd m 1)) true
+mvregTop m e = elim (λ (b : Bool) → Path Bool (natLe (natAdd m (flagIf b 0 1)) (natAdd m 1)) true) (natLeAddMono m m 0 1 (natLeRefl m) refl) (natLeRefl (natAdd m 1)) e
+
+mvregWriteWf : (n : ℕ) → (r : ℕ) → (i : Fin r) → (x : Fin n) → (s : MVReg n r) → (w : mvregWf n r s) → mvregWf n r (mvregWrite n r i x s)
+mvregWriteWf n r i x s w = λ (j : Fin r) (y : Fin n) → elim (λ (b : Bool) → Path Bool (natLe (natMax (witness s j y) (flagIf b (natAdd (natMul 2 (natAdd (payload s i) 1)) (flagIf (finEq n y x) 0 1)) (natAdd (natMul 2 (payload s j)) 1))) (natAdd (natMul 2 (natMax (payload s j) (flagIf b (natAdd (payload s i) 1) 0))) 1)) true) (mvregBound (witness s j y) (natAdd (natMul 2 (natAdd (payload s i) 1)) (flagIf (finEq n y x) 0 1)) (payload s j) (natAdd (payload s i) 1) (w j y) (mvregTop (natMul 2 (natAdd (payload s i) 1)) (finEq n y x))) (natMaxLeast (witness s j y) (natAdd (natMul 2 (payload s j)) 1) (natAdd (natMul 2 (payload s j)) 1) (w j y) (natLeRefl (natAdd (natMul 2 (payload s j)) 1))) (finEq r j i)
+
+-- L6b (D4), Q55 (a): two writes at i ≠ j of x ≠ y on a wf state give two live values.
+mvregConc : (n : ℕ) → (r : ℕ) → (i : Fin r) → (j : Fin r) → (x : Fin n) → (y : Fin n) → (s : MVReg n r) → MVReg n r
+mvregConc n r i j x y s = mvregMerge n r (mvregWrite n r i x s) (mvregWrite n r j y s)
+
+mvregCell : (w : ℕ) → (c : ℕ) → (ci : ℕ) → (cj : ℕ) → (b1 : Bool) → (b2 : Bool) → (e1 : Bool) → (e2 : Bool) → Bool
+mvregCell w c ci cj b1 b2 e1 e2 = and (natEq (natMax (natMax w (flagIf b1 (natAdd (natMul 2 (natAdd ci 1)) (flagIf e1 0 1)) (natAdd (natMul 2 c) 1))) (natMax w (flagIf b2 (natAdd (natMul 2 (natAdd cj 1)) (flagIf e2 0 1)) (natAdd (natMul 2 c) 1)))) (natMul 2 (natMax (natMax c (flagIf b1 (natAdd ci 1) 0)) (natMax c (flagIf b2 (natAdd cj 1) 0))))) (natLe 1 (natMax (natMax c (flagIf b1 (natAdd ci 1) 0)) (natMax c (flagIf b2 (natAdd cj 1) 0))))
+
+mvregOdd : (c : ℕ) → Path Bool (natLe (natAdd (natMul 2 c) 1) (natMul 2 (natAdd c 1))) true
+mvregOdd c = trans (cong (λ (m : ℕ) → natLe (natAdd (natMul 2 c) 1) m) (natMulTwoSucc c)) (natLeAddMono (natMul 2 c) (natMul 2 c) 1 2 (natLeRefl (natMul 2 c)) refl)
+
+mvregZL : (m : ℕ) → Path Bool (natLe (natAdd m 0) m) true
+mvregZL m = trans (cong (λ (k : ℕ) → natLe k m) (natAddZero m)) (natLeRefl m)
+
+mvregLeMaxZ : (w : ℕ) → (m : ℕ) → Path Bool (natLe m (natMax w (natAdd m 0))) true
+mvregLeMaxZ w m = natLeTrans m (natAdd m 0) (natMax w (natAdd m 0)) (trans (cong (λ (k : ℕ) → natLe m k) (natAddZero m)) (natLeRefl m)) (natLeMaxR w (natAdd m 0))
+
+mvregLeS : (c : ℕ) → Path Bool (natLe c (natAdd c 1)) true
+mvregLeS c = trans (cong (λ (k : ℕ) → natLe k (natAdd c 1)) (symm (natAddZero c))) (natLeAddMono c c 0 1 (natLeRefl c) refl)
+
+mvregWT : (w : ℕ) → (c : ℕ) → (h : Path Bool (natLe w (natAdd (natMul 2 c) 1)) true) → Path Bool (natLe w (natMul 2 (natAdd c 1))) true
+mvregWT w c h = natLeTrans w (natAdd (natMul 2 c) 1) (natMul 2 (natAdd c 1)) h (mvregOdd c)
+
+mvregCellCore : (wm : ℕ) → (k : ℕ) → (c : ℕ) → (p1 : Path Bool (natLe wm (natMul 2 (natAdd c 1))) true) → (p2 : Path Bool (natLe (natMul 2 (natAdd c 1)) wm) true) → (k1 : Path Bool (natLe k (natAdd c 1)) true) → (k2 : Path Bool (natLe (natAdd c 1) k) true) → Path Bool (and (natEq wm (natMul 2 k)) (natLe 1 k)) true
+mvregCellCore wm k c p1 p2 k1 k2 = trans (cong (λ (e : Bool) → and e (natLe 1 k)) (natLeAntisym wm (natMul 2 k) (natLeTrans wm (natMul 2 (natAdd c 1)) (natMul 2 k) p1 (natLeMulTwo (natAdd c 1) k k2)) (natLeTrans (natMul 2 k) (natMul 2 (natAdd c 1)) wm (natLeMulTwo k (natAdd c 1) k1) p2))) (natLeTrans 1 (natAdd c 1) k (natLeSucc c) k2)
+
+mvregRowI : (w : ℕ) → (c : ℕ) → (h : Path Bool (natLe w (natAdd (natMul 2 c) 1)) true) → Path Bool (and (natEq (natMax (natMax w (natAdd (natMul 2 (natAdd c 1)) 0)) (natMax w (natAdd (natMul 2 c) 1))) (natMul 2 (natMax (natMax c (natAdd c 1)) c))) (natLe 1 (natMax (natMax c (natAdd c 1)) c))) true
+mvregRowI w c h = mvregCellCore (natMax (natMax w (natAdd (natMul 2 (natAdd c 1)) 0)) (natMax w (natAdd (natMul 2 c) 1))) (natMax (natMax c (natAdd c 1)) c) c (natMaxLeast (natMax w (natAdd (natMul 2 (natAdd c 1)) 0)) (natMax w (natAdd (natMul 2 c) 1)) (natMul 2 (natAdd c 1)) (natMaxLeast w (natAdd (natMul 2 (natAdd c 1)) 0) (natMul 2 (natAdd c 1)) (mvregWT w c h) (mvregZL (natMul 2 (natAdd c 1)))) (natMaxLeast w (natAdd (natMul 2 c) 1) (natMul 2 (natAdd c 1)) (mvregWT w c h) (mvregOdd c))) (natLeTrans (natMul 2 (natAdd c 1)) (natMax w (natAdd (natMul 2 (natAdd c 1)) 0)) (natMax (natMax w (natAdd (natMul 2 (natAdd c 1)) 0)) (natMax w (natAdd (natMul 2 c) 1))) (mvregLeMaxZ w (natMul 2 (natAdd c 1))) (natLeMaxL (natMax w (natAdd (natMul 2 (natAdd c 1)) 0)) (natMax w (natAdd (natMul 2 c) 1)))) (natMaxLeast (natMax c (natAdd c 1)) c (natAdd c 1) (natMaxLeast c (natAdd c 1) (natAdd c 1) (mvregLeS c) (natLeRefl (natAdd c 1))) (mvregLeS c)) (natLeTrans (natAdd c 1) (natMax c (natAdd c 1)) (natMax (natMax c (natAdd c 1)) c) (natLeMaxR c (natAdd c 1)) (natLeMaxL (natMax c (natAdd c 1)) c))
+
+mvregRowJ : (w : ℕ) → (c : ℕ) → (h : Path Bool (natLe w (natAdd (natMul 2 c) 1)) true) → Path Bool (and (natEq (natMax (natMax w (natAdd (natMul 2 c) 1)) (natMax w (natAdd (natMul 2 (natAdd c 1)) 0))) (natMul 2 (natMax c (natMax c (natAdd c 1))))) (natLe 1 (natMax c (natMax c (natAdd c 1))))) true
+mvregRowJ w c h = mvregCellCore (natMax (natMax w (natAdd (natMul 2 c) 1)) (natMax w (natAdd (natMul 2 (natAdd c 1)) 0))) (natMax c (natMax c (natAdd c 1))) c (natMaxLeast (natMax w (natAdd (natMul 2 c) 1)) (natMax w (natAdd (natMul 2 (natAdd c 1)) 0)) (natMul 2 (natAdd c 1)) (natMaxLeast w (natAdd (natMul 2 c) 1) (natMul 2 (natAdd c 1)) (mvregWT w c h) (mvregOdd c)) (natMaxLeast w (natAdd (natMul 2 (natAdd c 1)) 0) (natMul 2 (natAdd c 1)) (mvregWT w c h) (mvregZL (natMul 2 (natAdd c 1))))) (natLeTrans (natMul 2 (natAdd c 1)) (natMax w (natAdd (natMul 2 (natAdd c 1)) 0)) (natMax (natMax w (natAdd (natMul 2 c) 1)) (natMax w (natAdd (natMul 2 (natAdd c 1)) 0))) (mvregLeMaxZ w (natMul 2 (natAdd c 1))) (natLeMaxR (natMax w (natAdd (natMul 2 c) 1)) (natMax w (natAdd (natMul 2 (natAdd c 1)) 0)))) (natMaxLeast c (natMax c (natAdd c 1)) (natAdd c 1) (mvregLeS c) (natMaxLeast c (natAdd c 1) (natAdd c 1) (mvregLeS c) (natLeRefl (natAdd c 1)))) (natLeTrans (natAdd c 1) (natMax c (natAdd c 1)) (natMax c (natMax c (natAdd c 1))) (natLeMaxR c (natAdd c 1)) (natLeMaxR c (natMax c (natAdd c 1))))
+
+mvregLiveI : (n : ℕ) → (r : ℕ) → (i : Fin r) → (j : Fin r) → (x : Fin n) → (y : Fin n) → (s : MVReg n r) → (wf : mvregWf n r s) → (hij : Path Bool (finEq r i j) false) → Path Bool (mvregLive n r (mvregConc n r i j x y s) i x) true
+mvregLiveI n r i j x y s wf hij = trans (cong (λ (b : Bool) → mvregCell (witness s i x) (payload s i) (payload s i) (payload s j) b (finEq r i j) (finEq n x x) (finEq n x y)) (natEqRefl (witness i))) (trans (cong (λ (b : Bool) → mvregCell (witness s i x) (payload s i) (payload s i) (payload s j) true b (finEq n x x) (finEq n x y)) hij) (trans (cong (λ (e : Bool) → mvregCell (witness s i x) (payload s i) (payload s i) (payload s j) true false e (finEq n x y)) (natEqRefl (witness x))) (mvregRowI (witness s i x) (payload s i) (wf i x))))
+
+mvregLiveJ : (n : ℕ) → (r : ℕ) → (i : Fin r) → (j : Fin r) → (x : Fin n) → (y : Fin n) → (s : MVReg n r) → (wf : mvregWf n r s) → (hij : Path Bool (finEq r i j) false) → Path Bool (mvregLive n r (mvregConc n r i j x y s) j y) true
+mvregLiveJ n r i j x y s wf hij = trans (cong (λ (b : Bool) → mvregCell (witness s j y) (payload s j) (payload s i) (payload s j) b (finEq r j j) (finEq n y x) (finEq n y y)) (trans (natEqSym (witness j) (witness i)) hij)) (trans (cong (λ (b : Bool) → mvregCell (witness s j y) (payload s j) (payload s i) (payload s j) false b (finEq n y x) (finEq n y y)) (natEqRefl (witness j))) (trans (cong (λ (e : Bool) → mvregCell (witness s j y) (payload s j) (payload s i) (payload s j) false true (finEq n y x) e) (natEqRefl (witness y))) (mvregRowJ (witness s j y) (payload s j) (wf j y))))
+
+mvregConflictHasL : (n : ℕ) → (r : ℕ) → (i : Fin r) → (j : Fin r) → (x : Fin n) → (y : Fin n) → (s : MVReg n r) → (wf : mvregWf n r s) → (hij : Path Bool (finEq r i j) false) → Path Bool (mvregHas n r (mvregConc n r i j x y s) x) true
+mvregConflictHasL n r i j x y s wf hij = natLeTrans 1 (flagIf (mvregLive n r (mvregConc n r i j x y s) i x) 1 0) (sumFin r (λ (k : Fin r) → flagIf (mvregLive n r (mvregConc n r i j x y s) k x) 1 0)) (cong (λ (e : Bool) → natLe 1 (flagIf e 1 0)) (mvregLiveI n r i j x y s wf hij)) (sumFinLe r (λ (k : Fin r) → flagIf (mvregLive n r (mvregConc n r i j x y s) k x) 1 0) i)
+
+mvregConflictHasR : (n : ℕ) → (r : ℕ) → (i : Fin r) → (j : Fin r) → (x : Fin n) → (y : Fin n) → (s : MVReg n r) → (wf : mvregWf n r s) → (hij : Path Bool (finEq r i j) false) → Path Bool (mvregHas n r (mvregConc n r i j x y s) y) true
+mvregConflictHasR n r i j x y s wf hij = natLeTrans 1 (flagIf (mvregLive n r (mvregConc n r i j x y s) j y) 1 0) (sumFin r (λ (k : Fin r) → flagIf (mvregLive n r (mvregConc n r i j x y s) k y) 1 0)) (cong (λ (e : Bool) → natLe 1 (flagIf e 1 0)) (mvregLiveJ n r i j x y s wf hij)) (sumFinLe r (λ (k : Fin r) → flagIf (mvregLive n r (mvregConc n r i j x y s) k y) 1 0) j)
+
+mvregConflict : (n : ℕ) → (r : ℕ) → (i : Fin r) → (j : Fin r) → (x : Fin n) → (y : Fin n) → (s : MVReg n r) → (wf : mvregWf n r s) → (hij : Path Bool (finEq r i j) false) → (hxy : Path Bool (finEq n x y) false) → Path Bool (natLe 2 (mvregCount n r (mvregConc n r i j x y s))) true
+mvregConflict n r i j x y s wf hij hxy = natLeTrans 2 (natAdd (flagIf (mvregHas n r (mvregConc n r i j x y s) x) 1 0) (flagIf (mvregHas n r (mvregConc n r i j x y s) y) 1 0)) (sumFin n (λ (z : Fin n) → flagIf (mvregHas n r (mvregConc n r i j x y s) z) 1 0)) (natLeAddMono 1 (flagIf (mvregHas n r (mvregConc n r i j x y s) x) 1 0) 1 (flagIf (mvregHas n r (mvregConc n r i j x y s) y) 1 0) (cong (λ (e : Bool) → natLe 1 (flagIf e 1 0)) (mvregConflictHasL n r i j x y s wf hij)) (cong (λ (e : Bool) → natLe 1 (flagIf e 1 0)) (mvregConflictHasR n r i j x y s wf hij))) (sumFinLeTwo n (λ (z : Fin n) → flagIf (mvregHas n r (mvregConc n r i j x y s) z) 1 0) x y hxy)
 
 -- Read n: the read of a set of values. empty when no value is present, one x
 -- when only x is present, conflict with the set and a proof that its count is
@@ -394,3 +604,98 @@ pairBot A B za zb = pack za zb
 
 pairUnit : (A : Type 0) → (B : Type 0) → (ma : A → A → A) → (mb : B → B → B) → (za : A) → (zb : B) → (ua : (x : A) → Path A (ma za x) x) → (ub : (y : B) → Path B (mb zb y) y) → (a : A × B) → Path (A × B) (pairMerge A B ma mb (pairBot A B za zb) a) a
 pairUnit A B ma mb za zb ua ub a i = pack (ua (witness a) i) (ub (payload a) i)
+
+-- The finite multiset (S2c) and the generic merge of a multiset of states
+-- (S2d, Q51 (a)). L5: a fold out of FMSet must agree with the unit,
+-- associativity, commutativity and set paths, so the merge of a multiset
+-- does not depend on the order. The set proofs use Hedberg (Q31 (a)).
+data FMSet (A : Type 0) : Type where
+  msing : (fmElem : A) → FMSet A
+  mnil : FMSet A
+  munion : (fmLeft : FMSet A) → (fmRight : FMSet A) → FMSet A
+  munit : (fmUnitS : FMSet A) → Path (FMSet A) (munion A (mnil A) fmUnitS) fmUnitS
+  massoc : (fmAssocS : FMSet A) → (fmAssocT : FMSet A) → (fmAssocU : FMSet A) → Path (FMSet A) (munion A (munion A fmAssocS fmAssocT) fmAssocU) (munion A fmAssocS (munion A fmAssocT fmAssocU))
+  mcomm : (fmCommS : FMSet A) → (fmCommT : FMSet A) → Path (FMSet A) (munion A fmCommS fmCommT) (munion A fmCommT fmCommS)
+  trunc : (fmTruncS : FMSet A) → (fmTruncT : FMSet A) → (fmTruncP : Path (FMSet A) fmTruncS fmTruncT) → (fmTruncQ : Path (FMSet A) fmTruncS fmTruncT) → Path (Path (FMSet A) fmTruncS fmTruncT) fmTruncP fmTruncQ
+
+collSet : (A : Type 0) → (a : A) → (f : (x : A) → Path A a x → Path A a x) → (fc : (x : A) → (p : Path A a x) → (q : Path A a x) → Path (Path A a x) (f x p) (f x q)) → (b : A) → (p : Path A a b) → (q : Path A a b) → Path (Path A a b) p q
+collSet A a f fc b p q j i = hcomp (λ k → [ ~ i ↦ f a (λ l → a) k , i ↦ fc b p q j k , ~ j ↦ f (p i) (λ l → p (i ∧ l)) k , j ↦ f (q i) (λ l → q (i ∧ l)) k ]) a
+
+absurdTF : (T : Type 0) → Path Bool true false → T
+absurdTF T e = transp (λ i → elim (λ (x : Bool) → Type 0) Bool T (e i)) i0 true
+
+absurdFT : (T : Type 0) → Path Bool false true → T
+absurdFT T e = transp (λ i → elim (λ (x : Bool) → Type 0) T Bool (e i)) i0 true
+
+collBoolT : (x : Bool) → Path Bool true x → Path Bool true x
+collBoolT x = elim (λ (y : Bool) → Path Bool true y → Path Bool true y) (λ (e : Path Bool true true) l → true) (λ (e : Path Bool true false) → e) x
+
+collBoolTc : (x : Bool) → (p : Path Bool true x) → (q : Path Bool true x) → Path (Path Bool true x) (collBoolT x p) (collBoolT x q)
+collBoolTc x = elim (λ (y : Bool) → (p : Path Bool true y) → (q : Path Bool true y) → Path (Path Bool true y) (collBoolT y p) (collBoolT y q)) (λ (p : Path Bool true true) (q : Path Bool true true) → refl) (λ (p : Path Bool true false) (q : Path Bool true false) → absurdTF (Path (Path Bool true false) p q) p) x
+
+collBoolF : (x : Bool) → Path Bool false x → Path Bool false x
+collBoolF x = elim (λ (y : Bool) → Path Bool false y → Path Bool false y) (λ (e : Path Bool false true) → e) (λ (e : Path Bool false false) l → false) x
+
+collBoolFc : (x : Bool) → (p : Path Bool false x) → (q : Path Bool false x) → Path (Path Bool false x) (collBoolF x p) (collBoolF x q)
+collBoolFc x = elim (λ (y : Bool) → (p : Path Bool false y) → (q : Path Bool false y) → Path (Path Bool false y) (collBoolF y p) (collBoolF y q)) (λ (p : Path Bool false true) (q : Path Bool false true) → absurdFT (Path (Path Bool false true) p q) p) (λ (p : Path Bool false false) (q : Path Bool false false) → refl) x
+
+isSetBool : (a : Bool) → (b : Bool) → (p : Path Bool a b) → (q : Path Bool a b) → Path (Path Bool a b) p q
+isSetBool a = elim (λ (c : Bool) → (b : Bool) → (p : Path Bool c b) → (q : Path Bool c b) → Path (Path Bool c b) p q) (collSet Bool true collBoolT collBoolTc) (collSet Bool false collBoolF collBoolFc) a
+
+isSetFun : (A : Type 0) → (B : Type 0) → (h : (a : B) → (b : B) → (p : Path B a b) → (q : Path B a b) → Path (Path B a b) p q) → (f : A → B) → (g : A → B) → (p : Path (A → B) f g) → (q : Path (A → B) f g) → Path (Path (A → B) f g) p q
+isSetFun A B h f g p q j i = λ (x : A) → h (f x) (g x) (λ l → p l x) (λ l → q l x) j i
+
+gsetIsSet : (n : ℕ) → (a : GSet n) → (b : GSet n) → (p : Path (GSet n) a b) → (q : Path (GSet n) a b) → Path (Path (GSet n) a b) p q
+gsetIsSet n = isSetFun (Fin n) Bool isSetBool
+
+IsSet : (A : Type 0) → Type 0
+IsSet A = (a : A) → (b : A) → (p : Path A a b) → (q : Path A a b) → Path (Path A a b) p q
+
+isSetPair : (A : Type 0) → (B : Type 0) → (ha : IsSet A) → (hb : IsSet B) → IsSet (A × B)
+isSetPair A B ha hb a b p q j i = pack (ha (witness a) (witness b) (λ l → witness (p l)) (λ l → witness (q l)) j i) (hb (payload a) (payload b) (λ l → payload (p l)) (λ l → payload (q l)) j i)
+
+natPred : ℕ → ℕ
+natPred n = fold (λ (k : ℕ) → ℕ) (λ (k : ℕ) (ih : ℕ) → k) 0 n
+
+absurdZS : (T : Type 0) → (y : ℕ) → Path ℕ 0 (natAdd y 1) → T
+absurdZS T y e = transp (λ i → fold (λ (k : ℕ) → Type 0) (λ (k : ℕ) (ih : Type 0) → T) Bool (e i)) i0 true
+
+absurdSZ : (T : Type 0) → (y : ℕ) → Path ℕ (natAdd y 1) 0 → T
+absurdSZ T y e = transp (λ i → fold (λ (k : ℕ) → Type 0) (λ (k : ℕ) (ih : Type 0) → Bool) T (e i)) i0 true
+
+collNat : (a : ℕ) → (x : ℕ) → Path ℕ a x → Path ℕ a x
+collNat a = fold (λ (c : ℕ) → (x : ℕ) → Path ℕ c x → Path ℕ c x) (λ (k : ℕ) (ih : (x : ℕ) → Path ℕ k x → Path ℕ k x) (x : ℕ) → fold (λ (y : ℕ) → Path ℕ (natAdd k 1) y → Path ℕ (natAdd k 1) y) (λ (y : ℕ) (h : Path ℕ (natAdd k 1) y → Path ℕ (natAdd k 1) y) (e : Path ℕ (natAdd k 1) (natAdd y 1)) l → natAdd (ih y (λ m → natPred (e m)) l) 1) (λ (e : Path ℕ (natAdd k 1) 0) → e) x) (λ (x : ℕ) → fold (λ (y : ℕ) → Path ℕ 0 y → Path ℕ 0 y) (λ (y : ℕ) (h : Path ℕ 0 y → Path ℕ 0 y) (e : Path ℕ 0 (natAdd y 1)) → e) (λ (e : Path ℕ 0 0) l → 0) x) a
+
+collNatC : (a : ℕ) → (x : ℕ) → (p : Path ℕ a x) → (q : Path ℕ a x) → Path (Path ℕ a x) (collNat a x p) (collNat a x q)
+collNatC a = fold (λ (c : ℕ) → (x : ℕ) → (p : Path ℕ c x) → (q : Path ℕ c x) → Path (Path ℕ c x) (collNat c x p) (collNat c x q)) (λ (k : ℕ) (ih : (x : ℕ) → (p : Path ℕ k x) → (q : Path ℕ k x) → Path (Path ℕ k x) (collNat k x p) (collNat k x q)) (x : ℕ) → fold (λ (y : ℕ) → (p : Path ℕ (natAdd k 1) y) → (q : Path ℕ (natAdd k 1) y) → Path (Path ℕ (natAdd k 1) y) (collNat (natAdd k 1) y p) (collNat (natAdd k 1) y q)) (λ (y : ℕ) (h : (p : Path ℕ (natAdd k 1) y) → (q : Path ℕ (natAdd k 1) y) → Path (Path ℕ (natAdd k 1) y) (collNat (natAdd k 1) y p) (collNat (natAdd k 1) y q)) (p : Path ℕ (natAdd k 1) (natAdd y 1)) (q : Path ℕ (natAdd k 1) (natAdd y 1)) j l → natAdd (ih y (λ m → natPred (p m)) (λ m → natPred (q m)) j l) 1) (λ (p : Path ℕ (natAdd k 1) 0) (q : Path ℕ (natAdd k 1) 0) → absurdSZ (Path (Path ℕ (natAdd k 1) 0) (collNat (natAdd k 1) 0 p) (collNat (natAdd k 1) 0 q)) k p) x) (λ (x : ℕ) → fold (λ (y : ℕ) → (p : Path ℕ 0 y) → (q : Path ℕ 0 y) → Path (Path ℕ 0 y) (collNat 0 y p) (collNat 0 y q)) (λ (y : ℕ) (h : (p : Path ℕ 0 y) → (q : Path ℕ 0 y) → Path (Path ℕ 0 y) (collNat 0 y p) (collNat 0 y q)) (p : Path ℕ 0 (natAdd y 1)) (q : Path ℕ 0 (natAdd y 1)) → absurdZS (Path (Path ℕ 0 (natAdd y 1)) (collNat 0 (natAdd y 1) p) (collNat 0 (natAdd y 1) q)) y p) (λ (p : Path ℕ 0 0) (q : Path ℕ 0 0) → refl) x) a
+
+isSetNat : IsSet ℕ
+isSetNat a = collSet ℕ a (collNat a) (collNatC a)
+
+counterIsSet : (r : ℕ) → IsSet (Counter r)
+counterIsSet r = isSetPair (Fin r → ℕ) (Fin r → ℕ) (isSetFun (Fin r) ℕ isSetNat) (isSetFun (Fin r) ℕ isSetNat)
+
+escrowIsSet : (r : ℕ) → IsSet (Escrow r)
+escrowIsSet r = isSetPair (Fin r → Fin r → ℕ) (Fin r → ℕ) (isSetFun (Fin r) (Fin r → ℕ) (isSetFun (Fin r) ℕ isSetNat)) (isSetFun (Fin r) ℕ isSetNat)
+
+mvregIsSet : (n : ℕ) → (r : ℕ) → IsSet (MVReg n r)
+mvregIsSet n r = isSetPair (Fin r → Fin n → ℕ) (Fin r → ℕ) (isSetFun (Fin r) (Fin n → ℕ) (isSetFun (Fin n) ℕ isSetNat)) (isSetFun (Fin r) ℕ isSetNat)
+
+mergeAll : (S : Type 0) → (z : S) → (mg : S → S → S) → (u : (s : S) → Path S (mg z s) s) → (al : (s : S) → (t : S) → (w : S) → Path S (mg (mg s t) w) (mg s (mg t w))) → (cm : (s : S) → (t : S) → Path S (mg s t) (mg t s)) → (hs : IsSet S) → (m : FMSet S) → S
+mergeAll S z mg u al cm hs m = fold (λ (e : S) → e) z (λ (g : S) (h : S) → mg g h) (λ (g : S) → u g) (λ (g : S) (h : S) (k : S) → al g h k) (λ (g : S) (h : S) → cm g h) (λ (g : S) (h : S) (p : Path S g h) (q : Path S g h) → hs g h p q) m
+
+-- The multiset of the first n values of f (L5r, Q46 (b)): f 0, ..., f
+-- (n - 1), one msing each.
+fmOf : (A : Type 0) → (f : ℕ → A) → (n : ℕ) → FMSet A
+fmOf A f n = fold (λ (k : ℕ) → FMSet A) (λ (k : ℕ) (x : FMSet A) → munion A x (msing A (f k))) (mnil A) n
+
+-- The left merge of f 0, ..., f (n - 1) into s, in this order (L5r, Q46
+-- (b)).
+mergeSeq : (S : Type 0) → (mg : S → S → S) → (s : S) → (f : ℕ → S) → (n : ℕ) → S
+mergeSeq S mg s f n = fold (λ (k : ℕ) → S) (λ (k : ℕ) (x : S) → mg x (f k)) s n
+
+-- The left merge of f 0, ..., f (n - 1) into s is the merge of s with the
+-- multiset of these values, for each order (L5r, Q46 (b)). The base is
+-- the unit and commutativity laws, the step is the associativity law.
+mergeSeqAll : (S : Type 0) → (z : S) → (mg : S → S → S) → (u : (s : S) → Path S (mg z s) s) → (al : (s : S) → (t : S) → (w : S) → Path S (mg (mg s t) w) (mg s (mg t w))) → (cm : (s : S) → (t : S) → Path S (mg s t) (mg t s)) → (hs : IsSet S) → (s : S) → (f : ℕ → S) → (n : ℕ) → Path S (mergeSeq S mg s f n) (mg s (mergeAll S z mg u al cm hs (fmOf S f n)))
+mergeSeqAll S z mg u al cm hs s f n = fold (λ (k : ℕ) → Path S (mergeSeq S mg s f k) (mg s (mergeAll S z mg u al cm hs (fmOf S f k)))) (λ (k : ℕ) (ih : Path S (mergeSeq S mg s f k) (mg s (mergeAll S z mg u al cm hs (fmOf S f k)))) → trans (cong (λ (x : S) → mg x (f k)) ih) (al s (mergeAll S z mg u al cm hs (fmOf S f k)) (f k))) (symm (trans (cm s z) (u s))) n

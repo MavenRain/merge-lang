@@ -1,0 +1,9 @@
+-- A written replica machine whose label is Event S: the label names the
+-- parameter, so it is not closed, and the codata is no cocell signature
+-- (rule R1, the F1 limit). A replicated form gives a closed NAMEEvent.
+data Event (S : Type 0) : Type where
+  local : (opCode : ℕ) → Event S
+  recv : (held : S) → Event S
+
+codata Replica' (S : Type 0) : Type where
+  replicaMk : (eps : S) → (step : Event S → Replica' S) → Replica' S

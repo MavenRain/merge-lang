@@ -334,6 +334,10 @@ static void put_item(FmtText *out, const FormItem *it) {
       put_str(out, it->name.text);
       put_str(out, " by escrow ");
       put_shares(out, it);
+      if (it->clause != NULL) {
+        put_str(out, " for ");
+        put_term(out, it->clause, LEVEL_BINDER);
+      }
       break;
   }
 }

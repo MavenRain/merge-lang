@@ -184,6 +184,7 @@ numbered for the admission table:
 | `ℕ`, `natAdd`, `natLe`, `natMax`, `natEq` | base type, ops | D5 (stock, decrements, rights), D4 (version counters) | S1 (kernel), S1b (`natMax` and its rules on open arguments, Q26 (a), Q27 (a)) |
 | `Fin n`, `finEq` | base type, op | D3, D4 (atom names), D8 (replica names) | S1 (kernel) |
 | `sumFin : (n : ℕ) → (Fin n → ℕ) → ℕ` | op (builtin: it unrolls at a numeral `n`, it is stuck at an open `n`; Q28 (a)) | D5 (total decrements, total rights) | S1b |
+| builtin ℕ lemmas `natEqRefl` to `sumFinMono` (the list after this table) | typing rules (Q53 (b)) | D6 "prove selected invariants": the ℕ facts of L6 and L7 | S4 |
 | `atoms NAME := a ∣ b ∣ ...` | form | D3 (tags), D4 (owners): a finite domain of opaque names | S3 |
 | `replicas A B ...` | form | D8 ("two disconnected replicas"); `Replica = Fin r` | S3 |
 | `GSet n`, `add`, `has`, `merge` | base type, ops | D3: two concurrent `add` both survive the join | S2 |
@@ -202,6 +203,41 @@ numbered for the admission table:
 | invariant laws L6, L7 | guest terms | D6 "prove selected invariants" | S4 |
 | schedules, counterexample | simulator | D7, D8 | S5 |
 | engine module | target | D7 | S7 |
+
+Builtin ℕ lemmas (Q53 (b)). `T x` is `Path Bool x true`. The arguments
+are the ℕ arguments, then the proofs:
+
+- `natEqRefl k : T (natEq k k)`
+- `natEqSound a b (e : T (natEq a b)) : Path ℕ a b`
+- `natLeRefl k : T (natLe k k)`
+- `natLeTrans a b c (p : T (natLe a b)) (q : T (natLe b c)) : T (natLe a c)`
+- `natLeMaxL a b : T (natLe a (natMax a b))`
+- `natLeMaxR a b : T (natLe b (natMax a b))`
+- `natMaxLeast a b c (p : T (natLe a c)) (q : T (natLe b c)) : T (natLe (natMax a b) c)`
+- `natLeAddMono a b c d (p : T (natLe a b)) (q : T (natLe c d)) : T (natLe (natAdd a c) (natAdd b d))`
+- `natLeSucc k : T (natLe 1 (natAdd k 1))`
+- `natEqSuccNe k : Path Bool (natEq (natAdd k 1) k) false`
+- `sumFinMono r (f g : Fin r → ℕ) (p : (j : Fin r) → T (natLe (f j) (g j))) : T (natLe (sumFin r f) (sumFin r g))`
+- `natLeMulTwo a b (p : T (natLe a b)) : T (natLe (natMul 2 a) (natMul 2 b))` (S4 L6b: natMul 2 of a neutral argument does not reduce)
+- `natLeAntisym a b (p : T (natLe a b)) (q : T (natLe b a)) : T (natEq a b)` (S4 L6b)
+- `natEqSym a b : Path Bool (natEq a b) (natEq b a)` (S4 L6b)
+- `natMulTwoSucc k : Path ℕ (natMul 2 (natAdd k 1)) (natAdd (natMul 2 k) 2)` (S4 L6b)
+- `sumFinLe r f k : T (natLe (f k) (sumFin r f))` (S4 L6b)
+- `sumFinLeTwo r f k l (h : Path Bool (natEq (witness k) (witness l)) false) : T (natLe (natAdd (f k) (f l)) (sumFin r f))` (S4 L6b)
+- `natAddAssoc a b c : Path ℕ (natAdd (natAdd a b) c) (natAdd a (natAdd b c))` (S4 L7; a guest fold on c does not close: `natAdd x (natAdd m 1)` is stuck for a neutral x)
+- `natAddComm a b : Path ℕ (natAdd a b) (natAdd b a)` (S4 L7, escrowRightsTransfer: `(out + k) + U` to `(out + U) + k`; a guest fold does not close, as for natAddAssoc)
+- `sumFinBumpLe r f j k : T (natLe (sumFin r (λ l → flagIf (finEq r l j) (natAdd (f l) k) (f l))) (natAdd (sumFin r f) k))` (S4 L7: the out of i after a transfer of k from i to j)
+- `sumFinAdd r f g : Path ℕ (sumFin r (λ j → natAdd (f j) (g j))) (natAdd (sumFin r f) (sumFin r g))` (S4 L7 sum lemma: the sum of the rights of each i)
+- `sumFinSwap r f : Path ℕ (sumFin r (λ a → sumFin r (λ b → f a b))) (sumFin r (λ b → sumFin r (λ a → f a b)))` (S4 L7 sum lemma: the sum of out is the sum of in)
+- `natLeAddCancel a b c (p : T (natLe (natAdd a c) (natAdd b c))) : T (natLe a b)` (S4 L7 sum lemma: remove the transfers from both sides)
+- `sumFinZero r : Path ℕ (sumFin r (λ j → 0)) 0` (S4 L7 base: the out and in of i at escrowBot; sumFin of a neutral r is stuck)
+- `finEqSound r a b (p : T (finEq r a b)) : Path (Fin r) a b` (S4 L7: the Fin form of natEqSound; the sum lemma needs the rights of each l, and a case finEq r l i = true moves the rights of i to l by cong; a guest path in Fin r from a witness path does not close)
+
+Trust: each lemma is a typing rule only, with no reduction. The checker
+examines each argument against its stated type, then gives the path
+`λ i → h i` over a neutral head `h` (`OP_NAT_LEMMA`). The ends of the
+path come from the statement. Two different lemmas never convert.
+`test/cubical.c` has one row that types and one misuse row per lemma.
 
 ### 3.3 Refused candidates
 
@@ -291,8 +327,9 @@ these parts and add no part.
 - J6 allocation rule: `allocate c by escrow (A ↦ a, B ↦ b)` changes the
   part `c` from `Counter` to `Escrow`. It covers only the invariant
   `nonneg c`. The library law L7 proves `nonneg c` in each reachable
-  state, so the mark is proved. Any other invariant named by the rule
-  gets `REFUSE_RULE_MISMATCH`.
+  state, so the mark is proved. The rule can name its invariant with a
+  clause, `allocate c by escrow (A ↦ a, B ↦ b) for nonneg c`. A clause
+  `for nonneg d` with d not c gets `REFUSE_RULE_MISMATCH`.
 
 ### 4.4 The three examples
 
@@ -340,7 +377,7 @@ Each code has a fix hint. S1 ports the kernel codes (`REFUSE_CELL`,
 | `REFUSE_OP_INFINITE_ARG` | an operation argument has an infinite type | "declare the argument as atoms or Fin n" |
 | `REFUSE_RAW_WRITE` | an effect is not a composition of part operations | "write the part through its operations" |
 | `REFUSE_NEEDS_COORDINATION` | J4: a pair breaks an invariant after merge | "declare an allocation rule, for example `allocate stock by escrow (...)`, or remove the invariant" |
-| `REFUSE_RULE_MISMATCH` | J6: the rule names an invariant that L7 does not prove | "an escrow rule covers `nonneg c` only" |
+| `REFUSE_RULE_MISMATCH` | J6: the rule names an invariant that L7 does not prove (`allocate c by escrow (...) for nonneg d`, d not c) | "an escrow rule covers `nonneg c` only" |
 | `REFUSE_ALLOC_SUM` | J1: the initial split does not sum to the initial stock | "make the split sum to the stock" |
 | `REFUSE_READ_WINNER` | an `MVReg` read is used where a value is needed | "fold over `Read`" |
 | `W_BOUNDED` | a law or a pair has the mark bounded | "add a proof term to get proved" |
@@ -456,9 +493,9 @@ reports are compared byte for byte.
 | L3 | `merge a a ≡ a` | proved (library) | S2 |
 | L4 | `apply i o s ≡ some t → le s t` (inflation) | proved (library, per part operation; per `Ops` script by composition, S3b) | S2 |
 | L5 | convergence: the state of a replica is `mergeAll` of the `FMSet` of states it merged (S2d, Q29 (a)), so two replicas that merged the same multiset are equal (from L1 to L3) | proved (library); the simulator also checks each delivery order (bounded) | S4 |
-| L5r | guest replicas: two `Replica S` values (S4) that got the same multiset of `recv` events after their last `local` event observe equal `eps` | proved when its guest term type-checks; else bounded (the simulator, each delivery order); a bounded run never gives proved | S4 |
+| L5r | guest replicas: two `Replica S` values (S4) that got the same multiset of `recv` events after their last `local` event observe equal `eps` | proved when its guest term type-checks; else bounded (the simulator, each delivery order); a bounded run never gives proved. S4: proved per form to `mergeSeq` (`NAMEL5r`); the multiset step is the domain lemma `mergeSeqAll` at an abstract `S` (Q54 (c)), so two orders `f`, `g` with a path `fmOf NAME f n ≡ fmOf NAME g n` give equal states through `mergeSeqAll` and `cong NAMEL5` (not per form) | S4 |
 | L6a | `GSet`: `has (merge (add x a) (add y b)) x` and the same for `y` (D3) | proved (library) | S4 |
-| L6b | `MVReg`: concurrent `write x` and `write y` with `x ≠ y` read as `conflict {x, y}` (D4) | proved (library) | S4 |
+| L6b | `MVReg`: concurrent `write x` and `write y` with `x ≠ y` read as `conflict {x, y}` (D4) | proved (library): the domain lemma `mvregConflict n r i j x y s wf hij hxy` at the `n` and `r` of each `MVReg` part is the instance (no per-form def). Its base state `s` has `wf : mvregWf n r s` (each witness at most `2 ctx + 1`, Q55 (a)); `mvregBotWf`, `mvregMergeWf` and `mvregWriteWf` show that `mvregBot`, `mvregMerge` and `mvregWrite` keep it. `hij : finEq r i j ≡ false` and `hxy : finEq n x y ≡ false` | S4 |
 | L7 | `Escrow`: in each reachable state, `rights i ≥ 0` for each `i` and the sum of the rights is `stock`, so `nonneg` holds (D5); with `restock` as `R i i` (O14) | proved (library) | S4 |
 | L8 | a program invariant under an independent pair | proved with a user term, else bounded | S4 |
 
@@ -535,7 +572,7 @@ on the new checks, docs, close (stage, commit message, next prompt).
 | S3e | the 7 forms elaborated to guest terms (Q9) on the S2 domain parts and the S2d `mergeAll`, by the evolve-lang route (Q33 (a): synthetic `DECL_DEF` nodes, a type error points at the form word); a numeric atom domain also gives `NAMEValue : NAME → ℕ` (Q34 (a)); an `op` body is one part operation, no `requires` (Q35 (a)); `REFUSE_NO_MERGE`, `REFUSE_OP_INFINITE_ARG`, `REFUSE_RAW_WRITE`, `REFUSE_ALLOC_SUM` with their docs/DIAGNOSTICS.md rows | one fixture per code; mutants on each J1 and J2 test DONE 2026-10-29: `make check` EXIT 0: examples 13 checked, 0 failed; parse refusals 22; check refusals 70 (10 new `test/check` fixtures, the text pinned); evals 173 (`test/eval/replicas.lang`, `shop.lang`, `escrow.lang`, 7 rows each); ir 13 lowered; wasm 16 modules valid; differential 1230 cases, 0 mismatches; fmt 143 canonical, 12 non-canonical pairs; merge examples 4 canonical; json 30 fixtures, diagnostics 42 codes (28 with a fixture, 14 with no fixture; `REFUSE_FORM` and its fixture removed, the 4 new codes each with a fixture `test/json/CODE.lang`); gate 0 failures; review, domain and diagnostic edit regressions passed; cubical 46 checks, 38 round trips. The four examples pass `langc check` (`tags.merge` and `owner.merge` name an atoms domain, Q36 (a)); the gate loop is still fmt only (S3x). 14/14 mutants KILLED (4 after new fixtures): the J1 `REFUSE_NO_MERGE` head test (`REFUSE_NO_MERGE.lang`); the `REFUSE_OP_INFINITE_ARG` call (json, the `form-replicated` pair), its `Fin` numeral test (new `op-fin-open`) and its `Replica` test (eval escrow); the parser Field span (the json column); the `REFUSE_ALLOC_SUM` `over` test (`alloc-sum`), the sum under the init (new `alloc-under`) and the share count (new `alloc-missing`); the J2 `REFUSE_RAW_WRITE` word test and part kind test (`raw-write`, eval shop) and arity test (new `op-arity`); `cg_value` names and `natEq` (eval replicas); `op_amount` (eval shop) |
 | S3x | the four examples parse and type (`check` GREEN; the `examples/*.merge` gate loop runs `check` too); the docs; the S3 close | the four examples GREEN DONE 2026-10-29 (on the USER S3e commit 2b4edf4): `make check` EXIT 0: examples 13 checked, 0 failed; parse refusals 22; check refusals 70; evals 173; ir 13 lowered; wasm 16 modules valid; differential 1230 cases, 0 mismatches; fmt 143 canonical, 12 non-canonical pairs; merge examples 4 canonical, 4 checked (the line text is new: the loop runs `langc check` on each file and fails on an exit that is not 0, an output that is not `ok`, or a stderr line); json 30 fixtures, diagnostics 42 codes (28 with a fixture, 14 with no fixture); cubical 63 checks, 38 round trips. 4/4 example mutants KILLED by the loop only (each file stays canonical, so the `fmt` part passes): `write` on the GSet of `tags.merge` and `add` on the MVReg of `owner.merge` (`REFUSE_RAW_WRITE`), an `Escrow` part with an init in `inventory.merge` (`REFUSE_NO_MERGE`), the shares `(A ↦ 1, B ↦ 1)` in `inventory-escrow.merge` (`REFUSE_ALLOC_SUM`). No `check.c` path is reached by the examples only: the loop also kills `counterRestock` to `escrowRestock` and the `over` test `>` to `>=`, but `test/eval/shop.lang`, `escrow.lang` and `alloc-twice` kill them too. The swap of `n` and `r` in `mvregWrite` survives the gate: each MVReg test has 2 atoms and 2 replicas |
 | S3b | kernel: the CM test admits a field `E → T A` with `E` closed data (the mandate-lang 4.6 R1 rule, its domain.lang `IO`); library `Ops A`; an `op` body can be an `Ops` script of part reads and part operations, one step at one replica (Q15 (b), Q24 (a)); L4 for scripts by composition | a fixture for the new field rule and a refused fixture where `E` mentions `A`; an eval test of a script that reads, then writes; mutants on the closed test of `E` and on the script step order. DONE 2026-10-29 (on the USER S3x commit a6d7a56; Q39 (a) to Q44 (a)): `make check` EXIT 0: examples 13 checked, 0 failed; parse refusals 22; check refusals 75 (5 new `test/check` fixtures: `cell-arrow-self`, `cell-arrow-two`, `read-counter`, `stock-mvreg`, `le-order`; the `REFUSE_CELL` text adds "or a function from closed data to it"); evals 200 (`test/eval/ops-lib.lang`, `ops.lang`, `owner3.lang`, `script.lang`, `script-dec.lang`, `le.lang`); ir 13 lowered; wasm 16 modules valid; differential 1230 cases, 0 mismatches; fmt 155 canonical, 13 non-canonical pairs (`form-op-steps`); merge examples 4 canonical, 4 checked; json 30 fixtures, diagnostics 42 codes (28 with a fixture, 14 with no fixture); gate 0 failures; review, domain and diagnostic edit regressions passed; cubical 63 checks, 38 round trips. U1 the arrow field rule and the catamorphism `fold` at the field (`cell-field.lang` refuses `E = A`); U2 `Ops A` and the runner `NAMERun` (Q44 (a): `owner3.lang` closes the S3x `n` and `r` swap gap); U3 the script syntax `x ← read PART; ...`; U4 `PLe` and `PLeTrans` for each part, the L4 of three scripts of two steps in `le.lang` (Q43 (b), a `NAMEOPL4` term for each script op, is not done). 10/10 mutants KILLED by a test: M1 the closed test of `E` (`cell-field`); M2 `self_uses == 1u` to `>= 1u` (`cell-arrow-two`); M3b `fold_arrow_field` returns `k` (eval `ops`); M4 the telescope; M5 `family_class`; M6 the script step order (eval `script claimBot`); M7 the read part index (`stock-mvreg`, eval `shop tagged`); M8b the `run_cast` false branch (`raw-write`); M9a the total `kc` (eval `script bothBen`); M9b the partial `kc` (eval `script-dec soldTagged`) |
-| S4 | the checker: J4 to J6, the bounded search core in C (shared with S5), `REFUSE_NEEDS_COORDINATION`, `REFUSE_RULE_MISMATCH`, `REFUSE_READ_WINNER`, `W_BOUNDED`; L5, L5r, L6a, L6b, L7, L8; the `Replica S` cofamily with `Event = local Op ∣ recv S` (Q16 (b), Q25 (a)); `laws` and `pairs` counts in `check --json` | one test per code with its JSON shape; `inventory.merge` refused, `inventory-escrow.merge` GREEN with L7 proved; L5r proved or bounded, never proved by a bounded run; mutants on each class test and on L7 |
+| S4 | the checker: J4 to J6, the bounded search core in C (shared with S5), `REFUSE_NEEDS_COORDINATION`, `REFUSE_RULE_MISMATCH`, `REFUSE_READ_WINNER`, `W_BOUNDED`; L5, L5r, L6a, L6b, L7, L8; the `Replica S` cofamily with `Event = local Op ∣ recv S` (Q16 (b), Q25 (a)); `laws` and `pairs` counts in `check --json` | one test per code with its JSON shape; `inventory.merge` refused, `inventory-escrow.merge` GREEN with L7 proved; L5r proved or bounded, never proved by a bounded run; mutants on each class test and on L7 DONE 2026-10-31 (on the USER S3b commit 263cf6d; Q45 (a), Q46 (b), Q47 (a), Q48 (a), Q49 (b), Q50 (a) to Q52 (a), Q53 (b), Q54 (c), Q55 (a)): `make check` EXIT 0: examples 13 checked, 0 failed; parse refusals 23 (`test/parse/allocate-for-no-body.lang`); check refusals 76 (`test/check/machine-open.lang`); evals 206 (`test/eval/machine.lang`); ir 13 lowered; wasm 16 modules valid; differential 1230 cases, 0 mismatches; fmt 163 canonical, 14 non-canonical pairs (`allocate-for`); merge examples 4 canonical, 3 checked, 1 refused (`inventory.merge` gets `REFUSE_NEEDS_COORDINATION`); json 35 fixtures (`REFUSE_NEEDS_COORDINATION`, `REFUSE_READ_WINNER`, `REFUSE_RULE_MISMATCH`, `W_BOUNDED`, `pair-law`), diagnostics 46 codes (32 with a fixture, 14 with no fixture); gate 0 failures; review, domain and diagnostic edit regressions passed; cubical 122 checks, 38 round trips. L5r is proved per form to `mergeSeq` (`NAMEL5r`), with the multiset step in the domain (`mergeSeqAll`, Q54 (c)); L6a and L6b are domain lemmas; L7 is proved per allocated part (`NAMEPARTL7`) for the 5.2 shape only; 25 builtin ℕ lemmas (Q53 (b), section 3). 12/12 mutants KILLED by a test, `check-clang` rc 0 on each: C1 and C2 on the class tests (`test/json/pair-law.lang`); C3 (`inventory-escrow.merge`, `W_BOUNDED` sell ∥ refill); C4 (`inventory.merge`, `REFUSE_NEEDS_COORDINATION.lang`); N1 `natLeTrans` without `q` (the row `natLeTrans`, `escrowRightsMerge` TYPE_MISMATCH); L1 `escrowStep` at `hs i`; L2 `form_l7` at `r + 1u` (`ShopStockL7` TYPE_MISMATCH); R1 the d ≠ c test (`REFUSE_RULE_MISMATCH.lang`); F1 `fmt` drops the clause (`allocate-for.canon`); O1 `op_reader` (`REFUSE_READ_WINNER.lang`); V1 `form_violation` (merge loop, json); U1 `law_refuted` (json progress line) |
 | S5 | `langc sim`: schedules, order, reduction, transcript; golden `test/sim/*.out` (the demo); determinism gate | the demo transcript equals its golden file; two runs byte-identical; mutants on the order and on the minimality test |
 | S6 | JSON report: port of `json.c`, `NAME.report.json`, the 5.3 schema shared with `check --json` | golden reports; mutants on the class map |
 | S7 | Wasm engine: the writer changes of 5.1, part templates, lowered invariants, the engine ABI | `wasm-validate`; differential gate on every simulator schedule; mutants on one template per part |
@@ -845,3 +882,89 @@ RULED (letter) is a USER ruling.
   0, 2026-10-29). RULED (a). (a) a side fixture in U2 with 3 atoms or 3
   replicas, and a STATUS line. (b) not in S3b. The reason for (a): one
   fixture kills a live mutant.
+- Q45 the `Replica` cofamily under rule R1 (S4 Unit 0, 2026-10-30).
+  RULED (a). (a) per form, no kernel work: the elaboration gives the
+  closed types `NAMEOp` and `NAMEEvent` (`local i o` ∣ `recv s`),
+  `codata NAMEMachine (S : Type 0)` with `step : NAMEEvent → NAMEMachine
+  S`, and `NAMEReplicaOf` by `corec`. (b) kernel work: R1 accepts a
+  labelled field `E A → D A` with `E` strictly positive data over the
+  parameter, so one domain `Machine S` with `Event S`. (c) rename the
+  finite `Replica` type to make the name free for (b). The reason for
+  (a): it is the Q25 (a) reading with no kernel change, and the name
+  clash with the finite `Replica` type does not occur.
+- Q46 the L5r route (S4 Unit 0, 2026-10-30). RULED (b). (a) bounded in
+  S4: the search runs each replica machine of a schedule; for two
+  replicas with the same multiset of `recv` events after their last
+  `local` event, it compares `eps` by `conv_values`; the mark is
+  bounded, with one W_BOUNDED per form. (b) a guest term per form:
+  `NAMEL5r` states `eps (recvAll m xs) ≡ NAMEMerge (eps m) (mergeAll
+  xs)` for `xs : FMSet NAME`, proved by the `FMSet` fold; the mark is
+  proved. A form whose `NAMEL5r` term does not type-check falls back to
+  (a). The reason for (b): the S2d `mergeAll` fold does the hard part,
+  and (a) puts a W_BOUNDED on each example with an op.
+- Q47 the W_BOUNDED output (S4 Unit 0, 2026-10-30). RULED (a). (a) a
+  warning record (severity warning) in `check --json`, one stderr line
+  in text mode, rc 0, stdout `ok` (the W_NONCANON form). (b) only in
+  `check --json`. The reason for (a): it is the W_NONCANON form.
+- Q48 the search home (S4 Unit 0, 2026-10-30). RULED (a). (a)
+  src/front/search.c and search.h in the checker; the search calls the
+  guest values through the Machine. (b) in main.c behind `langc check`.
+  The reason for (a): S5 calls the same API.
+- Q49 the REFUSE_RULE_MISMATCH trigger (S4 Unit 0, 2026-10-30). RULED
+  (b), the clause optional. (a) no grammar change: an allocate line on
+  part `c` with no `invariant nonneg c` line gives the code at the
+  allocate word. (b) a surface change: `allocate c by escrow (...) for
+  nonneg d`, and the code when `d ≠ c`. In both, a violation of
+  `nonneg d` with an allocate on a different part `c` stays
+  REFUSE_NEEDS_COORDINATION. The recommendation was (a). The USER ruled
+  (b), and then ruled that the `for` clause is optional: with no
+  clause, the line covers `nonneg c`; fmt prints the clause only when
+  the line has it.
+- Q50 the progress line (S4 Unit 0, 2026-10-30). RULED (a). (a) the 5.3
+  object form, with `affine` removed (a kit key with no meaning here).
+  (b) the object form, with `affine`. (c) the string form `"laws":"P of
+  T"` and a new `"pairs":"C of N"`. The reason for (a): 5.3 sets the
+  object form for S6, so S4 writes it one time.
+- Q51 the L5 home (S4 Unit 0, 2026-10-30). RULED (a). (a) move `FMSet`
+  and the generic `mergeAll` from test/eval to domain.lang (the
+  fixtures then use the domain names), with one `NAMEL5` instance per
+  form. (b) L5 stays a fixture fact: the form gets no L5 term, and the
+  law count has no L5. The reason for (a): 6.1 marks L5 "proved
+  (library)".
+- Q52 the L7 statement and proof route (S4 Unit 0, 2026-10-30). RULED
+  (a). L7 is a fact about the system (replica `i` is the only writer of
+  row `i` of `R` and of `U i`), not about one state. (a) domain
+  `EscrowOwn r i s t` with lemmas: each op of replica `i` keeps `rights
+  i ≥ 0`; each op of a replica `j ≠ i`, and each merge with a state `t`
+  with `EscrowOwn r i s t`, gives rights of `i` at least those in `s`;
+  and the sum lemma. `escrowL7` composes them for the 5.2 schedule
+  shape (prefix, branches, reconnect), with the form instance `NAMEL7`.
+  (b) an indexed family `EscrowReach` of the replica vector, closed
+  under each op and each merge, and `escrowL7` by `elim` over it (all
+  schedules). (c) L7 bounded (the S4 test row "L7 proved" refuses it).
+  The recommendation was (b), with (a) as the fallback. The USER ruled
+  (a): L7 is proved for the 5.2 schedule shape.
+- Q53 the ℕ facts of L6a, L6b and L7 (S4 Unit 4, 2026-10-30). RULED
+  (b). The ℕ builtins compute on literals only, so `refl` does not
+  prove `natEq k k ≡ true` for a variable `k`. (a) kernel reduction
+  rules. (b) builtin ℕ lemma rules in the check.c builtin table, the
+  same shape as `symm`, `trans` and `cong`: a typing rule each, no
+  computation and no new reduction. (c) L6a, L6b and L7 bounded. (d)
+  L6a per literal atom. The recommendation was (b). The USER ruled (b):
+  L6a, L6b and L7 are guest terms that use these rules (unit U4k).
+- Q54 the multiset step of L5r (S4 STEP 1, 2026-10-30). RULED (c).
+  eval.c `conv_loop` has no `a == b` or def-head shortcut, so two stuck
+  `mergeAll` folds compare the law values under binders: the per-form
+  application takes 227 MB at 2 parts and 939 MB at 3 parts, and 4
+  parts hit OOM at the 1 GiB arena. (c) `NAMEL5r` stops at `mergeSeq`
+  (`cong` only, 50 to 64 MB); the multiset step is the domain lemma
+  `mergeSeqAll` at an abstract `S`, not applied per form. (d) a kernel
+  `conv` shortcut is an open edge. The USER ruled (c).
+- Q55 the base state of L6b (S4 STEP 3, 2026-10-30). RULED (a). L6b is
+  false at a free base s: when `witness s i x` is more than `2 (payload
+  s i) + 1`, a write of x at i does not make x live. Each reachable
+  state is well formed (each witness at most `2 ctx + 1`). (a) L6b at
+  each s with `mvregWf n r s`, and guest lemmas: `mvregBot` is well
+  formed, `mvregWrite` and `mvregMerge` keep it. (b) the hypothesis
+  only, closure as a STATUS note. (c) L6b at `mvregBot` only. (d) L6b
+  bounded. The recommendation was (b). The USER ruled (a).

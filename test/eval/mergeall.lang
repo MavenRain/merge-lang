@@ -1,93 +1,18 @@
 -- mergeAll (S2d): isSet for each part (Hedberg, Q31 (a) for ℕ) and one mergeAll eval per part.
-data FMSet (A : Type 0) : Type where
-  msing : (fmElem : A) → FMSet A
-  mnil : FMSet A
-  munion : (fmLeft : FMSet A) → (fmRight : FMSet A) → FMSet A
-  munit : (fmUnitS : FMSet A) → Path (FMSet A) (munion A (mnil A) fmUnitS) fmUnitS
-  massoc : (fmAssocS : FMSet A) → (fmAssocT : FMSet A) → (fmAssocU : FMSet A) → Path (FMSet A) (munion A (munion A fmAssocS fmAssocT) fmAssocU) (munion A fmAssocS (munion A fmAssocT fmAssocU))
-  mcomm : (fmCommS : FMSet A) → (fmCommT : FMSet A) → Path (FMSet A) (munion A fmCommS fmCommT) (munion A fmCommT fmCommS)
-  trunc : (fmTruncS : FMSet A) → (fmTruncT : FMSet A) → (fmTruncP : Path (FMSet A) fmTruncS fmTruncT) → (fmTruncQ : Path (FMSet A) fmTruncS fmTruncT) → Path (Path (FMSet A) fmTruncS fmTruncT) fmTruncP fmTruncQ
-
-collSet : (A : Type 0) → (a : A) → (f : (x : A) → Path A a x → Path A a x) → (fc : (x : A) → (p : Path A a x) → (q : Path A a x) → Path (Path A a x) (f x p) (f x q)) → (b : A) → (p : Path A a b) → (q : Path A a b) → Path (Path A a b) p q
-collSet A a f fc b p q j i = hcomp (λ k → [ ~ i ↦ f a (λ l → a) k , i ↦ fc b p q j k , ~ j ↦ f (p i) (λ l → p (i ∧ l)) k , j ↦ f (q i) (λ l → q (i ∧ l)) k ]) a
-
-absurdTF : (T : Type 0) → Path Bool true false → T
-absurdTF T e = transp (λ i → elim (λ (x : Bool) → Type 0) Bool T (e i)) i0 true
-
-absurdFT : (T : Type 0) → Path Bool false true → T
-absurdFT T e = transp (λ i → elim (λ (x : Bool) → Type 0) T Bool (e i)) i0 true
-
-fT : (x : Bool) → Path Bool true x → Path Bool true x
-fT x = elim (λ (y : Bool) → Path Bool true y → Path Bool true y) (λ (e : Path Bool true true) l → true) (λ (e : Path Bool true false) → e) x
-
-fcT : (x : Bool) → (p : Path Bool true x) → (q : Path Bool true x) → Path (Path Bool true x) (fT x p) (fT x q)
-fcT x = elim (λ (y : Bool) → (p : Path Bool true y) → (q : Path Bool true y) → Path (Path Bool true y) (fT y p) (fT y q)) (λ (p : Path Bool true true) (q : Path Bool true true) → refl) (λ (p : Path Bool true false) (q : Path Bool true false) → absurdTF (Path (Path Bool true false) p q) p) x
-
-fF : (x : Bool) → Path Bool false x → Path Bool false x
-fF x = elim (λ (y : Bool) → Path Bool false y → Path Bool false y) (λ (e : Path Bool false true) → e) (λ (e : Path Bool false false) l → false) x
-
-fcF : (x : Bool) → (p : Path Bool false x) → (q : Path Bool false x) → Path (Path Bool false x) (fF x p) (fF x q)
-fcF x = elim (λ (y : Bool) → (p : Path Bool false y) → (q : Path Bool false y) → Path (Path Bool false y) (fF y p) (fF y q)) (λ (p : Path Bool false true) (q : Path Bool false true) → absurdFT (Path (Path Bool false true) p q) p) (λ (p : Path Bool false false) (q : Path Bool false false) → refl) x
-
-isSetBool : (a : Bool) → (b : Bool) → (p : Path Bool a b) → (q : Path Bool a b) → Path (Path Bool a b) p q
-isSetBool a = elim (λ (c : Bool) → (b : Bool) → (p : Path Bool c b) → (q : Path Bool c b) → Path (Path Bool c b) p q) (collSet Bool true fT fcT) (collSet Bool false fF fcF) a
-
-isSetFun : (A : Type 0) → (B : Type 0) → (h : (a : B) → (b : B) → (p : Path B a b) → (q : Path B a b) → Path (Path B a b) p q) → (f : A → B) → (g : A → B) → (p : Path (A → B) f g) → (q : Path (A → B) f g) → Path (Path (A → B) f g) p q
-isSetFun A B h f g p q j i = λ (x : A) → h (f x) (g x) (λ l → p l x) (λ l → q l x) j i
-
-isSetGs : (n : ℕ) → (a : GSet n) → (b : GSet n) → (p : Path (GSet n) a b) → (q : Path (GSet n) a b) → Path (Path (GSet n) a b) p q
-isSetGs n = isSetFun (Fin n) Bool isSetBool
-
-IsSet : (A : Type 0) → Type 0
-IsSet A = (a : A) → (b : A) → (p : Path A a b) → (q : Path A a b) → Path (Path A a b) p q
-
-isSetPair : (A : Type 0) → (B : Type 0) → (ha : IsSet A) → (hb : IsSet B) → IsSet (A × B)
-isSetPair A B ha hb a b p q j i = pack (ha (witness a) (witness b) (λ l → witness (p l)) (λ l → witness (q l)) j i) (hb (payload a) (payload b) (λ l → payload (p l)) (λ l → payload (q l)) j i)
-
-natPred : ℕ → ℕ
-natPred n = fold (λ (k : ℕ) → ℕ) (λ (k : ℕ) (ih : ℕ) → k) 0 n
-
-absurdZS : (T : Type 0) → (y : ℕ) → Path ℕ 0 (natAdd y 1) → T
-absurdZS T y e = transp (λ i → fold (λ (k : ℕ) → Type 0) (λ (k : ℕ) (ih : Type 0) → T) Bool (e i)) i0 true
-
-absurdSZ : (T : Type 0) → (y : ℕ) → Path ℕ (natAdd y 1) 0 → T
-absurdSZ T y e = transp (λ i → fold (λ (k : ℕ) → Type 0) (λ (k : ℕ) (ih : Type 0) → Bool) T (e i)) i0 true
-
-fN : (a : ℕ) → (x : ℕ) → Path ℕ a x → Path ℕ a x
-fN a = fold (λ (c : ℕ) → (x : ℕ) → Path ℕ c x → Path ℕ c x) (λ (k : ℕ) (ih : (x : ℕ) → Path ℕ k x → Path ℕ k x) (x : ℕ) → fold (λ (y : ℕ) → Path ℕ (natAdd k 1) y → Path ℕ (natAdd k 1) y) (λ (y : ℕ) (h : Path ℕ (natAdd k 1) y → Path ℕ (natAdd k 1) y) (e : Path ℕ (natAdd k 1) (natAdd y 1)) l → natAdd (ih y (λ m → natPred (e m)) l) 1) (λ (e : Path ℕ (natAdd k 1) 0) → e) x) (λ (x : ℕ) → fold (λ (y : ℕ) → Path ℕ 0 y → Path ℕ 0 y) (λ (y : ℕ) (h : Path ℕ 0 y → Path ℕ 0 y) (e : Path ℕ 0 (natAdd y 1)) → e) (λ (e : Path ℕ 0 0) l → 0) x) a
-
-fcN : (a : ℕ) → (x : ℕ) → (p : Path ℕ a x) → (q : Path ℕ a x) → Path (Path ℕ a x) (fN a x p) (fN a x q)
-fcN a = fold (λ (c : ℕ) → (x : ℕ) → (p : Path ℕ c x) → (q : Path ℕ c x) → Path (Path ℕ c x) (fN c x p) (fN c x q)) (λ (k : ℕ) (ih : (x : ℕ) → (p : Path ℕ k x) → (q : Path ℕ k x) → Path (Path ℕ k x) (fN k x p) (fN k x q)) (x : ℕ) → fold (λ (y : ℕ) → (p : Path ℕ (natAdd k 1) y) → (q : Path ℕ (natAdd k 1) y) → Path (Path ℕ (natAdd k 1) y) (fN (natAdd k 1) y p) (fN (natAdd k 1) y q)) (λ (y : ℕ) (h : (p : Path ℕ (natAdd k 1) y) → (q : Path ℕ (natAdd k 1) y) → Path (Path ℕ (natAdd k 1) y) (fN (natAdd k 1) y p) (fN (natAdd k 1) y q)) (p : Path ℕ (natAdd k 1) (natAdd y 1)) (q : Path ℕ (natAdd k 1) (natAdd y 1)) j l → natAdd (ih y (λ m → natPred (p m)) (λ m → natPred (q m)) j l) 1) (λ (p : Path ℕ (natAdd k 1) 0) (q : Path ℕ (natAdd k 1) 0) → absurdSZ (Path (Path ℕ (natAdd k 1) 0) (fN (natAdd k 1) 0 p) (fN (natAdd k 1) 0 q)) k p) x) (λ (x : ℕ) → fold (λ (y : ℕ) → (p : Path ℕ 0 y) → (q : Path ℕ 0 y) → Path (Path ℕ 0 y) (fN 0 y p) (fN 0 y q)) (λ (y : ℕ) (h : (p : Path ℕ 0 y) → (q : Path ℕ 0 y) → Path (Path ℕ 0 y) (fN 0 y p) (fN 0 y q)) (p : Path ℕ 0 (natAdd y 1)) (q : Path ℕ 0 (natAdd y 1)) → absurdZS (Path (Path ℕ 0 (natAdd y 1)) (fN 0 (natAdd y 1) p) (fN 0 (natAdd y 1) q)) y p) (λ (p : Path ℕ 0 0) (q : Path ℕ 0 0) → refl) x) a
-
-isSetNat : IsSet ℕ
-isSetNat a = collSet ℕ a (fN a) (fcN a)
-
-isSetCt : (r : ℕ) → IsSet (Counter r)
-isSetCt r = isSetPair (Fin r → ℕ) (Fin r → ℕ) (isSetFun (Fin r) ℕ isSetNat) (isSetFun (Fin r) ℕ isSetNat)
-
-isSetEs : (r : ℕ) → IsSet (Escrow r)
-isSetEs r = isSetPair (Fin r → Fin r → ℕ) (Fin r → ℕ) (isSetFun (Fin r) (Fin r → ℕ) (isSetFun (Fin r) ℕ isSetNat)) (isSetFun (Fin r) ℕ isSetNat)
-
-isSetMv : (n : ℕ) → (r : ℕ) → IsSet (MVReg n r)
-isSetMv n r = isSetPair (Fin r → Fin n → ℕ) (Fin r → ℕ) (isSetFun (Fin r) (Fin n → ℕ) (isSetFun (Fin n) ℕ isSetNat)) (isSetFun (Fin r) ℕ isSetNat)
-
 isSetGc : IsSet (GSet 3 × Counter 2)
-isSetGc = isSetPair (GSet 3) (Counter 2) (isSetGs 3) (isSetCt 2)
-
-mergeAll : (S : Type 0) → (z : S) → (mg : S → S → S) → (u : (s : S) → Path S (mg z s) s) → (al : (s : S) → (t : S) → (w : S) → Path S (mg (mg s t) w) (mg s (mg t w))) → (cm : (s : S) → (t : S) → Path S (mg s t) (mg t s)) → (hs : IsSet S) → (m : FMSet S) → S
-mergeAll S z mg u al cm hs m = fold (λ (e : S) → e) z (λ (g : S) (h : S) → mg g h) (λ (g : S) → u g) (λ (g : S) (h : S) (k : S) → al g h k) (λ (g : S) (h : S) → cm g h) (λ (g : S) (h : S) (p : Path S g h) (q : Path S g h) → hs g h p q) m
+isSetGc = isSetPair (GSet 3) (Counter 2) (gsetIsSet 3) (counterIsSet 2)
 
 allGs : ℕ
-allGs = gsetCount 3 (mergeAll (GSet 3) (gsetBot 3) (gsetMerge 3) (gsetUnit 3) (gsetAssoc 3) (gsetComm 3) (isSetGs 3) (munion (GSet 3) (msing (GSet 3) (gsetAdd 3 (pack 0 refl) (gsetBot 3))) (munion (GSet 3) (msing (GSet 3) (gsetAdd 3 (pack 2 refl) (gsetBot 3))) (mnil (GSet 3)))))
+allGs = gsetCount 3 (mergeAll (GSet 3) (gsetBot 3) (gsetMerge 3) (gsetUnit 3) (gsetAssoc 3) (gsetComm 3) (gsetIsSet 3) (munion (GSet 3) (msing (GSet 3) (gsetAdd 3 (pack 0 refl) (gsetBot 3))) (munion (GSet 3) (msing (GSet 3) (gsetAdd 3 (pack 2 refl) (gsetBot 3))) (mnil (GSet 3)))))
 
 allCt : ℤ
-allCt = counterStock 2 5 (mergeAll (Counter 2) (counterBot 2) (counterMerge 2) (counterUnit 2) (counterAssoc 2) (counterComm 2) (isSetCt 2) (munion (Counter 2) (msing (Counter 2) (counterRestock 2 (pack 0 refl) 3 (counterBot 2))) (munion (Counter 2) (msing (Counter 2) (counterRestock 2 (pack 1 refl) 4 (counterBot 2))) (mnil (Counter 2)))))
+allCt = counterStock 2 5 (mergeAll (Counter 2) (counterBot 2) (counterMerge 2) (counterUnit 2) (counterAssoc 2) (counterComm 2) (counterIsSet 2) (munion (Counter 2) (msing (Counter 2) (counterRestock 2 (pack 0 refl) 3 (counterBot 2))) (munion (Counter 2) (msing (Counter 2) (counterRestock 2 (pack 1 refl) 4 (counterBot 2))) (mnil (Counter 2)))))
 
 allEs : ℤ
-allEs = escrowStock 2 (λ j → 4) (mergeAll (Escrow 2) (escrowBot 2) (escrowMerge 2) (escrowUnit 2) (escrowAssoc 2) (escrowComm 2) (isSetEs 2) (munion (Escrow 2) (msing (Escrow 2) (escrowRestock 2 (pack 0 refl) 3 (escrowBot 2))) (munion (Escrow 2) (msing (Escrow 2) (escrowRestock 2 (pack 1 refl) 4 (escrowBot 2))) (mnil (Escrow 2)))))
+allEs = escrowStock 2 (λ j → 4) (mergeAll (Escrow 2) (escrowBot 2) (escrowMerge 2) (escrowUnit 2) (escrowAssoc 2) (escrowComm 2) (escrowIsSet 2) (munion (Escrow 2) (msing (Escrow 2) (escrowRestock 2 (pack 0 refl) 3 (escrowBot 2))) (munion (Escrow 2) (msing (Escrow 2) (escrowRestock 2 (pack 1 refl) 4 (escrowBot 2))) (mnil (Escrow 2)))))
 
 allMv : ℕ
-allMv = mvregCount 3 2 (mergeAll (MVReg 3 2) (mvregBot 3 2) (mvregMerge 3 2) (mvregUnit 3 2) (mvregAssoc 3 2) (mvregComm 3 2) (isSetMv 3 2) (munion (MVReg 3 2) (msing (MVReg 3 2) (mvregWrite 3 2 (pack 0 refl) (pack 1 refl) (mvregBot 3 2))) (munion (MVReg 3 2) (msing (MVReg 3 2) (mvregWrite 3 2 (pack 1 refl) (pack 2 refl) (mvregBot 3 2))) (mnil (MVReg 3 2)))))
+allMv = mvregCount 3 2 (mergeAll (MVReg 3 2) (mvregBot 3 2) (mvregMerge 3 2) (mvregUnit 3 2) (mvregAssoc 3 2) (mvregComm 3 2) (mvregIsSet 3 2) (munion (MVReg 3 2) (msing (MVReg 3 2) (mvregWrite 3 2 (pack 0 refl) (pack 1 refl) (mvregBot 3 2))) (munion (MVReg 3 2) (msing (MVReg 3 2) (mvregWrite 3 2 (pack 1 refl) (pack 2 refl) (mvregBot 3 2))) (mnil (MVReg 3 2)))))
 
 gcAll : GSet 3 × Counter 2
 gcAll = mergeAll (GSet 3 × Counter 2) (pairBot (GSet 3) (Counter 2) (gsetBot 3) (counterBot 2)) (pairMerge (GSet 3) (Counter 2) (gsetMerge 3) (counterMerge 2)) (pairUnit (GSet 3) (Counter 2) (gsetMerge 3) (counterMerge 2) (gsetBot 3) (counterBot 2) (gsetUnit 3) (counterUnit 2)) (pairAssoc (GSet 3) (Counter 2) (gsetMerge 3) (counterMerge 2) (gsetAssoc 3) (counterAssoc 2)) (pairComm (GSet 3) (Counter 2) (gsetMerge 3) (counterMerge 2) (gsetComm 3) (counterComm 2)) isSetGc (munion (GSet 3 × Counter 2) (msing (GSet 3 × Counter 2) (pack (gsetAdd 3 (pack 0 refl) (gsetBot 3)) (counterRestock 2 (pack 0 refl) 3 (counterBot 2)))) (munion (GSet 3 × Counter 2) (msing (GSet 3 × Counter 2) (pack (gsetAdd 3 (pack 2 refl) (gsetBot 3)) (counterRestock 2 (pack 1 refl) 4 (counterBot 2)))) (mnil (GSet 3 × Counter 2))))

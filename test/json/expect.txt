@@ -1,89 +1,103 @@
 == DOMAIN_FAMILY.lang exit 1
 {"code":"DOMAIN_FAMILY","severity":"error","span":{"file":"test/json/DOMAIN_FAMILY.lang","line":1,"col":1,"end_line":2,"end_col":33},"expected":null,"found":null,"fix":null,"retry":true,"message":"fold over Step is not in S2: a fold over an indexed family needs a dependent eliminator (S3)"}
-{"parsed":"1 of 1","typed":"0 of 1","affine":"0 of 0","laws":"0 of 0"}
+{"parsed":"1 of 1","typed":"0 of 1","laws":{"total":0,"proved":0,"bounded":0,"refuted":0},"pairs":{"total":0,"classified":0}}
 == LEX_CHAR.lang exit 1
 {"code":"LEX_CHAR","severity":"error","span":{"file":"test/json/LEX_CHAR.lang","line":2,"col":14,"end_line":2,"end_col":15},"expected":"a symbol of the language","found":"+","fix":null,"retry":true,"message":"test/json/LEX_CHAR.lang:2:14: unexpected byte 0x2b"}
-{"parsed":"0 of 0","typed":"0 of 0","affine":"0 of 0","laws":"0 of 0"}
+{"parsed":"0 of 0","typed":"0 of 0","laws":{"total":0,"proved":0,"bounded":0,"refuted":0},"pairs":{"total":0,"classified":0}}
 == LEX_NAT_RANGE.lang exit 1
 {"code":"LEX_NAT_RANGE","severity":"error","span":{"file":"test/json/LEX_NAT_RANGE.lang","line":2,"col":5,"end_line":2,"end_col":25},"expected":"a Nat literal at most 18446744073709551615","found":"18446744073709551616","fix":null,"retry":true,"message":"test/json/LEX_NAT_RANGE.lang:2:5: a Nat literal is larger than 2^64 - 1"}
-{"parsed":"0 of 0","typed":"0 of 0","affine":"0 of 0","laws":"0 of 0"}
+{"parsed":"0 of 0","typed":"0 of 0","laws":{"total":0,"proved":0,"bounded":0,"refuted":0},"pairs":{"total":0,"classified":0}}
 == NAME_UNKNOWN.lang exit 1
 {"code":"NAME_UNKNOWN","severity":"error","span":{"file":"test/json/NAME_UNKNOWN.lang","line":2,"col":10,"end_line":2,"end_col":14},"expected":"Bool","found":"Flag","fix":"Bool","retry":true,"message":"unknown name Flag (S1 removed it); use Bool"}
-{"parsed":"1 of 1","typed":"0 of 1","affine":"0 of 0","laws":"0 of 0"}
+{"parsed":"1 of 1","typed":"0 of 1","laws":{"total":0,"proved":0,"bounded":0,"refuted":0},"pairs":{"total":0,"classified":0}}
 == PARSE_CLAUSE_NAME.lang exit 1
 {"code":"PARSE_CLAUSE_NAME","severity":"error","span":{"file":"test/json/PARSE_CLAUSE_NAME.lang","line":3,"col":1,"end_line":3,"end_col":6},"expected":"total","found":"count","fix":"total","retry":true,"message":"test/json/PARSE_CLAUSE_NAME.lang:3:1: the clause name count is not the signature name total"}
-{"parsed":"0 of 1","typed":"0 of 1","affine":"0 of 0","laws":"0 of 0"}
+{"parsed":"0 of 1","typed":"0 of 1","laws":{"total":0,"proved":0,"bounded":0,"refuted":0},"pairs":{"total":0,"classified":0}}
 == PARSE_CTOR_RESULT.lang exit 1
 {"code":"PARSE_CTOR_RESULT","severity":"error","span":{"file":"test/json/PARSE_CTOR_RESULT.lang","line":3,"col":3,"end_line":3,"end_col":12},"expected":"Coin","found":"ℕ","fix":null,"retry":true,"message":"test/json/PARSE_CTOR_RESULT.lang:3:3: the constructor heads must end in Coin"}
-{"parsed":"0 of 1","typed":"0 of 1","affine":"0 of 0","laws":"0 of 0"}
+{"parsed":"0 of 1","typed":"0 of 1","laws":{"total":0,"proved":0,"bounded":0,"refuted":0},"pairs":{"total":0,"classified":0}}
 == PARSE_DEPTH.lang exit 1
 {"code":"PARSE_DEPTH","severity":"error","span":{"file":"test/json/PARSE_DEPTH.lang","line":2,"col":508,"end_line":2,"end_col":509},"expected":null,"found":null,"fix":null,"retry":true,"message":"test/json/PARSE_DEPTH.lang:2:508: terms nest deeper than 1000 levels"}
-{"parsed":"0 of 1","typed":"0 of 1","affine":"0 of 0","laws":"0 of 0"}
+{"parsed":"0 of 1","typed":"0 of 1","laws":{"total":0,"proved":0,"bounded":0,"refuted":0},"pairs":{"total":0,"classified":0}}
 == PARSE_EXPECT.lang exit 1
 {"code":"PARSE_EXPECT","severity":"error","span":{"file":"test/json/PARSE_EXPECT.lang","line":3,"col":1,"end_line":3,"end_col":1},"expected":"')'","found":"end of input","fix":null,"retry":true,"message":"test/json/PARSE_EXPECT.lang:3:1: expected ')', found end of input"}
-{"parsed":"0 of 1","typed":"0 of 1","affine":"0 of 0","laws":"0 of 0"}
+{"parsed":"0 of 1","typed":"0 of 1","laws":{"total":0,"proved":0,"bounded":0,"refuted":0},"pairs":{"total":0,"classified":0}}
 == REFUSE_ALLOC_SUM.lang exit 1
 {"code":"REFUSE_ALLOC_SUM","severity":"error","span":{"file":"test/json/REFUSE_ALLOC_SUM.lang","line":5,"col":3,"end_line":5,"end_col":11},"expected":null,"found":null,"fix":null,"retry":true,"message":"allocate stock: give each replica one share, and the shares sum to the Counter init 1"}
-{"parsed":"2 of 2","typed":"1 of 2","affine":"0 of 0","laws":"0 of 0"}
+{"parsed":"2 of 2","typed":"1 of 2","laws":{"total":0,"proved":0,"bounded":0,"refuted":0},"pairs":{"total":0,"classified":0}}
 == REFUSE_AXIOM.lang exit 1
 {"code":"REFUSE_AXIOM","severity":"error","span":{"file":"test/json/REFUSE_AXIOM.lang","line":1,"col":1,"end_line":1,"end_col":20},"expected":null,"found":null,"fix":null,"retry":true,"message":"an axiom has no proof (rule R2)"}
-{"parsed":"1 of 1","typed":"0 of 1","affine":"0 of 0","laws":"0 of 0"}
+{"parsed":"1 of 1","typed":"0 of 1","laws":{"total":0,"proved":0,"bounded":0,"refuted":0},"pairs":{"total":0,"classified":0}}
 == REFUSE_CELL.lang exit 1
 {"code":"REFUSE_CELL","severity":"error","span":{"file":"test/json/REFUSE_CELL.lang","line":1,"col":1,"end_line":2,"end_col":34},"expected":null,"found":null,"fix":null,"retry":true,"message":"Pair is not a cell signature: the field x has a type parameter as its type, so it must be the one field of its constructor (rule R1)"}
-{"parsed":"1 of 1","typed":"0 of 1","affine":"0 of 0","laws":"0 of 0"}
+{"parsed":"1 of 1","typed":"0 of 1","laws":{"total":0,"proved":0,"bounded":0,"refuted":0},"pairs":{"total":0,"classified":0}}
 == REFUSE_DATA.lang exit 1
 {"code":"REFUSE_DATA","severity":"error","span":{"file":"test/json/REFUSE_DATA.lang","line":1,"col":1,"end_line":3,"end_col":15},"expected":null,"found":null,"fix":null,"retry":true,"message":"a program cannot declare data with no type argument; a base type comes only from domain/domain.lang (rule R2)"}
-{"parsed":"1 of 1","typed":"0 of 1","affine":"0 of 0","laws":"0 of 0"}
+{"parsed":"1 of 1","typed":"0 of 1","laws":{"total":0,"proved":0,"bounded":0,"refuted":0},"pairs":{"total":0,"classified":0}}
 == REFUSE_NAME.lang exit 1
 {"code":"REFUSE_NAME","severity":"error","span":{"file":"test/json/REFUSE_NAME.lang","line":1,"col":1,"end_line":2,"end_col":11},"expected":null,"found":null,"fix":null,"retry":true,"message":"natAdd is a core name (rule R4)"}
-{"parsed":"1 of 1","typed":"0 of 1","affine":"0 of 0","laws":"0 of 0"}
+{"parsed":"1 of 1","typed":"0 of 1","laws":{"total":0,"proved":0,"bounded":0,"refuted":0},"pairs":{"total":0,"classified":0}}
+== REFUSE_NEEDS_COORDINATION.lang exit 1
+{"code":"REFUSE_NEEDS_COORDINATION","severity":"error","span":{"file":"test/json/REFUSE_NEEDS_COORDINATION.lang","line":9,"col":3,"end_line":9,"end_col":5},"expected":null,"found":"pack (λ x → 0) (λ x → natMax (flagIf (natEq (witness x) 0) 1 0) (flagIf (natEq (witness x) 1) 1 0))","fix":"declare an allocation rule, for example `allocate stock by escrow (...)`, or remove the invariant","retry":true,"message":"sell ∥ sell: the pair breaks an invariant after merge; the schedule A: sell 1; B: sell 1"}
+{"parsed":"3 of 3","typed":"2 of 3","laws":{"total":7,"proved":6,"bounded":0,"refuted":1},"pairs":{"total":1,"classified":1}}
 == REFUSE_NO_MERGE.lang exit 1
 {"code":"REFUSE_NO_MERGE","severity":"error","span":{"file":"test/json/REFUSE_NO_MERGE.lang","line":4,"col":3,"end_line":4,"end_col":8},"expected":null,"found":null,"fix":null,"retry":true,"message":"the state n has no merge; a part type is GSet T or MVReg T (T an atoms name), Counter or Escrow (Q36 (a))"}
-{"parsed":"2 of 2","typed":"1 of 2","affine":"0 of 0","laws":"0 of 0"}
+{"parsed":"2 of 2","typed":"1 of 2","laws":{"total":0,"proved":0,"bounded":0,"refuted":0},"pairs":{"total":0,"classified":0}}
 == REFUSE_OP_INFINITE_ARG.lang exit 1
 {"code":"REFUSE_OP_INFINITE_ARG","severity":"error","span":{"file":"test/json/REFUSE_OP_INFINITE_ARG.lang","line":5,"col":9,"end_line":5,"end_col":10},"expected":null,"found":null,"fix":null,"retry":true,"message":"the parameter k of op o is not finite; an op parameter type is an atoms name, Replica or Fin m"}
-{"parsed":"2 of 2","typed":"1 of 2","affine":"0 of 0","laws":"0 of 0"}
+{"parsed":"2 of 2","typed":"1 of 2","laws":{"total":6,"proved":5,"bounded":0,"refuted":0},"pairs":{"total":0,"classified":0}}
 == REFUSE_RAW_WRITE.lang exit 1
 {"code":"REFUSE_RAW_WRITE","severity":"error","span":{"file":"test/json/REFUSE_RAW_WRITE.lang","line":7,"col":3,"end_line":7,"end_col":5},"expected":null,"found":null,"fix":null,"retry":true,"message":"the body of op tag is not one part operation (Q35 (a)): add p x on a GSet, write p x on an MVReg, dec p k or restock p k on a Counter, dec p k, transfer p j k or restock p k on an allocated Counter; x ← read p reads a GSet or an MVReg and x ← stock p a Counter or an allocated Counter"}
-{"parsed":"3 of 3","typed":"2 of 3","affine":"0 of 0","laws":"0 of 0"}
+{"parsed":"3 of 3","typed":"2 of 3","laws":{"total":7,"proved":6,"bounded":0,"refuted":0},"pairs":{"total":0,"classified":0}}
+== REFUSE_READ_WINNER.lang exit 1
+{"code":"REFUSE_READ_WINNER","severity":"error","span":{"file":"test/json/REFUSE_READ_WINNER.lang","line":8,"col":42,"end_line":8,"end_col":43},"expected":null,"found":"x","fix":"fold over `Read`: `readEmpty`, `readOne u`, `readConflict s`","retry":true,"message":"op keep: x ← read owner is an MVReg read, used where a value is needed"}
+{"parsed":"3 of 3","typed":"2 of 3","laws":{"total":7,"proved":6,"bounded":0,"refuted":0},"pairs":{"total":0,"classified":0}}
 == REFUSE_REC.lang exit 1
 {"code":"REFUSE_REC","severity":"error","span":{"file":"test/json/REFUSE_REC.lang","line":1,"col":1,"end_line":2,"end_col":16},"expected":null,"found":null,"fix":null,"retry":true,"message":"a rec declaration is refused (rule R3); use fold"}
-{"parsed":"1 of 1","typed":"0 of 1","affine":"0 of 0","laws":"0 of 0"}
+{"parsed":"1 of 1","typed":"0 of 1","laws":{"total":0,"proved":0,"bounded":0,"refuted":0},"pairs":{"total":0,"classified":0}}
+== REFUSE_RULE_MISMATCH.lang exit 1
+{"code":"REFUSE_RULE_MISMATCH","severity":"error","span":{"file":"test/json/REFUSE_RULE_MISMATCH.lang","line":13,"col":43,"end_line":13,"end_col":46},"expected":"stock","found":"spare","fix":"an escrow rule on stock covers nonneg stock only: write `for nonneg stock`, or remove the clause","retry":true,"message":"allocate stock for nonneg spare: an escrow rule on stock covers nonneg stock only"}
+{"parsed":"3 of 3","typed":"2 of 3","laws":{"total":0,"proved":0,"bounded":0,"refuted":0},"pairs":{"total":0,"classified":0}}
 == TYPE_ARITY.lang exit 1
 {"code":"TYPE_ARITY","severity":"error","span":{"file":"test/json/TYPE_ARITY.lang","line":1,"col":1,"end_line":2,"end_col":17},"expected":null,"found":null,"fix":null,"retry":true,"message":"natAdd needs 2 arguments, found 1"}
-{"parsed":"1 of 1","typed":"0 of 1","affine":"0 of 0","laws":"0 of 0"}
+{"parsed":"1 of 1","typed":"0 of 1","laws":{"total":0,"proved":0,"bounded":0,"refuted":0},"pairs":{"total":0,"classified":0}}
 == TYPE_ENDPOINT.lang exit 1
 {"code":"TYPE_ENDPOINT","severity":"error","span":{"file":"test/json/TYPE_ENDPOINT.lang","line":1,"col":1,"end_line":2,"end_col":10},"expected":null,"found":null,"fix":null,"retry":true,"message":"the path at i1 normalizes to 0, the type needs 1"}
-{"parsed":"1 of 1","typed":"0 of 1","affine":"0 of 0","laws":"0 of 0"}
+{"parsed":"1 of 1","typed":"0 of 1","laws":{"total":0,"proved":0,"bounded":0,"refuted":0},"pairs":{"total":0,"classified":0}}
 == TYPE_INFER.lang exit 1
 {"code":"TYPE_INFER","severity":"error","span":{"file":"test/json/TYPE_INFER.lang","line":1,"col":1,"end_line":2,"end_col":30},"expected":null,"found":null,"fix":null,"retry":true,"message":"pack needs a declared type (x : A) × B here"}
-{"parsed":"1 of 1","typed":"0 of 1","affine":"0 of 0","laws":"0 of 0"}
+{"parsed":"1 of 1","typed":"0 of 1","laws":{"total":0,"proved":0,"bounded":0,"refuted":0},"pairs":{"total":0,"classified":0}}
 == TYPE_LINE.lang exit 1
 {"code":"TYPE_LINE","severity":"error","span":{"file":"test/json/TYPE_LINE.lang","line":1,"col":1,"end_line":2,"end_col":34},"expected":null,"found":null,"fix":null,"retry":true,"message":"transp needs a line that is constant where r holds, found the line λ i → q i"}
-{"parsed":"1 of 1","typed":"0 of 1","affine":"0 of 0","laws":"0 of 0"}
+{"parsed":"1 of 1","typed":"0 of 1","laws":{"total":0,"proved":0,"bounded":0,"refuted":0},"pairs":{"total":0,"classified":0}}
 == TYPE_MISMATCH.lang exit 1
 {"code":"TYPE_MISMATCH","severity":"error","span":{"file":"test/json/TYPE_MISMATCH.lang","line":1,"col":1,"end_line":2,"end_col":10},"expected":null,"found":null,"fix":null,"retry":true,"message":"expected a term of type Bool, found a term of type ℕ"}
-{"parsed":"1 of 1","typed":"0 of 1","affine":"0 of 0","laws":"0 of 0"}
+{"parsed":"1 of 1","typed":"0 of 1","laws":{"total":0,"proved":0,"bounded":0,"refuted":0},"pairs":{"total":0,"classified":0}}
 == TYPE_NOT_FUNCTION.lang exit 1
 {"code":"TYPE_NOT_FUNCTION","severity":"error","span":{"file":"test/json/TYPE_NOT_FUNCTION.lang","line":1,"col":1,"end_line":2,"end_col":12},"expected":null,"found":null,"fix":null,"retry":true,"message":"a term of type ℕ is applied to an argument"}
-{"parsed":"1 of 1","typed":"0 of 1","affine":"0 of 0","laws":"0 of 0"}
+{"parsed":"1 of 1","typed":"0 of 1","laws":{"total":0,"proved":0,"bounded":0,"refuted":0},"pairs":{"total":0,"classified":0}}
 == TYPE_PRETYPE.lang exit 1
 {"code":"TYPE_PRETYPE","severity":"error","span":{"file":"test/json/TYPE_PRETYPE.lang","line":1,"col":1,"end_line":2,"end_col":11},"expected":null,"found":null,"fix":null,"retry":true,"message":"expected a type in a universe, found the pretype I"}
-{"parsed":"1 of 1","typed":"0 of 1","affine":"0 of 0","laws":"0 of 0"}
+{"parsed":"1 of 1","typed":"0 of 1","laws":{"total":0,"proved":0,"bounded":0,"refuted":0},"pairs":{"total":0,"classified":0}}
 == TYPE_REFL.lang exit 1
 {"code":"TYPE_REFL","severity":"error","span":{"file":"test/json/TYPE_REFL.lang","line":4,"col":1,"end_line":5,"end_col":13},"expected":null,"found":null,"fix":null,"retry":true,"message":"refl cannot prove the equality: the left side normalizes to 1201, the right side normalizes to 1200"}
-{"parsed":"2 of 2","typed":"1 of 2","affine":"0 of 0","laws":"0 of 0"}
+{"parsed":"2 of 2","typed":"1 of 2","laws":{"total":0,"proved":0,"bounded":0,"refuted":0},"pairs":{"total":0,"classified":0}}
 == TYPE_SYSTEM.lang exit 1
 {"code":"TYPE_SYSTEM","severity":"error","span":{"file":"test/json/TYPE_SYSTEM.lang","line":1,"col":1,"end_line":2,"end_col":26},"expected":null,"found":null,"fix":null,"retry":true,"message":"two branches disagree where the faces meet at i: 1 against 2"}
-{"parsed":"1 of 1","typed":"0 of 1","affine":"0 of 0","laws":"0 of 0"}
+{"parsed":"1 of 1","typed":"0 of 1","laws":{"total":0,"proved":0,"bounded":0,"refuted":0},"pairs":{"total":0,"classified":0}}
 == TYPE_UNIVERSE.lang exit 1
 {"code":"TYPE_UNIVERSE","severity":"error","span":{"file":"test/json/TYPE_UNIVERSE.lang","line":1,"col":1,"end_line":2,"end_col":8},"expected":null,"found":null,"fix":null,"retry":true,"message":"Type 64 is above the largest universe Type 1"}
-{"parsed":"1 of 1","typed":"0 of 1","affine":"0 of 0","laws":"0 of 0"}
+{"parsed":"1 of 1","typed":"0 of 1","laws":{"total":0,"proved":0,"bounded":0,"refuted":0},"pairs":{"total":0,"classified":0}}
+== W_BOUNDED.lang exit 0
+{"code":"W_BOUNDED","severity":"warning","span":{"file":"test/json/W_BOUNDED.lang","line":9,"col":3,"end_line":9,"end_col":5},"expected":null,"found":null,"fix":null,"retry":true,"message":"refill ∥ refill: kept on all 108 schedules (bounded: 1, 2, 2); add a proof term to get proved"}
+{"parsed":"3 of 3","typed":"3 of 3","laws":{"total":7,"proved":6,"bounded":1,"refuted":0},"pairs":{"total":1,"classified":1}}
 == W_NONCANON.lang exit 0
 {"code":"W_NONCANON","severity":"warning","span":{"file":"test/json/W_NONCANON.lang","line":1,"col":1,"end_line":4,"end_col":1},"expected":"-- ASCII aliases parse; check gives W_NONCANON with the canonical text as fix.\u000akeep : ℕ → ℕ\u000akeep n = n\u000a","found":"-- ASCII aliases parse; check gives W_NONCANON with the canonical text as fix.\u000akeep : Nat -> Nat\u000akeep = fun n => n\u000a","fix":"-- ASCII aliases parse; check gives W_NONCANON with the canonical text as fix.\u000akeep : ℕ → ℕ\u000akeep n = n\u000a","retry":true,"message":"test/json/W_NONCANON.lang:1:1: lines 1 to 3 are not canonical; replace them with the fix text (the langc fmt output)"}
-{"parsed":"1 of 1","typed":"1 of 1","affine":"0 of 0","laws":"0 of 0"}
+{"parsed":"1 of 1","typed":"1 of 1","laws":{"total":0,"proved":0,"bounded":0,"refuted":0},"pairs":{"total":0,"classified":0}}
+== pair-law.lang exit 0
+{"parsed":"4 of 4","typed":"4 of 4","laws":{"total":14,"proved":14,"bounded":0,"refuted":0},"pairs":{"total":2,"classified":2}}
 == progress-part.lang exit 1
 {"code":"TYPE_MISMATCH","severity":"error","span":{"file":"test/json/progress-part.lang","line":8,"col":1,"end_line":9,"end_col":11},"expected":null,"found":null,"fix":null,"retry":true,"message":"expected a term of type ℕ, found a term of type Bool"}
-{"parsed":"3 of 3","typed":"2 of 3","affine":"0 of 0","laws":"0 of 0"}
+{"parsed":"3 of 3","typed":"2 of 3","laws":{"total":0,"proved":0,"bounded":0,"refuted":0},"pairs":{"total":0,"classified":0}}
 == progress-pass.lang exit 0
-{"parsed":"2 of 2","typed":"2 of 2","affine":"0 of 0","laws":"0 of 0"}
+{"parsed":"2 of 2","typed":"2 of 2","laws":{"total":0,"proved":0,"bounded":0,"refuted":0},"pairs":{"total":0,"classified":0}}

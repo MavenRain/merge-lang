@@ -4,6 +4,7 @@
    hint) or its type is inferred. Two types are equal when their normal forms
    are equal (front/eval.c). The checker writes core terms (front/core.h). */
 #include "front/check.h"
+#include "front/search.h"
 
 #include <string.h>
 
@@ -68,7 +69,8 @@ typedef enum {
   RULE_TRANSP,
   RULE_HCOMP,
   RULE_ELIM,
-  RULE_SUM_FIN
+  RULE_SUM_FIN,
+  RULE_NAT_LEMMA
 } Rule;
 
 typedef struct {
@@ -77,7 +79,7 @@ typedef struct {
   Rule rule;
   Op op;
   Op result;     /* VALUE0, NAT2: the result type. EMPTY: the type former. */
-  uint32_t part; /* SIGMA_PART: 0 or 1. PATHP: 0 PathP, 1 Path. */
+  uint32_t part; /* SIGMA_PART: 0 or 1. PATHP: 0 PathP, 1 Path. NAT_LEMMA: the NatLemma. */
 } Builtin;
 
 static const Builtin BUILTINS[] = {
@@ -127,6 +129,32 @@ static const Builtin BUILTINS[] = {
   {"natLe", 2, RULE_NAT2, OP_NAT_LE, OP_BOOL, 0},
   {"natMax", 2, RULE_NAT2, OP_NAT_MAX, OP_NAT, 0},
   {"sumFin", 2, RULE_SUM_FIN, OP_SUM_FIN, OP_NAT, 0},
+  /* Builtin ℕ lemmas (Q53 (b)): a typing rule each, no reduction. */
+  {"natEqRefl", 1, RULE_NAT_LEMMA, OP_NAT_LEMMA, OP_PATHP, NAT_EQ_REFL},
+  {"natEqSound", 3, RULE_NAT_LEMMA, OP_NAT_LEMMA, OP_PATHP, NAT_EQ_SOUND},
+  {"natLeRefl", 1, RULE_NAT_LEMMA, OP_NAT_LEMMA, OP_PATHP, NAT_LE_REFL},
+  {"natLeTrans", 5, RULE_NAT_LEMMA, OP_NAT_LEMMA, OP_PATHP, NAT_LE_TRANS},
+  {"natLeMaxL", 2, RULE_NAT_LEMMA, OP_NAT_LEMMA, OP_PATHP, NAT_LE_MAX_L},
+  {"natLeMaxR", 2, RULE_NAT_LEMMA, OP_NAT_LEMMA, OP_PATHP, NAT_LE_MAX_R},
+  {"natMaxLeast", 5, RULE_NAT_LEMMA, OP_NAT_LEMMA, OP_PATHP, NAT_MAX_LEAST},
+  {"natLeAddMono", 6, RULE_NAT_LEMMA, OP_NAT_LEMMA, OP_PATHP, NAT_LE_ADD_MONO},
+  {"natLeSucc", 1, RULE_NAT_LEMMA, OP_NAT_LEMMA, OP_PATHP, NAT_LE_SUCC},
+  {"natEqSuccNe", 1, RULE_NAT_LEMMA, OP_NAT_LEMMA, OP_PATHP, NAT_EQ_SUCC_NE},
+  {"sumFinMono", 4, RULE_NAT_LEMMA, OP_NAT_LEMMA, OP_PATHP, NAT_SUM_FIN_MONO},
+  {"natLeMulTwo", 3, RULE_NAT_LEMMA, OP_NAT_LEMMA, OP_PATHP, NAT_LE_MUL_TWO},
+  {"natLeAntisym", 4, RULE_NAT_LEMMA, OP_NAT_LEMMA, OP_PATHP, NAT_LE_ANTISYM},
+  {"natEqSym", 2, RULE_NAT_LEMMA, OP_NAT_LEMMA, OP_PATHP, NAT_EQ_SYM},
+  {"natMulTwoSucc", 1, RULE_NAT_LEMMA, OP_NAT_LEMMA, OP_PATHP, NAT_MUL_TWO_SUCC},
+  {"sumFinLe", 3, RULE_NAT_LEMMA, OP_NAT_LEMMA, OP_PATHP, NAT_SUM_FIN_LE},
+  {"sumFinLeTwo", 5, RULE_NAT_LEMMA, OP_NAT_LEMMA, OP_PATHP, NAT_SUM_FIN_LE_TWO},
+  {"natAddAssoc", 3, RULE_NAT_LEMMA, OP_NAT_LEMMA, OP_PATHP, NAT_ADD_ASSOC},
+  {"natAddComm", 2, RULE_NAT_LEMMA, OP_NAT_LEMMA, OP_PATHP, NAT_ADD_COMM},
+  {"sumFinBumpLe", 4, RULE_NAT_LEMMA, OP_NAT_LEMMA, OP_PATHP, NAT_SUM_FIN_BUMP_LE},
+  {"sumFinAdd", 3, RULE_NAT_LEMMA, OP_NAT_LEMMA, OP_PATHP, NAT_SUM_FIN_ADD},
+  {"sumFinSwap", 2, RULE_NAT_LEMMA, OP_NAT_LEMMA, OP_PATHP, NAT_SUM_FIN_SWAP},
+  {"natLeAddCancel", 4, RULE_NAT_LEMMA, OP_NAT_LEMMA, OP_PATHP, NAT_LE_ADD_CANCEL},
+  {"sumFinZero", 1, RULE_NAT_LEMMA, OP_NAT_LEMMA, OP_PATHP, NAT_SUM_FIN_ZERO},
+  {"finEqSound", 4, RULE_NAT_LEMMA, OP_NAT_LEMMA, OP_PATHP, NAT_FIN_EQ_SOUND},
   {"flagIf", 3, RULE_FLAG_IF, OP_FLAG_IF, OP_BOOL, 0},
   {"elim", 4, RULE_ELIM, OP_FLAG_IF, OP_BOOL, 0}
 };
@@ -1109,6 +1137,184 @@ static const Core *rule_sum_fin(Call *k) {
   return op3(c, OP_SUM_FIN, 0, 2, n, f, NULL);
 }
 
+/* The builtin ℕ lemmas (Q53 (b)). For each: the ℕ arguments (sumFinMono:
+   r, f and g; sumFinLe: r, f and k; sumFinLeTwo: r, f, k and l), the
+   proof arguments, then the two sides of each premise (indexes into the
+   ℕ arguments). */
+static const unsigned char NAT_LEMMA_SHAPE[NAT_LEMMA_COUNT][6] = {
+  [NAT_EQ_REFL] = {1, 0}, [NAT_EQ_SOUND] = {2, 1, 0, 1},
+  [NAT_LE_REFL] = {1, 0}, [NAT_LE_TRANS] = {3, 2, 0, 1, 1, 2},
+  [NAT_LE_MAX_L] = {2, 0}, [NAT_LE_MAX_R] = {2, 0},
+  [NAT_MAX_LEAST] = {3, 2, 0, 2, 1, 2}, [NAT_LE_ADD_MONO] = {4, 2, 0, 1, 2, 3},
+  [NAT_LE_SUCC] = {1, 0}, [NAT_EQ_SUCC_NE] = {1, 0}, [NAT_SUM_FIN_MONO] = {3, 1},
+  [NAT_LE_MUL_TWO] = {2, 1, 0, 1}, [NAT_LE_ANTISYM] = {2, 2, 0, 1, 1, 0},
+  [NAT_EQ_SYM] = {2, 0}, [NAT_MUL_TWO_SUCC] = {1, 0}, [NAT_SUM_FIN_LE] = {3, 0},
+  [NAT_SUM_FIN_LE_TWO] = {4, 1}, [NAT_ADD_ASSOC] = {3, 0}, [NAT_ADD_COMM] = {2, 0},
+  [NAT_SUM_FIN_BUMP_LE] = {4, 0}, [NAT_SUM_FIN_ADD] = {3, 0}, [NAT_SUM_FIN_SWAP] = {2, 0},
+  [NAT_LE_ADD_CANCEL] = {3, 1, 0, 1}, [NAT_SUM_FIN_ZERO] = {1, 0},
+  [NAT_FIN_EQ_SOUND] = {3, 1, 1, 2}
+};
+
+static const Core *nat2_core(Checker *c, Op op, const Core *x, const Core *y) {
+  return op3(c, op, 0, 2, x, y, NULL);
+}
+
+/* T b, that is Path Bool b true, with B a core term of type Bool. */
+static const Value *holds(Checker *c, const Core *b) {
+  return path_type(c, bool_type(c), here(c, b), op0(c, OP_TRUE));
+}
+
+/* (j : Fin r) → T (natLe (f j) (g j)), the premise of sumFinMono. */
+static const Value *pointwise_le(Checker *c, const Value *fin, const Core *f, const Core *g) {
+  const Core *j = core_index(c, CORE_VAR, 0u);
+  const Core *le = nat2_core(c, OP_NAT_LE, core_app(c, core_index(c, CORE_VAR, 2u), j), core_app(c, core_index(c, CORE_VAR, 1u), j));
+  const Core *line = core_bind(c, CORE_LAM, "_", NULL, op3(c, OP_BOOL, 0, 0, NULL, NULL, NULL));
+  const Core *body = op3(c, OP_PATHP, 0, 3, line, le, op3(c, OP_TRUE, 0, 0, NULL, NULL, NULL));
+  const Env *env = body == NULL ? NULL : env_push(c->m, env_push(c->m, NULL, here(c, f)), here(c, g));
+  return env == NULL ? NULL : val_closure(c->m, VAL_PI, "j", fin, env, body);
+}
+
+/* The statement of lemma L over the ℕ arguments X. */
+/* λ l → flagIf (natEq (witness l) (witness j)) (natAdd (f l) k) (f l),
+   with X = r, f, j, k: f with k added at j (sumFinBumpLe). */
+static const Core *bump_fun(Checker *c, const Core *const *x) {
+  const Core *f = quote_value(c->m, c->level + 1u, here(c, x[1]));
+  const Core *j = quote_value(c->m, c->level + 1u, here(c, x[2]));
+  const Core *k = quote_value(c->m, c->level + 1u, here(c, x[3]));
+  const Core *l = core_index(c, CORE_VAR, 0u);
+  const Core *fl = core_app(c, f, l);
+  const Core *eq = nat2_core(c, OP_NAT_EQ, op3(c, OP_WITNESS, 0, 1, l, NULL, NULL), op3(c, OP_WITNESS, 0, 1, j, NULL, NULL));
+  return core_bind(c, CORE_LAM, "l", NULL, op3(c, OP_FLAG_IF, 0, 3, eq, nat2_core(c, OP_NAT_ADD, fl, k), fl));
+}
+
+/* λ j → natAdd (f j) (g j), with X = r, f, g (sumFinAdd). */
+static const Core *add_fun(Checker *c, const Core *const *x) {
+  const Core *f = quote_value(c->m, c->level + 1u, here(c, x[1]));
+  const Core *g = quote_value(c->m, c->level + 1u, here(c, x[2]));
+  const Core *j = core_index(c, CORE_VAR, 0u);
+  return core_bind(c, CORE_LAM, "j", NULL, nat2_core(c, OP_NAT_ADD, core_app(c, f, j), core_app(c, g, j)));
+}
+
+/* λ a → sumFin r (λ b → f a b), with X = r, f; with FLIP the order of
+   the sums is b then a (sumFinSwap). */
+static const Core *swap_fun(Checker *c, const Core *const *x, int flip) {
+  const Core *r = quote_value(c->m, c->level + 1u, here(c, x[0]));
+  const Core *f = quote_value(c->m, c->level + 2u, here(c, x[1]));
+  const Core *a = core_index(c, CORE_VAR, flip ? 0u : 1u);
+  const Core *b = core_index(c, CORE_VAR, flip ? 1u : 0u);
+  const Core *body = core_app(c, core_app(c, f, a), b);
+  return core_bind(c, CORE_LAM, flip ? "b" : "a", NULL, nat2_core(c, OP_SUM_FIN, r, core_bind(c, CORE_LAM, flip ? "a" : "b", NULL, body)));
+}
+
+static const Value *nat_statement(Checker *c, NatLemma l, const Core *const *x) {
+  const Core *one = core_leaf(c, CORE_NAT, 1u);
+  const Core *two = core_leaf(c, CORE_NAT, 2u);
+  switch (l) {
+  case NAT_EQ_REFL:
+    return holds(c, nat2_core(c, OP_NAT_EQ, x[0], x[0]));
+  case NAT_EQ_SOUND:
+    return path_type(c, nat_type(c), here(c, x[0]), here(c, x[1]));
+  case NAT_LE_REFL:
+    return holds(c, nat2_core(c, OP_NAT_LE, x[0], x[0]));
+  case NAT_LE_TRANS:
+    return holds(c, nat2_core(c, OP_NAT_LE, x[0], x[2]));
+  case NAT_LE_MAX_L:
+    return holds(c, nat2_core(c, OP_NAT_LE, x[0], nat2_core(c, OP_NAT_MAX, x[0], x[1])));
+  case NAT_LE_MAX_R:
+    return holds(c, nat2_core(c, OP_NAT_LE, x[1], nat2_core(c, OP_NAT_MAX, x[0], x[1])));
+  case NAT_MAX_LEAST:
+    return holds(c, nat2_core(c, OP_NAT_LE, nat2_core(c, OP_NAT_MAX, x[0], x[1]), x[2]));
+  case NAT_LE_ADD_MONO:
+    return holds(c, nat2_core(c, OP_NAT_LE, nat2_core(c, OP_NAT_ADD, x[0], x[2]), nat2_core(c, OP_NAT_ADD, x[1], x[3])));
+  case NAT_LE_SUCC:
+    return holds(c, nat2_core(c, OP_NAT_LE, one, nat2_core(c, OP_NAT_ADD, x[0], one)));
+  case NAT_EQ_SUCC_NE:
+    return path_type(c, bool_type(c), here(c, nat2_core(c, OP_NAT_EQ, nat2_core(c, OP_NAT_ADD, x[0], one), x[0])), op0(c, OP_FALSE));
+  case NAT_SUM_FIN_MONO:
+    return holds(c, nat2_core(c, OP_NAT_LE, nat2_core(c, OP_SUM_FIN, x[0], x[1]), nat2_core(c, OP_SUM_FIN, x[0], x[2])));
+  case NAT_LE_MUL_TWO:
+    return holds(c, nat2_core(c, OP_NAT_LE, nat2_core(c, OP_NAT_MUL, two, x[0]), nat2_core(c, OP_NAT_MUL, two, x[1])));
+  case NAT_LE_ANTISYM:
+    return holds(c, nat2_core(c, OP_NAT_EQ, x[0], x[1]));
+  case NAT_EQ_SYM:
+    return path_type(c, bool_type(c), here(c, nat2_core(c, OP_NAT_EQ, x[0], x[1])), here(c, nat2_core(c, OP_NAT_EQ, x[1], x[0])));
+  case NAT_MUL_TWO_SUCC:
+    return path_type(c, nat_type(c), here(c, nat2_core(c, OP_NAT_MUL, two, nat2_core(c, OP_NAT_ADD, x[0], one))), here(c, nat2_core(c, OP_NAT_ADD, nat2_core(c, OP_NAT_MUL, two, x[0]), two)));
+  case NAT_SUM_FIN_LE:
+    return holds(c, nat2_core(c, OP_NAT_LE, core_app(c, x[1], x[2]), nat2_core(c, OP_SUM_FIN, x[0], x[1])));
+  case NAT_SUM_FIN_LE_TWO:
+    return holds(c, nat2_core(c, OP_NAT_LE, nat2_core(c, OP_NAT_ADD, core_app(c, x[1], x[2]), core_app(c, x[1], x[3])), nat2_core(c, OP_SUM_FIN, x[0], x[1])));
+  case NAT_ADD_ASSOC:
+    return path_type(c, nat_type(c), here(c, nat2_core(c, OP_NAT_ADD, nat2_core(c, OP_NAT_ADD, x[0], x[1]), x[2])), here(c, nat2_core(c, OP_NAT_ADD, x[0], nat2_core(c, OP_NAT_ADD, x[1], x[2]))));
+  case NAT_ADD_COMM:
+    return path_type(c, nat_type(c), here(c, nat2_core(c, OP_NAT_ADD, x[0], x[1])), here(c, nat2_core(c, OP_NAT_ADD, x[1], x[0])));
+  case NAT_SUM_FIN_BUMP_LE:
+    return holds(c, nat2_core(c, OP_NAT_LE, nat2_core(c, OP_SUM_FIN, x[0], bump_fun(c, x)), nat2_core(c, OP_NAT_ADD, nat2_core(c, OP_SUM_FIN, x[0], x[1]), x[3])));
+  case NAT_SUM_FIN_ADD:
+    return path_type(c, nat_type(c), here(c, nat2_core(c, OP_SUM_FIN, x[0], add_fun(c, x))), here(c, nat2_core(c, OP_NAT_ADD, nat2_core(c, OP_SUM_FIN, x[0], x[1]), nat2_core(c, OP_SUM_FIN, x[0], x[2]))));
+  case NAT_SUM_FIN_SWAP:
+    return path_type(c, nat_type(c), here(c, nat2_core(c, OP_SUM_FIN, x[0], swap_fun(c, x, 0))), here(c, nat2_core(c, OP_SUM_FIN, x[0], swap_fun(c, x, 1))));
+  case NAT_LE_ADD_CANCEL:
+    return holds(c, nat2_core(c, OP_NAT_LE, x[0], x[1]));
+  case NAT_FIN_EQ_SOUND:
+    return path_type(c, here(c, fin_core(c, x[0])), here(c, x[1]), here(c, x[2]));
+  case NAT_SUM_FIN_ZERO:
+    return path_type(c, nat_type(c), here(c, nat2_core(c, OP_SUM_FIN, x[0], core_bind(c, CORE_LAM, "j", NULL, core_leaf(c, CORE_NAT, 0u)))), here(c, core_leaf(c, CORE_NAT, 0u)));
+  case NAT_LEMMA_COUNT:
+    break;
+  }
+  return NULL;
+}
+
+/* A sumFin lemma: the first argument is r, the next are over Fin r. */
+static int sum_fin_lemma(NatLemma l) {
+  return l == NAT_SUM_FIN_MONO || l == NAT_SUM_FIN_LE || l == NAT_SUM_FIN_LE_TWO || l == NAT_SUM_FIN_BUMP_LE || l == NAT_SUM_FIN_ADD || l == NAT_SUM_FIN_SWAP || l == NAT_SUM_FIN_ZERO || l == NAT_FIN_EQ_SOUND;
+}
+
+/* The type of argument I of lemma L, after the arguments X (FIN is Fin r
+   for a sumFin lemma). */
+static const Value *nat_lemma_want(Checker *c, NatLemma l, uint32_t i, const Value *fin, const Core *const *x) {
+  const unsigned char *shape = NAT_LEMMA_SHAPE[l];
+  uint32_t p = i - shape[0];
+  int sum = sum_fin_lemma(l);
+  return i == 0u || (!sum && i < shape[0]) ? nat_type(c)
+       : l == NAT_SUM_FIN_SWAP && i == 1u ? val_arrow(c->m, fin, val_arrow(c->m, fin, nat_type(c)))
+       : l == NAT_FIN_EQ_SOUND && i < 3u ? fin
+       : l == NAT_FIN_EQ_SOUND ? holds(c, nat2_core(c, OP_NAT_EQ, op3(c, OP_WITNESS, 0, 1, x[1], NULL, NULL), op3(c, OP_WITNESS, 0, 1, x[2], NULL, NULL)))
+       : sum && (i == 1u || ((l == NAT_SUM_FIN_MONO || l == NAT_SUM_FIN_ADD) && i == 2u)) ? val_arrow(c->m, fin, nat_type(c))
+       : l == NAT_SUM_FIN_BUMP_LE && i == 3u ? nat_type(c)
+       : sum && i < shape[0] ? fin
+       : l == NAT_SUM_FIN_MONO ? pointwise_le(c, fin, x[1], x[2])
+       : l == NAT_LE_ADD_CANCEL ? holds(c, nat2_core(c, OP_NAT_LE, nat2_core(c, OP_NAT_ADD, x[0], x[2]), nat2_core(c, OP_NAT_ADD, x[1], x[2])))
+       : l == NAT_SUM_FIN_LE_TWO ? path_type(c, bool_type(c), here(c, nat2_core(c, OP_NAT_EQ, op3(c, OP_WITNESS, 0, 1, x[2], NULL, NULL), op3(c, OP_WITNESS, 0, 1, x[3], NULL, NULL))), op0(c, OP_FALSE))
+       : holds(c, nat2_core(c, l == NAT_EQ_SOUND ? OP_NAT_EQ : OP_NAT_LE, x[shape[2u + 2u * p]], x[shape[3u + 2u * p]]));
+}
+
+/* A builtin ℕ lemma: check the arguments, state the fact, and give the
+   path λ i → h i over the neutral head h (OP_NAT_LEMMA). A typing rule
+   only: no reduction, so the ends come from the statement. */
+static const Core *rule_nat_lemma(Call *k) {
+  Checker *c = k->c;
+  NatLemma l = (NatLemma)k->b->part;
+  const Core *x[6];
+  const Value *fin = NULL;
+  const Value *stated;
+  const Core *head;
+  uint32_t i;
+  for (i = 0; i < k->b->arity; i++) {
+    const Value *want = nat_lemma_want(c, l, i, fin, x);
+    x[i] = want == NULL ? NULL : check(c, k->args[i], want);
+    if (x[i] == NULL)
+      return NULL;
+    fin = sum_fin_lemma(l) && i == 0u ? here(c, fin_core(c, x[0])) : fin;
+    if (sum_fin_lemma(l) && fin == NULL)
+      return NULL;
+  }
+  stated = nat_statement(c, l, x);
+  head = stated == NULL ? NULL : core_op(c, OP_NAT_LEMMA, (uint32_t)l, 0, x, k->b->arity);
+  k->type = stated;
+  return head == NULL ? NULL : path_lam(c, "i", path_at(c, 1u, head, stated, ivar(c, 0)));
+}
 /* ~ r, r ∧ s and r ∨ s: each argument is in I, and so is the result. */
 static const Core *rule_interval(Call *k) {
   Checker *c = k->c;
@@ -1468,6 +1674,8 @@ static const Core *rule(Call *k) {
     return rule_elim(k);
   case RULE_SUM_FIN:
     return rule_sum_fin(k);
+  case RULE_NAT_LEMMA:
+    return rule_nat_lemma(k);
   case RULE_PATHP:
     return rule_pathp(k);
   }
@@ -3084,6 +3292,50 @@ static int form_shop(const Cogen *g, const Part *parts, size_t k, uint64_t r) {
          cg_def_origin(g, ORIGIN_PROGRAM, cg_join(g, name, "Merge"), cg_pi(g, NULL, self, cg_pi(g, NULL, self, self)), merge);
 }
 
+/* The unit, associativity, commutativity and set proofs of a form: the
+   pair chains over the part laws, in the order of form_shop. */
+typedef struct {
+  const Term *unit, *assoc, *comm, *set;
+} Laws;
+
+static Laws form_laws(const Cogen *g, const Part *parts, size_t k, uint64_t r) {
+  const Part *last = &parts[k - 1u];
+  const Term *type = part_term(g, last, r, NULL), *bot = part_term(g, last, r, "Bot");
+  const Term *merge = part_term(g, last, r, "Merge"), *unit = part_term(g, last, r, "Unit");
+  const Term *assoc = part_term(g, last, r, "Assoc"), *comm = part_term(g, last, r, "Comm");
+  const Term *set = part_term(g, last, r, "IsSet");
+  Laws out;
+  size_t j;
+  for (j = k - 1u; j > 0; j--) {
+    const Part *p = &parts[j - 1u];
+    const Term *a = part_term(g, p, r, NULL), *pb = part_term(g, p, r, "Bot"), *pm = part_term(g, p, r, "Merge");
+    unit = cg_spine(g, "pairUnit", (const Term *const[]){a, type, pm, merge, pb, bot, part_term(g, p, r, "Unit"), unit}, 8);
+    assoc = cg_spine(g, "pairAssoc", (const Term *const[]){a, type, pm, merge, part_term(g, p, r, "Assoc"), assoc}, 6);
+    comm = cg_spine(g, "pairComm", (const Term *const[]){a, type, pm, merge, part_term(g, p, r, "Comm"), comm}, 6);
+    set = cg_spine(g, "isSetPair", (const Term *const[]){a, type, part_term(g, p, r, "IsSet"), set}, 4);
+    bot = cg_spine(g, "pairBot", (const Term *const[]){a, type, pb, bot}, 4);
+    merge = cg_spine(g, "pairMerge", (const Term *const[]){a, type, pm, merge}, 4);
+    type = a == NULL || type == NULL ? NULL : cg_node(g, TERM_SIGMA, NULL, a, type);
+  }
+  out.unit = unit;
+  out.assoc = assoc;
+  out.comm = comm;
+  out.set = set;
+  return out;
+}
+
+/* NAMEL5 : FMSet NAME → NAME is the domain mergeAll at NAME (L5, Q51
+   (a)) with the laws L. */
+static int form_l5(const Cogen *g, const Laws *l) {
+  const char *name = g->d->name;
+  const Term *self = cg_var(g, name);
+  return cg_def_origin(g, ORIGIN_PROGRAM, cg_join(g, name, "L5"), cg_pi(g, NULL, cg_app(g, cg_var(g, "FMSet"), self), self),
+                       cg_spine(g, "mergeAll",
+                                (const Term *const[]){self, cg_var(g, cg_join(g, name, "Bot")), cg_var(g, cg_join(g, name, "Merge")),
+                                                      l->unit, l->assoc, l->comm, l->set},
+                                7));
+}
+
 static int term_has_name(const Term *t, const char *name) {
   return t != NULL && ((t->name != NULL && strcmp(t->name, name) == 0) || term_has_name(t->left, name) ||
                        term_has_name(t->right, name));
@@ -3437,6 +3689,14 @@ typedef struct {
   const char *x;
 } OpPlan;
 
+/* The writes of one op for the J4 static part (S4 design sec 1): WRITES
+   has one flag for each part, 1 when a write step changes the part; ADDS
+   is 1 when each write step is add on a GSet. */
+typedef struct {
+  unsigned char *writes;
+  int adds;
+} OpWrites;
+
 /* The script constructor of the step S on the part P, then REST. */
 static const Term *op_step(const Cogen *g, const FormItem *it, const OpPlan *s, const Part *p, uint64_t r, const Term *rest) {
   const Term *u = cg_var(g, "Unit"), *j = cg_nat(g, s->pj), *n = cg_nat(g, p->n);
@@ -3452,14 +3712,23 @@ static const Term *op_step(const Cogen *g, const FormItem *it, const OpPlan *s, 
                   (const Term *const[]){u, j, op_amount(g, it, s->args[0]), rest}, 4);
 }
 
+/* The last step before step T of IT that binds NAME, else T (NAME is a
+   parameter or a free name). */
+static size_t op_reader(const FormItem *it, size_t t, const char *name) {
+  size_t a, b = t;
+  for (a = t; a > 0 && b == t; a--) b = it->steps[a - 1u].name != NULL && strcmp(it->steps[a - 1u].name, name) == 0 ? a - 1u : t;
+  return b;
+}
+
 /* An op line (Q41 (a)): NAMEWordScript : params → Ops Unit and NAMEWord :
    Replica → params → NAME → Option NAME, the Run of the script (Q38 (a)).
    J1: REFUSE_OP_INFINITE_ARG at a parameter that is not finite. J2:
    REFUSE_RAW_WRITE at the op word when a write step is not one part
    operation `WORD PART ARG..` of the part kind of PART (Q35 (a)), or a
    read step does not read a GSet or an MVReg (read) or a Counter or an
-   allocated Counter (stock). */
-static int form_op(const Cogen *g, const FormItem *it, const Part *parts, size_t k, uint64_t r, const char *runner) {
+   allocated Counter (stock). REFUSE_READ_WINNER at an argument of a part
+   operation that is the name of an MVReg read. */
+static int form_op(const Cogen *g, const FormItem *it, const Part *parts, size_t k, uint64_t r, const char *runner, OpWrites *out) {
   Checker *c = g->c;
   const FormItem *source = it;
   FormItem scoped;
@@ -3536,8 +3805,17 @@ static int form_op(const Cogen *g, const FormItem *it, const Part *parts, size_t
                           it->name.text);
     /* WORD and PART are form labels. Only the argument expressions are in
        the scope of the parameters and the earlier reads, with the last
-       binder first. */
+       binder first. An argument that is the name of an MVReg read is a
+       Read set, not a value: REFUSE_READ_WINNER at the argument (the
+       source name, before the rename). */
     for (j = 0; plan[t].x == NULL && j < PART_OPS[plan[t].w].args; j++) {
+      const Term *arg = plan[t].args[j];
+      size_t b = arg->kind == TERM_VAR ? op_reader(it, t, arg->name) : t;
+      if (b < t && !plan[b].stock && parts[plan[b].pj].kind == PART_MVREG)
+        return diag_fail_at(c->m->diag, "REFUSE_READ_WINNER", c->m->def, word_span(arg->line, arg->col, arg->name), NULL, arg->name,
+                            "fold over `Read`: `readEmpty`, `readOne u`, `readConflict s`",
+                            "op %s: %s ← read %s is an MVReg read, used where a value is needed", it->name.text, arg->name,
+                            it->steps[b].part.text);
       for (a = t; a > 0; a--)
         plan[t].args[j] = plan[a - 1u].x == NULL ? plan[t].args[j]
                                                  : op_rename(g, plan[t].args[j], it->steps[a - 1u].name, plan[a - 1u].x);
@@ -3546,6 +3824,11 @@ static int form_op(const Cogen *g, const FormItem *it, const Part *parts, size_t
       if (plan[t].args[j] == NULL)
         return FAIL(c, "OOM", "out of memory");
     }
+  }
+  out->adds = 1;
+  for (t = 0; t <= it->step_count; t++) {
+    out->writes[plan[t].pj] = (unsigned char)(out->writes[plan[t].pj] || plan[t].x == NULL);
+    out->adds = out->adds && (plan[t].x != NULL || plan[t].w == PW_ADD);
   }
   script = cg_spine(g, "opPure", (const Term *const[]){cg_var(g, "Unit"), cg_var(g, "unit")}, 2);
   for (t = it->step_count + 1u; t > 0; t--) script = op_step(g, it, &plan[t - 1u], &parts[plan[t - 1u].pj], r, script);
@@ -3591,6 +3874,29 @@ static int form_alloc(Checker *c, const FormItem *it, Part *parts, size_t k, con
   if (parts[pj].kind != PART_COUNTER)
     return diag_fail_at(c->m->diag, "REFUSE_NO_MERGE", c->m->def, span, NULL, NULL, NULL,
                         "the state %s: only a Counter part takes an allocate; an Escrow part has no init", it->name.text);
+  /* Q49 (b): the clause has the Q37 (a) shape `nonneg d`, and d is c. */
+  if (it->clause != NULL) {
+    const Term *b = it->clause, *d = b->kind == TERM_APP ? b->right : NULL;
+    Span at = word_span(it->for_line, it->for_col, "for");
+    size_t dj = k;
+    if (d != NULL && d->kind == TERM_VAR && b->left->kind == TERM_VAR && strcmp(b->left->name, "nonneg") == 0) {
+      dj = part_index(parts, k, d->name);
+      if (dj == k)
+        return diag_fail_at(c->m->diag, "NAME_UNKNOWN", c->m->def, word_span(d->line, d->col, d->name), NULL, d->name, NULL,
+                            "unknown name %s; the part of an invariant is a state of this form", d->name);
+    }
+    if (dj == k || (parts[dj].kind != PART_COUNTER && parts[dj].split == NULL))
+      return diag_fail_at(c->m->diag, "REFUSE_RAW_WRITE", c->m->def, at, NULL, NULL, NULL,
+                          "the for clause is not nonneg PART on a Counter or an allocated Counter (Q37 (a))");
+    if (dj != pj) {
+      char fix[256];
+      snprintf(fix, sizeof fix, "an escrow rule on %s covers nonneg %s only: write `for nonneg %s`, or remove the clause",
+               it->name.text, it->name.text, it->name.text);
+      return diag_fail_at(c->m->diag, "REFUSE_RULE_MISMATCH", c->m->def, at, it->name.text, d->name, fix,
+                          "allocate %s for nonneg %s: an escrow rule on %s covers nonneg %s only", it->name.text, d->name,
+                          it->name.text, it->name.text);
+    }
+  }
   shares = arena_alloc(c->m->arena, (r + 1u) * sizeof *shares);
   if (shares == NULL)
     return FAIL(c, "OOM", "out of memory");
@@ -3632,6 +3938,17 @@ static int form_split(Cogen *g, Part *p, uint64_t r) {
                        cg_value(g, "Replica", p->shares, r));
 }
 
+/* NAMEPARTL7 : EscrowL7Law r NAMEPARTSplit (L7, Q52 (a)): the domain
+   lemma escrowL7 at the part, with the span of the allocate word. It
+   proves nonneg PART for the 5.2 shape, not for all schedules. */
+static int form_l7(Cogen *g, const Part *p, uint64_t r) {
+  const char *name = cg_join(g, cg_join(g, g->d->name, cg_word(g, p->it->name.text)), "L7");
+  if (name == NULL)
+    return FAIL(g->c, "OOM", "out of memory");
+  return cg_def_origin(g, ORIGIN_PROGRAM, name, cg_spine(g, "EscrowL7Law", (const Term *const[]){cg_nat(g, r), cg_var(g, p->split)}, 2),
+                       cg_spine(g, "escrowL7", (const Term *const[]){cg_nat(g, r), cg_var(g, p->split)}, 2));
+}
+
 /* An invariant line (Q37 (a)): `nonneg PART` on a Counter part gives
    counterNonneg r s0, on an allocated Counter escrowNonneg r split, at
    the part PART of S. Another body gives REFUSE_RAW_WRITE at the
@@ -3658,19 +3975,498 @@ static int form_inv(const Cogen *g, const FormItem *it, const Part *parts, size_
 
 /* A replicated form (Q9, Q33 (a)): the allocate lines change their
    Counter parts to Escrow parts; NAME, NAMEBot and NAMEMerge from the
-   state lines (the span of the replicated word); NAMEPARTSplit for each
-   allocate line; NAMEWord for each op line (the span of the op word);
+   state lines (the span of the replicated word); NAMEPARTSplit and
+   NAMEPARTL7 for each allocate line; NAMEWord for each op line (the span of the op word);
    NAMEInv : NAME → Bool, the and of the invariant lines (the span of the
    first invariant word). */
+/* A binder of the machine terms: BASE, primes, that is no global. The op
+   parameters get their own binders, so no user name is in scope. */
+static const char *machine_binder(const Cogen *g, const char *base) {
+  while (base != NULL && name_owner(g->c, base) != NULL)
+    base = cg_join(g, base, "'");
+  return base;
+}
+
+/* The constructor NAME with the N fields IN of a machine family; the field
+   NAME.f for the field f of IN, so it is global and no user name. A
+   repeated parameter name gets primes. */
+static int machine_ctor(const Cogen *g, Ctor *out, const char *name, const Field *in, size_t n) {
+  Field *fields = arena_alloc(g->c->m->arena, (n + 1u) * sizeof *fields);
+  size_t j, a;
+  if (fields == NULL || name == NULL)
+    return 0;
+  for (j = 0; j < n; j++) {
+    int clash = 1;
+    fields[j] = in[j];
+    fields[j].name = cg_join(g, cg_join(g, name, "."), in[j].name);
+    while (fields[j].name != NULL && clash) {
+      clash = 0;
+      for (a = 0; a < j && !clash; a++)
+        clash = strcmp(fields[a].name, fields[j].name) == 0;
+      if (clash)
+        fields[j].name = cg_join(g, fields[j].name, "'");
+    }
+    if (fields[j].name == NULL || fields[j].type == NULL)
+      return 0;
+  }
+  memset(out, 0, sizeof *out);
+  out->name = name;
+  out->fields = fields;
+  out->field_count = n;
+  out->line = g->line;
+  out->col = g->col;
+  return 1;
+}
+
+/* A closed machine family NAME : Type 0 with the N constructors CTORS, as
+   cg_pos: ORIGIN_DOMAIN, so REFUSE_DATA does not apply. */
+static int machine_family(const Cogen *g, const char *name, const Ctor *ctors, size_t n) {
+  Decl d;
+  if (!cg_start(g, name))
+    return 0;
+  memset(&d, 0, sizeof d);
+  d.kind = DECL_FAMILY;
+  d.origin = ORIGIN_DOMAIN;
+  d.line = d.end_line = g->line;
+  d.col = d.end_col = g->col;
+  d.name = name;
+  d.type = cg_univ(g, 0);
+  d.ctors = ctors;
+  d.ctor_count = n;
+  return d.type == NULL ? FAIL(g->c, "OOM", "out of memory") : check_family(g->c, &d);
+}
+
+/* The NAMEOp case of the op IT: λ (a : T1) .. → elim (λ (q : Option NAME)
+   → NAME) s (λ (x : NAME) → x) (NAMEWord i a .. s). A none keeps the
+   state s. */
+static const Term *machine_op_case(const Cogen *g, const FormItem *it, const char *i, const char *s, const char *q, const char *x) {
+  const Term *shop = cg_var(g, g->d->name);
+  const char *word = cg_word(g, it->name.text);
+  const char **as = arena_alloc(g->c->m->arena, (it->param_count + 1u) * sizeof *as);
+  const char *a = "a";
+  const Term *call = cg_app(g, cg_var(g, word == NULL ? NULL : cg_join(g, g->d->name, word)), cg_var(g, i));
+  const Term *body;
+  size_t j;
+  if (as == NULL)
+    return NULL;
+  for (j = 0; j < it->param_count; j++) {
+    as[j] = machine_binder(g, a);
+    call = cg_app(g, call, cg_var(g, as[j]));
+    a = cg_join(g, as[j], "'");
+  }
+  call = cg_app(g, call, cg_var(g, s));
+  body = cg_spine(g, "elim",
+                  (const Term *const[]){cg_lam(g, q, cg_app(g, cg_var(g, "Option"), shop), shop), cg_var(g, s), cg_lam(g, x, shop, cg_var(g, x)), call},
+                  4);
+  for (j = it->param_count; j > 0; j--)
+    body = cg_lam(g, as[j - 1u], it->params[j - 1u].type, body);
+  return body;
+}
+
+/* Q45 (a), after the op defs: NAMEOp has one constructor NAMEOpWord for
+   each op with its parameters; NAMEEvent is NAMELocal (i : Replica) (o :
+   NAMEOp) ∣ NAMERecv (s : NAME); the codata NAMEMachine (S : Type 0) has
+   NAMEMachineMk : (NAMEEps : S) → (NAMEStep : NAMEEvent → NAMEMachine S)
+   → NAMEMachine S, one observation and one labelled field with a closed
+   label (rule R1). NAMEReplicaOf : NAME → NAMEMachine NAME by the
+   corecursor: NAMEEps is the state, NAMEStep (NAMELocal i o) runs the op
+   (a none keeps the state) and NAMEStep (NAMERecv t) is NAMEMerge s t. */
+typedef struct {
+  const char *mach, *eps, *step, *recv, *replica_of;
+} MachineNames;
+
+/* L5r (Q46 (b)), after NAMEReplicaOf. NAMERecvN m f n gives the events
+   NAMERecv (f 0), ..., NAMERecv (f (n - 1)) to m in this order (the ℕ
+   fold). NAMEL5rM s f n is a path from NAMERecvN (NAMEReplicaOf s) f n
+   to NAMEReplicaOf (mergeSeq NAME NAMEMerge s f n) by the ℕ fold: the
+   base is refl, the step is cong of the delivery (NAMEStep of
+   NAMEReplicaOf u at NAMERecv t is NAMEReplicaOf (NAMEMerge u t) by
+   definition), so no law is in it. NAMEL5r is this path at NAMEEps: the
+   path from NAMEEps NAME (NAMERecvN (NAMEReplicaOf s) f n) to the left
+   merge mergeSeq NAME NAMEMerge s f n (Q54 (c)). The domain mergeSeqAll
+   (proved one time at an abstract S with the unit, associativity,
+   commutativity and set laws) gives NAMEMerge s (mergeAll .. (fmOf NAME f
+   n)) at NAME with the laws of NAMEL5, so two delivery orders f and g
+   with a path fmOf NAME f n ≡ fmOf NAME g n (the same multiset) give
+   equal states. It is not applied per form: the check of that
+   application compares the law values under binders (227 MB at 2 parts).
+   The statement is at NAMEReplicaOf s only: a machine can ignore
+   NAMERecv. */
+static int form_l5r(const Cogen *g, const MachineNames *mn) {
+  const char *d = g->d->name;
+  const char *rn = op_helper(g, NULL, cg_join(g, d, "RecvN")), *rm = op_helper(g, NULL, cg_join(g, d, "L5rM"));
+  const char *s = machine_binder(g, "s"), *f = machine_binder(g, "f"), *n = machine_binder(g, "n");
+  const char *k = machine_binder(g, "k"), *ih = machine_binder(g, "ih"), *x = machine_binder(g, "x");
+  const char *m = machine_binder(g, "m");
+  const Term *self = cg_var(g, d), *nat = cg_var(g, "Nat"), *mt = cg_app(g, cg_var(g, mn->mach), self);
+  const Term *fty = cg_pi(g, NULL, nat, self), *fk = cg_app(g, cg_var(g, f), cg_var(g, k));
+  const Term *deliver = cg_lam(g, x, mt, cg_spine(g, mn->step, (const Term *const[]){self, cg_var(g, x), cg_app(g, cg_var(g, mn->recv), fk)}, 3));
+  const Term *ro = cg_var(g, mn->replica_of), *merge = cg_var(g, cg_join(g, d, "Merge"));
+  const Term *start = cg_app(g, ro, cg_var(g, s));
+  const Term *mot[2], *got[2], *seq[2];
+  const Term *body, *walk;
+  size_t j;
+  if (rn == NULL || rm == NULL || s == NULL || f == NULL || n == NULL || k == NULL || ih == NULL || x == NULL || m == NULL)
+    return FAIL(g->c, "OOM", "out of memory");
+  /* The motive at k (j 0) and at n (j 1). */
+  for (j = 0; j < 2u; j++) {
+    const Term *at = cg_var(g, j == 0u ? k : n);
+    got[j] = cg_spine(g, rn, (const Term *const[]){start, cg_var(g, f), at}, 3);
+    seq[j] = cg_spine(g, "mergeSeq", (const Term *const[]){self, merge, cg_var(g, s), cg_var(g, f), at}, 5);
+    mot[j] = cg_spine(g, "Path", (const Term *const[]){mt, got[j], cg_app(g, ro, seq[j])}, 3);
+  }
+  body = cg_spine(g, "fold",
+                  (const Term *const[]){cg_lam(g, k, nat, mot[0]),
+                                        cg_lam(g, k, nat, cg_lam(g, ih, mot[0], cg_spine(g, "cong", (const Term *const[]){deliver, cg_var(g, ih)}, 2))),
+                                        cg_var(g, "refl"), cg_var(g, n)},
+                  4);
+  walk = cg_spine(g, "fold", (const Term *const[]){cg_lam(g, k, nat, mt), cg_lam(g, k, nat, deliver), cg_var(g, m), cg_var(g, n)}, 4);
+  return cg_def(g, rn, cg_pi(g, NULL, mt, cg_pi(g, NULL, fty, cg_pi(g, NULL, nat, mt))), cg_lam(g, m, mt, cg_lam(g, f, fty, cg_lam(g, n, nat, walk)))) &&
+         cg_def(g, rm, cg_pi(g, s, self, cg_pi(g, f, fty, cg_pi(g, n, nat, mot[1]))), cg_lam(g, s, self, cg_lam(g, f, fty, cg_lam(g, n, nat, body)))) &&
+         cg_def_origin(g, ORIGIN_PROGRAM, op_helper(g, NULL, cg_join(g, d, "L5r")),
+                       cg_pi(g, s, self, cg_pi(g, f, fty, cg_pi(g, n, nat, cg_spine(g, "Path", (const Term *const[]){self, cg_spine(g, mn->eps, (const Term *const[]){self, got[1]}, 2), seq[1]}, 3)))),
+                       cg_lam(g, s, self,
+                              cg_lam(g, f, fty,
+                                     cg_lam(g, n, nat,
+                                            cg_spine(g, "cong",
+                                                     (const Term *const[]){cg_app(g, cg_var(g, mn->eps), self),
+                                                                           cg_spine(g, rm, (const Term *const[]){cg_var(g, s), cg_var(g, f), cg_var(g, n)}, 3)},
+                                                     2)))));
+}
+
+static int form_machine(const Cogen *g) {
+  Checker *c = g->c;
+  Arena *arena = c->m->arena;
+  const char *d = g->d->name;
+  const Term *shop = cg_var(g, d);
+  const Term *replica = cg_var(g, "Replica");
+  const Term **cases = arena_alloc(arena, (g->d->item_count + 1u) * sizeof *cases);
+  Ctor *opc = arena_alloc(arena, (g->d->item_count + 1u) * sizeof *opc);
+  Ctor *evc = arena_alloc(arena, 3u * sizeof *evc);
+  Ctor *mkc = arena_alloc(arena, sizeof *mkc);
+  Field *sp = arena_alloc(arena, sizeof *sp);
+  Field *mf = arena_alloc(arena, 2u * sizeof *mf);
+  Field ef[3];
+  Decl m;
+  const char *opn = op_helper(g, NULL, cg_join(g, d, "Op")), *evn = op_helper(g, NULL, cg_join(g, d, "Event"));
+  const char *mach = op_helper(g, NULL, cg_join(g, d, "Machine")), *mk = op_helper(g, NULL, cg_join(g, d, "MachineMk"));
+  const char *s = machine_binder(g, "s"), *e = machine_binder(g, "e"), *i = machine_binder(g, "i");
+  const char *o = machine_binder(g, "o"), *t = machine_binder(g, "t"), *q = machine_binder(g, "q");
+  const char *x = machine_binder(g, "x");
+  const Term *local, *recv, *step;
+  MachineNames mn;
+  size_t j, ops = 0;
+  if (cases == NULL || opc == NULL || evc == NULL || mkc == NULL || sp == NULL || mf == NULL || opn == NULL || evn == NULL || mach == NULL || mk == NULL ||
+      s == NULL || e == NULL || i == NULL || o == NULL || t == NULL || q == NULL || x == NULL)
+    return FAIL(c, "OOM", "out of memory");
+  for (j = 0; j < g->d->item_count; j++) {
+    const FormItem *it = &g->d->items[j];
+    const char *word = it->kind == ITEM_OP ? cg_word(g, it->name.text) : NULL;
+    if (it->kind != ITEM_OP)
+      continue;
+    if (!machine_ctor(g, &opc[ops], op_helper(g, NULL, cg_join(g, opn, word)), it->params, it->param_count) ||
+        (cases[ops] = machine_op_case(g, it, i, s, q, x)) == NULL)
+      return FAIL(c, "OOM", "out of memory");
+    ops++;
+  }
+  ef[0].name = "i";
+  ef[0].type = replica;
+  ef[1].name = "o";
+  ef[1].type = cg_var(g, opn);
+  ef[2].name = "s";
+  ef[2].type = shop;
+  ef[0].line = ef[1].line = ef[2].line = g->line;
+  ef[0].col = ef[1].col = ef[2].col = g->col;
+  mn.recv = op_helper(g, NULL, cg_join(g, d, "Recv"));
+  if (!machine_ctor(g, &evc[0], op_helper(g, NULL, cg_join(g, d, "Local")), ef, 2u) || !machine_ctor(g, &evc[1], mn.recv, &ef[2], 1u))
+    return FAIL(c, "OOM", "out of memory");
+  if (!machine_family(g, opn, opc, ops) || !machine_family(g, evn, evc, 2u))
+    return 0;
+  sp->name = "S";
+  sp->type = cg_univ(g, 0);
+  sp->line = g->line;
+  sp->col = g->col;
+  /* The field names are the destructors NAMEEps and NAMEStep. */
+  mf[0].name = op_helper(g, NULL, cg_join(g, d, "Eps"));
+  mf[0].type = cg_var(g, "S");
+  mf[1].name = op_helper(g, NULL, cg_join(g, d, "Step"));
+  mf[1].type = cg_pi(g, NULL, cg_var(g, evn), cg_app(g, cg_var(g, mach), cg_var(g, "S")));
+  mf[0].line = mf[1].line = g->line;
+  mf[0].col = mf[1].col = g->col;
+  if (mf[0].name == NULL || mf[1].name == NULL || mf[0].type == NULL || mf[1].type == NULL)
+    return FAIL(c, "OOM", "out of memory");
+  memset(mkc, 0, sizeof *mkc);
+  mkc->name = mk;
+  mkc->fields = mf;
+  mkc->field_count = 2u;
+  mkc->line = g->line;
+  mkc->col = g->col;
+  memset(&m, 0, sizeof m);
+  m.kind = DECL_COFAMILY;
+  m.origin = ORIGIN_DOMAIN;
+  m.line = m.end_line = g->line;
+  m.col = m.end_col = g->col;
+  m.name = mach;
+  m.type = cg_univ(g, 0);
+  m.params = sp;
+  m.param_count = 1u;
+  m.ctors = mkc;
+  m.ctor_count = 1u;
+  if (m.type == NULL || sp->type == NULL)
+    return FAIL(c, "OOM", "out of memory");
+  if (!cg_start(g, mach) || !check_cofamily(c, &m))
+    return 0;
+  cases[ops] = cg_var(g, o);
+  local = cg_lam(g, i, replica, cg_lam(g, o, cg_var(g, opn), cg_spine(g, "fold", cases, ops + 1u)));
+  recv = cg_lam(g, t, shop, cg_spine(g, cg_join(g, d, "Merge"), (const Term *const[]){cg_var(g, s), cg_var(g, t)}, 2));
+  step = cg_lam(g, s, shop, cg_lam(g, e, cg_var(g, evn), cg_spine(g, "fold", (const Term *const[]){local, recv, cg_var(g, e)}, 3)));
+  mn.mach = mach;
+  mn.eps = mf[0].name;
+  mn.step = mf[1].name;
+  mn.replica_of = op_helper(g, NULL, cg_join(g, d, "ReplicaOf"));
+  return cg_def(g, mn.replica_of, cg_pi(g, NULL, shop, cg_app(g, cg_var(g, mach), shop)),
+                cg_lam(g, s, shop, cg_spine(g, mk, (const Term *const[]){shop, shop, cg_lam(g, x, shop, cg_var(g, x)), step, cg_var(g, s)}, 5))) &&
+         form_l5r(g, &mn);
+}
+
+/* A new warning record of M in arena memory (run_check prints the records
+   after the error). The array holds pointers: a Diag is not copied.
+   Returns NULL after OOM. */
+static Diag *machine_warn(Machine *m) {
+  Diag *rec = arena_alloc(m->arena, sizeof *rec), **grown;
+  if (rec == NULL)
+    return NULL;
+  if (m->warn_count == m->warn_cap) {
+    grown = arena_alloc(m->arena, (m->warn_cap == 0u ? 4u : 2u * m->warn_cap) * sizeof *grown);
+    if (grown == NULL)
+      return NULL;
+    if (m->warn_count > 0u)
+      memcpy(grown, m->warns, m->warn_count * sizeof *grown);
+    m->warns = grown;
+    m->warn_cap = m->warn_cap == 0u ? 4u : 2u * m->warn_cap;
+  }
+  diag_init(rec);
+  m->warns[m->warn_count++] = rec;
+  return rec;
+}
+
+/* The def index of the form def D SUFFIX, else NO_DEF. */
+static uint32_t form_def(const Cogen *g, const char *suffix) {
+  const char *name = cg_join(g, g->d->name, suffix);
+  return name == NULL ? NO_DEF : find_def(g->c->m, name);
+}
+
+/* The size of an op parameter type (op_param_finite): R for Replica, the
+   member count of an atoms name, M for Fin M. A size above SEARCH_CAP is
+   SEARCH_CAP + 1: the search then stops above the cap. */
+static uint32_t op_param_size(const Checker *c, const Term *t, uint64_t r) {
+  const Decl *atoms = t->kind == TERM_VAR ? form_decl(c, DECL_ATOMS, t->name) : NULL;
+  uint64_t n = t->kind != TERM_VAR ? t->right->nat : strcmp(t->name, "Replica") == 0 ? r : atoms == NULL ? 0u : atoms->name_count;
+  return n > SEARCH_CAP ? SEARCH_CAP + 1u : (uint32_t)n;
+}
+
+/* Appends TEXT to BUF (CAP bytes, USED < CAP in use). A full BUF keeps the
+   text that fits. Returns the new USED. */
+static size_t text_put(char *buf, size_t cap, size_t used, const char *text) {
+  size_t n = strlen(text);
+  n = used + n < cap ? n : cap - 1u - used;
+  memcpy(buf + used, text, n);
+  buf[used + n] = '\0';
+  return used + n;
+}
+
+/* The member I of the op parameter type T (op_param_size): a replica name,
+   an atoms name or numeral, or the numeral I of Fin M. */
+static const char *form_arg_text(const Cogen *g, const Term *t, const Decl *replicas, uint32_t i) {
+  const Decl *atoms = t->kind == TERM_VAR ? form_decl(g->c, DECL_ATOMS, t->name) : NULL;
+  const FormName *name = t->kind == TERM_VAR && strcmp(t->name, "Replica") == 0 ? &replicas->names[i]
+                         : atoms != NULL                                         ? &atoms->names[i]
+                                                                                 : NULL;
+  char *num;
+  if (name != NULL && name->text != NULL)
+    return name->text;
+  if ((num = arena_alloc(g->c->m->arena, 24u)) != NULL)
+    snprintf(num, 24u, "%llu", (unsigned long long)(name != NULL ? name->nat : i));
+  return num;
+}
+
+/* J4 and J6 on a violation of O1 ∥ O2 (U3, S4 design sec 1 and 7). When an
+   invariant is on an allocated part, NAMEInvL7 : NAME → Bool (the and of
+   those invariants, built on this path only, so an ok check gets no new
+   def) must hold on the merged state: L7 proves it, so false is INTERNAL.
+   Else REFUSE_NEEDS_COORDINATION at the op word of O1: the schedule (the
+   4.6 counterexample) in the message, the merged state in found. */
+static int form_violation(const Cogen *g, const Part *parts, size_t k, const Decl *replicas, const FormItem *const *ops,
+                          uint32_t o1, uint32_t o2, const SearchOutcome *out) {
+  Checker *c = g->c;
+  Machine *m = c->m;
+  const Decl *d = g->d;
+  const Term *shop = cg_var(g, d->name), *s = cg_var(g, "s"), *inv = NULL;
+  const size_t cap = 1024u;
+  char *sched = arena_alloc(m->arena, cap), *state = arena_alloc(m->arena, cap);
+  const Value *fn, *r;
+  uint32_t i, j, l7d;
+  size_t a, used = 0;
+  if (sched == NULL || state == NULL)
+    return FAIL(c, "OOM", "out of memory");
+  for (a = 0; a < d->item_count; a++) {
+    const FormItem *it = &d->items[a];
+    size_t pj = it->kind == ITEM_INVARIANT ? part_index(parts, k, it->body->right->name) : k;
+    const Term *t = NULL;
+    if (pj < k && parts[pj].alloc != NULL && !form_inv(g, it, parts, k, replicas->name_count, s, &t))
+      return 0;
+    if (t != NULL)
+      inv = inv == NULL ? t : cg_spine(g, "and", (const Term *const[]){inv, t}, 2);
+  }
+  if (inv != NULL) {
+    if (!cg_def_origin(g, ORIGIN_PROGRAM, cg_join(g, d->name, "InvL7"), cg_pi(g, NULL, shop, cg_var(g, "Bool")),
+                       cg_lam(g, "s", shop, inv)))
+      return 0;
+    if ((l7d = form_def(g, "InvL7")) == NO_DEF)
+      return FAIL(c, "INTERNAL", "search: no InvL7 def for %s", d->name);
+    if ((fn = def_value(m, l7d)) == NULL || (r = apply_value(m, fn, out->merged)) == NULL)
+      return 0;
+    if (val_is(r, OP_FALSE))
+      return FAIL(c, "INTERNAL", "L7 refuted on a reachable state: %s ∥ %s", ops[o1]->name.text, ops[o2]->name.text);
+  }
+  sched[0] = '\0';
+  for (i = 0; i < out->step_count; i++) {
+    const SearchStep *st = &out->steps[i];
+    used = text_put(sched, cap, used, i == 0u ? "" : "; ");
+    used = text_put(sched, cap, used, st->seg == 0u ? "prefix" : replicas->names[st->seg - 1u].text);
+    used = text_put(sched, cap, used, ": ");
+    used = text_put(sched, cap, used, ops[st->op]->name.text);
+    for (j = 0; j < ops[st->op]->param_count; j++) {
+      const char *arg = form_arg_text(g, ops[st->op]->params[j].type, replicas, st->args[j]);
+      if (arg == NULL)
+        return FAIL(c, "OOM", "out of memory");
+      used = text_put(sched, cap, used, " ");
+      used = text_put(sched, cap, used, arg);
+    }
+  }
+  if (!value_print(m, NULL, 0u, out->merged, state, cap) && m->diag->set)
+    return 0;
+  (void)diag_fail_at(m->diag, "REFUSE_NEEDS_COORDINATION", d->name, word_span(ops[o1]->line, ops[o1]->col, "op"), NULL, NULL,
+                     "declare an allocation rule, for example `allocate stock by escrow (...)`, or remove the invariant",
+                     "%s ∥ %s: the pair breaks an invariant after merge; the schedule %s", ops[o1]->name.text,
+                     ops[o2]->name.text, sched);
+  diag_attach(m->diag, NULL, state, NULL);
+  return 0;
+}
+
+/* J4 and J5 in U2 (S4 design sec 1 and 2), after the Inv def. Each
+   unordered op pair (O1 <= O2, in the declaration order) goes to the
+   bounded search with P 1, M 2 and N (Q17 (a)), unless a library law
+   covers it: each invariant is nonneg c with c allocated (L7), both ops
+   add to a GSet only (L6a), or both write the same MVReg part (L6b). A
+   kept pair with K > 0 gives one W_BOUNDED record at the op word of O1.
+   Each pair that goes to the search is one L8 law: bounded when kept,
+   refuted at a violation. */
+static int pair_covered(const Part *parts, size_t k, const OpWrites *ow, uint32_t o1, uint32_t o2, int l7) {
+  size_t pj;
+  int l6b = 0;
+  int mvreg_only = 1;
+  for (pj = 0; pj < k; pj++) {
+    l6b = l6b || (parts[pj].kind == PART_MVREG && ow[o1].writes[pj] && ow[o2].writes[pj]);
+    mvreg_only = mvreg_only && (parts[pj].kind == PART_MVREG || (!ow[o1].writes[pj] && !ow[o2].writes[pj]));
+  }
+  return l7 || (ow[o1].adds && ow[o2].adds) || (l6b && mvreg_only);
+}
+
+static int form_search(const Cogen *g, const Part *parts, size_t k, const Decl *replicas, const FormItem *const *ops,
+                       const OpWrites *ow, uint32_t n) {
+  Checker *c = g->c;
+  Machine *m = c->m;
+  const Decl *d = g->d;
+  uint32_t *words = arena_alloc(m->arena, (n + 1u) * sizeof *words), *arity = arena_alloc(m->arena, (n + 1u) * sizeof *arity);
+  const uint32_t **sizes = arena_alloc(m->arena, (n + 1u) * sizeof *sizes);
+  SearchBounds b = {1u, 2u, (uint32_t)replicas->name_count};
+  SearchForm f;
+  const Value *first;
+  uint32_t o1, o2, j;
+  size_t a, pj;
+  int l7 = 1;
+  if (n == 0u)
+    return 1;
+  if (words == NULL || arity == NULL || sizes == NULL)
+    return FAIL(c, "OOM", "out of memory");
+  for (a = 0; a < d->item_count; a++) {
+    const FormItem *it = &d->items[a];
+    pj = it->kind == ITEM_INVARIANT ? part_index(parts, k, it->body->right->name) : k;
+    l7 = l7 && (it->kind != ITEM_INVARIANT || (pj < k && parts[pj].alloc != NULL));
+  }
+  for (j = 0; j < n; j++) {
+    uint32_t *sz = arena_alloc(m->arena, (ops[j]->param_count + 1u) * sizeof *sz);
+    if (sz == NULL)
+      return FAIL(c, "OOM", "out of memory");
+    for (a = 0; a < ops[j]->param_count; a++) sz[a] = op_param_size(c, ops[j]->params[a].type, replicas->name_count);
+    words[j] = form_def(g, cg_word(g, ops[j]->name.text));
+    arity[j] = (uint32_t)ops[j]->param_count;
+    sizes[j] = sz;
+    if (words[j] == NO_DEF)
+      return FAIL(c, "INTERNAL", "search: no def for the op %s", ops[j]->name.text);
+  }
+  f.bot = form_def(g, "Bot");
+  f.merge = form_def(g, "Merge");
+  f.inv = form_def(g, "Inv");
+  f.words = words;
+  f.arity = arity;
+  f.sizes = sizes;
+  f.op_count = n;
+  j = replicas->name_count == 0u ? NO_DEF : find_def(m, replicas->names[0].text);
+  if (f.bot == NO_DEF || f.merge == NO_DEF || f.inv == NO_DEF || j == NO_DEF)
+    return FAIL(c, "INTERNAL", "search: no Bot, Merge, Inv or replica def for %s", d->name);
+  if ((first = def_value(m, j)) == NULL)
+    return 0;
+  if (!val_is(first, OP_PACK) || first->argc != 2u)
+    return FAIL(c, "INTERNAL", "search: the replica %s is not pack j p", replicas->names[0].text);
+  f.proof = first->args[1];
+  for (o1 = 0; o1 < n; o1++) {
+    for (o2 = o1; o2 < n; o2++) m->law_total += !pair_covered(parts, k, ow, o1, o2, l7);
+  }
+  for (o1 = 0; o1 < n; o1++) {
+    for (o2 = o1; o2 < n; o2++) {
+      SearchOutcome out;
+      Diag *rec;
+      if (!pair_covered(parts, k, ow, o1, o2, l7)) {
+        if (!search_pair(m, &f, b, o1, o2, &out))
+          return 0;
+        if (out.result == SEARCH_ABOVE_CAP)
+          return FAIL(c, "INTERNAL", "search above the cap: %s ∥ %s visits more than %u schedules", ops[o1]->name.text,
+                      ops[o2]->name.text, SEARCH_CAP);
+        if (out.result == SEARCH_VIOLATION) {
+          m->law_refuted++;
+          m->pair_classified++;
+          return form_violation(g, parts, k, replicas, ops, o1, o2, &out);
+        }
+        m->law_bounded++;
+        if (out.result == SEARCH_KEPT && out.kept > 0u) {
+          if ((rec = machine_warn(m)) == NULL)
+            return FAIL(c, "OOM", "out of memory");
+          (void)diag_fail_at(rec, "W_BOUNDED", d->name, word_span(ops[o1]->line, ops[o1]->col, "op"), NULL, NULL, NULL,
+                             "%s ∥ %s: kept on all %llu schedules (bounded: %u, %u, %u); add a proof term to get proved",
+                             ops[o1]->name.text, ops[o2]->name.text, (unsigned long long)out.kept, b.prefix, b.ops, b.replicas);
+        }
+      }
+      m->pair_classified++;
+    }
+  }
+  return 1;
+}
+
 static int check_replicated(Checker *c, const Decl *d) {
   Part *parts = arena_alloc(c->m->arena, (d->item_count + 1u) * sizeof *parts);
+  const FormItem **ops = arena_alloc(c->m->arena, (d->item_count + 1u) * sizeof *ops);
+  OpWrites *ow = arena_alloc(c->m->arena, (d->item_count + 1u) * sizeof *ow);
+  uint32_t n = 0;
   const Decl *replicas = form_decl(c, DECL_REPLICAS, NULL);
   const FormItem *first = NULL;
   const Term *inv = NULL, *shop, *s;
   const char *runner = NULL;
   size_t k = 0, j;
   Cogen g;
-  if (parts == NULL)
+  Laws laws;
+  if (parts == NULL || ops == NULL || ow == NULL)
     return FAIL(c, "OOM", "out of memory");
   for (j = 0; j < d->item_count; j++) {
     if (d->items[j].kind == ITEM_STATE) {
@@ -3701,11 +4497,23 @@ static int check_replicated(Checker *c, const Decl *d) {
   g.d = d;
   g.line = d->line;
   g.col = d->col;
-  if (!form_shop(&g, parts, k, replicas->name_count))
-    return 0;
+  /* U5: L1 to L4, L5, L5r, one L6a or L6b for each GSet or MVReg part (the
+     domain lemma at the part is the proof), one L7 for each allocated part.
+     form_search adds the L8 pairs. */
+  c->m->law_total += 6u;
   for (j = 0; j < k; j++) {
-    if (parts[j].alloc != NULL && !form_split(&g, &parts[j], replicas->name_count))
+    c->m->law_total += (parts[j].kind == PART_GSET || parts[j].kind == PART_MVREG) + (parts[j].alloc != NULL);
+    c->m->law_proved += parts[j].kind == PART_GSET || parts[j].kind == PART_MVREG;
+  }
+  laws = form_laws(&g, parts, k, replicas->name_count);
+  if (!form_shop(&g, parts, k, replicas->name_count) || !form_l5(&g, &laws))
+    return 0;
+  c->m->law_proved += 5u;
+  for (j = 0; j < k; j++) {
+    if (parts[j].alloc != NULL &&
+        (!form_split(&g, &parts[j], replicas->name_count) || !form_l7(&g, &parts[j], replicas->name_count)))
       return 0;
+    c->m->law_proved += parts[j].alloc != NULL;
   }
   shop = cg_var(&g, d->name);
   for (j = 0; j < d->item_count && d->items[j].kind != ITEM_OP; j++) {}
@@ -3719,8 +4527,16 @@ static int check_replicated(Checker *c, const Decl *d) {
     c->m->def = d->name;
     g.line = it->line;
     g.col = it->col;
-    if (it->kind == ITEM_OP && !form_op(&g, it, parts, k, replicas->name_count, runner))
-      return 0;
+    if (it->kind == ITEM_OP) {
+      ops[n] = it;
+      ow[n].writes = arena_alloc(c->m->arena, k);
+      if (ow[n].writes == NULL)
+        return FAIL(c, "OOM", "out of memory");
+      memset(ow[n].writes, 0, k);
+      if (!form_op(&g, it, parts, k, replicas->name_count, runner, &ow[n]))
+        return 0;
+      n++;
+    }
     if (it->kind == ITEM_INVARIANT && !form_inv(&g, it, parts, k, replicas->name_count, s, &t))
       return 0;
     if (it->kind == ITEM_INVARIANT) {
@@ -3728,12 +4544,22 @@ static int check_replicated(Checker *c, const Decl *d) {
       first = first == NULL ? it : first;
     }
   }
-  if (first == NULL)
+  g.line = d->line;
+  g.col = d->col;
+  if (!form_machine(&g))
+    return 0;
+  c->m->law_proved++;
+  c->m->pair_total += (size_t)n * (n + 1u) / 2u;
+  /* No invariant: each pair is independent, with no L8. */
+  if (first == NULL) {
+    c->m->pair_classified += (size_t)n * (n + 1u) / 2u;
     return 1;
+  }
   g.line = first->line;
   g.col = first->col;
   return cg_def_origin(&g, ORIGIN_PROGRAM, cg_join(&g, d->name, "Inv"), cg_pi(&g, NULL, shop, cg_var(&g, "Bool")),
-                       cg_lam(&g, "s", shop, inv));
+                       cg_lam(&g, "s", shop, inv)) &&
+         form_search(&g, parts, k, replicas, ops, ow, n);
 }
 
 static int check_decl(Checker *c, const Decl *d) {
@@ -3781,11 +4607,18 @@ int check_program(Arena *arena, const DeclList *decls, Machine *m, Diag *diag) {
        definitions (check_finite). */
     if (d->kind == DECL_REPLICAS || d->kind == DECL_ATOMS)
       defs += d->name_count;
-    /* A replicated form gives NAME, NAMEBot, NAMEMerge, one def for each
-       op and allocate line and one NAMEInv for its invariant lines
-       (check_replicated). */
-    if (d->kind == DECL_REPLICATED)
-      defs += 3u + d->item_count;
+    /* A replicated form gives NAME, NAMEBot, NAMEMerge, NAMEL5, two defs
+       for each op (script and function) and allocate (split and L7) line,
+       one NAMEInv for its invariant lines
+       and NAMEReplicaOf; NAMERecvN, NAMEL5rM and NAMEL5r (form_l5r); the
+       families NAMEOp (one constructor for each op) and NAMEEvent (2);
+       and the codata NAMEMachine with 2 fields, counted as a
+       DECL_COFAMILY (form_machine). */
+    if (d->kind == DECL_REPLICATED) {
+      families += 4u;
+      ctors += 6u + d->item_count;
+      defs += 18u + 2u * d->item_count;
+    }
   }
   m->defs = arena_alloc(arena, (defs + 1u) * sizeof *m->defs);
   m->families = arena_alloc(arena, (families + 1u) * sizeof *m->families);

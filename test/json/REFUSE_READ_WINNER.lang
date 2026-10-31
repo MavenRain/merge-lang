@@ -1,0 +1,8 @@
+-- REFUSE_READ_WINNER: an MVReg read is a Read set, not a value.
+replicas A B
+
+atoms User := ana ∣ ben
+
+replicated Task
+  state owner : MVReg User
+  op keep := x ← read owner; write owner x

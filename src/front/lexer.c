@@ -39,6 +39,7 @@ static const struct {
   {"allocate", TOK_KW_ALLOCATE},
   {"by", TOK_KW_BY},
   {"escrow", TOK_KW_ESCROW},
+  {"for", TOK_KW_FOR},
   {"init", TOK_KW_INIT},
 };
 
@@ -103,6 +104,7 @@ const char *tok_kind_name(TokKind kind) {
     case TOK_KW_ALLOCATE: return "'allocate'";
     case TOK_KW_BY: return "'by'";
     case TOK_KW_ESCROW: return "'escrow'";
+    case TOK_KW_FOR: return "'for'";
     case TOK_KW_INIT: return "'init'";
   }
   return "a token";

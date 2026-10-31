@@ -249,13 +249,17 @@ static void print_progress(const Front *front, const Machine *machine, int parse
   size_t count = done + (size_t)(front->lexed && !parsed);
   size_t checked = machine->checked > front->domain_count ? machine->checked - front->domain_count : 0;
   size_t ok = typed ? count : parsed ? checked : 0;
-  fprintf(out, "{\"parsed\":\"%zu of %zu\",\"typed\":\"%zu of %zu\",\"affine\":\"0 of 0\",\"laws\":\"0 of 0\"}\n",
-          done, count, ok, count);
+  fprintf(out,
+          "{\"parsed\":\"%zu of %zu\",\"typed\":\"%zu of %zu\",\"laws\":{\"total\":%zu,\"proved\":%zu,\"bounded\":%zu,"
+          "\"refuted\":%zu},\"pairs\":{\"total\":%zu,\"classified\":%zu}}\n",
+          done, count, ok, count, machine->law_total, machine->law_proved, machine->law_bounded, machine->law_refuted,
+          machine->pair_total, machine->pair_classified);
 }
 
-/* `check` in both modes: the error (at most one), then the W_NONCANON
-   warning (at most one), then `ok` (text) or the progress line (JSON). A
-   warning does not change the exit code. */
+/* `check` in both modes: the error (at most one), then the W_BOUNDED
+   warnings (one for each bounded op pair), then the W_NONCANON warning (at
+   most one), then `ok` (text) or the progress line (JSON). A warning does
+   not change the exit code. */
 static int run_check(const Options *opt, Arena *arena, Diag *diag) {
   char *text = NULL;
   size_t len = 0;
@@ -272,12 +276,15 @@ static int run_check(const Options *opt, Arena *arena, Diag *diag) {
     diag_default_span(diag, decl_span(opt->prog_path, &front.decls.items[machine.checked]));
   }
   if (parsed) noncanon(arena, opt->prog_path, text, len, &front, &warn);
+  for (uint32_t i = 0; i < machine.warn_count; i++) diag_default_span(machine.warns[i], (Span){opt->prog_path, 0, 0, 0, 0});
   if (opt->json) {
     if (diag->set) diag_print_json(diag, stdout);
+    for (uint32_t i = 0; i < machine.warn_count; i++) diag_print_json(machine.warns[i], stdout);
     if (warn.set) diag_print_json(&warn, stdout);
     print_progress(&front, &machine, parsed, typed, stdout);
   } else {
     if (diag->set) diag_print(diag, stderr);
+    for (uint32_t i = 0; i < machine.warn_count; i++) diag_print(machine.warns[i], stderr);
     if (warn.set) diag_print(&warn, stderr);
     if (typed) puts("ok");
   }

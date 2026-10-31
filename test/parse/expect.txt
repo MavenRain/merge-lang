@@ -17,6 +17,7 @@ replicated-column.lang PARSE_EXPECT 3:5: expected a new line after the declarati
 item-unknown.lang PARSE_EXPECT expected 'state', 'op', 'invariant' or 'allocate'
 state-init-name.lang PARSE_EXPECT 2:27: expected a Nat literal, found a name
 op-no-assign.lang PARSE_EXPECT expected a binder group or ':='
+allocate-for-no-body.lang PARSE_EXPECT expected a term
 allocate-no-by.lang PARSE_EXPECT expected 'by', found 'escrow'
 allocate-no-escrow.lang PARSE_EXPECT expected 'escrow', found '('
 share-no-mapsto.lang PARSE_EXPECT expected '↦', found a Nat literal

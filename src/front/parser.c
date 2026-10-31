@@ -11,7 +11,7 @@
      item   := 'state' NAME ':' term ('(' 'init' NAT ')')?
              | 'op' NAME group* ':=' term
              | 'invariant' term
-             | 'allocate' NAME 'by' 'escrow' '(' share (',' share)* ')'
+             | 'allocate' NAME 'by' 'escrow' '(' share (',' share)* ')' ('for' term)?
      share  := NAME '↦' NAT
      term   := ('λ' | '\') (NAME | group)+ '→' term
              | 'fun' (NAME | group)+ '=>' term
@@ -219,6 +219,7 @@ static int starts_atom(TokKind kind) {
     case TOK_KW_ALLOCATE:
     case TOK_KW_BY:
     case TOK_KW_ESCROW:
+    case TOK_KW_FOR:
     case TOK_KW_INIT:
       return 0;
   }
@@ -445,6 +446,7 @@ static const Term *parse_atom(Parser *p) {
     case TOK_KW_ALLOCATE:
     case TOK_KW_BY:
     case TOK_KW_ESCROW:
+    case TOK_KW_FOR:
     case TOK_KW_INIT:
     case TOK_EOF:
     case TOK_RPAREN:
@@ -943,7 +945,7 @@ static int parse_invariant(Parser *p, FormItem *it) {
   return it->body != NULL;
 }
 
-/* `allocate NAME by escrow (A ↦ n, ..)`. */
+/* `allocate NAME by escrow (A ↦ n, ..) [for INV]` (Q49 (b)). */
 static int parse_allocate(Parser *p, FormItem *it) {
   if (!take_form_name(p, &it->name, "a state name") || !expect(p, TOK_KW_BY, "'by'")
       || !expect(p, TOK_KW_ESCROW, "'escrow'") || !expect(p, TOK_LPAREN, "'('"))
@@ -960,7 +962,14 @@ static int parse_allocate(Parser *p, FormItem *it) {
   } while (eat(p, TOK_COMMA));
   it->shares = shares;
   it->share_count = count;
-  return expect(p, TOK_RPAREN, "',' or ')'");
+  it->clause = NULL;
+  if (!expect(p, TOK_RPAREN, "',' or ')'")) return 0;
+  if (!at(p, TOK_KW_FOR)) return 1;
+  it->for_line = cur(p)->line;
+  it->for_col = cur(p)->col;
+  bump(p);
+  it->clause = parse_term(p);
+  return it->clause != NULL;
 }
 
 /* The item words and their parsers. */
@@ -1029,6 +1038,7 @@ static int parse_decl_body(Parser *p, Decl *d) {
     case TOK_KW_ALLOCATE:
     case TOK_KW_BY:
     case TOK_KW_ESCROW:
+    case TOK_KW_FOR:
     case TOK_KW_INIT:
     case TOK_EOF:
     case TOK_NAT:

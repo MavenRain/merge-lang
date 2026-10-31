@@ -95,6 +95,9 @@ typedef struct {
   size_t step_count;
   const FormName *shares;
   size_t share_count;
+  const Term *clause; /* the `for` term of an allocate line, NULL when absent */
+  int for_line;
+  int for_col;
   int line;
   int col;
 } FormItem;

@@ -1,0 +1,53 @@
+-- The replica machine of a replicated form (S4 U1, Q45 (a)). ShopReplicaOf
+-- s is the Moore machine at the state s: ShopEps observes the state,
+-- ShopStep (ShopLocal i o) runs the op o at the replica i (a none keeps the
+-- state) and ShopStep (ShopRecv t) merges the state t. ShopL5 merges a
+-- finite multiset of states. Amount is an atoms name: pack 0 refl is the
+-- member 1 and pack 1 refl is the member 2.
+replicas A B
+
+atoms Amount := 1 ∣ 2
+
+replicated Shop
+  state stock : Counter (init 3)
+  op sell (k : Amount) := dec stock k
+  op refill (k : Amount) := restock stock k
+
+soldA : ShopMachine Shop
+soldA = ShopStep Shop (ShopReplicaOf ShopBot) (ShopLocal A (ShopOpSell (pack 0 refl)))
+
+soldB : Shop
+soldB = ShopEps Shop (ShopStep Shop (ShopReplicaOf ShopBot) (ShopLocal B (ShopOpSell (pack 1 refl))))
+
+local : ℤ
+local = counterStock 2 3 (ShopEps Shop soldA)
+
+received : ℤ
+received = counterStock 2 3 (ShopEps Shop (ShopStep Shop soldA (ShopRecv soldB)))
+
+oversold : ℤ
+oversold = counterStock 2 3 (ShopEps Shop (ShopStep Shop (ShopStep Shop (ShopReplicaOf ShopBot) (ShopLocal A (ShopOpSell (pack 1 refl)))) (ShopLocal A (ShopOpSell (pack 1 refl)))))
+
+refilled : ℤ
+refilled = counterStock 2 3 (ShopEps Shop (ShopStep Shop soldA (ShopLocal B (ShopOpRefill (pack 1 refl)))))
+
+mergedAll : ℤ
+mergedAll = counterStock 2 3 (ShopL5 (munion Shop (msing Shop (ShopEps Shop soldA)) (msing Shop soldB)))
+
+-- L5r: ShopRecvN gives the states f 0 and f 1 in this order. The two
+-- orders give the same state; ShopL5r is the path to the left merge
+-- mergeSeq (the domain mergeSeqAll gives the merge of the multiset).
+firstA : ℕ → Shop
+firstA k = flagIf (natEq k 0) (ShopEps Shop soldA) soldB
+
+firstB : ℕ → Shop
+firstB k = flagIf (natEq k 0) soldB (ShopEps Shop soldA)
+
+orderAB : ℤ
+orderAB = counterStock 2 3 (ShopEps Shop (ShopRecvN (ShopReplicaOf ShopBot) firstA 2))
+
+orderBA : ℤ
+orderBA = counterStock 2 3 (ShopEps Shop (ShopRecvN (ShopReplicaOf ShopBot) firstB 2))
+
+deliveredAB : Path Shop (ShopEps Shop (ShopRecvN (ShopReplicaOf ShopBot) firstA 2)) (mergeSeq Shop ShopMerge ShopBot firstA 2)
+deliveredAB = ShopL5r ShopBot firstA 2

@@ -18,6 +18,11 @@ static int check_case(const char *label, const char *source, const char *want) {
   diag_init(&diag);
   int checked = load(&arena, source, &machine, &diag);
   int ok = want == NULL ? checked : !checked && diag.code != NULL && strcmp(diag.code, want) == 0;
+  if (checked && (machine.def_count > machine.def_cap || machine.family_count > machine.family_cap || machine.ctor_count > machine.ctor_cap)) {
+    fprintf(stderr, "FAIL cubical %s: checker table capacity exceeded (%u/%u defs, %u/%u families, %u/%u ctors)\n",
+            label, machine.def_count, machine.def_cap, machine.family_count, machine.family_cap, machine.ctor_count, machine.ctor_cap);
+    ok = 0;
+  }
   if (!ok) {
     fprintf(stderr, "FAIL cubical %s: wanted %s, got %s\n", label,
             want == NULL ? "ok" : want, checked ? "ok" : diag.code == NULL ? "no diagnostic" : diag.code);
@@ -61,6 +66,18 @@ done:
 
 int main(void) {
   static const struct { const char *label; const char *source; const char *code; } checks[] = {
+    {"generated op definitions fit checker tables",
+     "replicas A B\n\natoms Tag := t\n\nreplicated Box\n  state tags : GSet Tag\n"
+     "  op put0 := add tags t\n  op put1 := add tags t\n  op put2 := add tags t\n"
+     "  op put3 := add tags t\n  op put4 := add tags t\n  op put5 := add tags t\n"
+     "  op put6 := add tags t\n  op put7 := add tags t\n  op put8 := add tags t\n"
+     "  op put9 := add tags t\n  op put10 := add tags t\n  op put11 := add tags t\n"
+     "  op put12 := add tags t\n  op put13 := add tags t\n", NULL},
+    {"MVReg writes do not cover a Counter decrement",
+     "replicas A B\n\natoms User := ana\n\n"
+     "replicated Stock\n  state count : Counter (init 1)\n  state owner : MVReg User\n"
+     "  op take := write owner ana; dec count 1\n  invariant nonneg count\n",
+     "REFUSE_NEEDS_COORDINATION"},
     {"fold maps path fields without path constructors",
      "data W (A : Type 0) : Type where\n"
      "  wPure : (wOf : A) → W A\n"
@@ -224,6 +241,98 @@ int main(void) {
     {"endpoints on wrong face", "value : (p : Path ℕ 0 1) → (i : I) → Partial (~ i) (Path ℕ (p i) 1)\nvalue p i = [ ~ i ↦ (λ j → 1) ]\n", "TYPE_ENDPOINT"},
     {"refl on both faces", "value : (p : Path ℕ 0 1) → (i : I) → Partial (i ∨ ~ i) (Path ℕ (p i) 1)\nvalue p i = [ i ∨ ~ i ↦ refl ]\n", "TYPE_REFL"},
     {"trans on wrong face", "value : (p : Path ℕ 0 1) → (i : I) → (q : Path ℕ 0 (p i)) → (r : Path ℕ 1 2) → Partial (~ i) (Path ℕ 0 2)\nvalue p i q r = [ ~ i ↦ trans q r ]\n", "TYPE_MISMATCH"},
+    /* Builtin ℕ lemmas (Q53 (b)): per lemma a row that types and a misuse row. */
+    {"natEqRefl at a literal", "value : Path Bool (natEq 5 5) true\nvalue = natEqRefl 5\n", NULL},
+    {"natEqRefl at a Bool", "value : Path Bool (natEq 0 0) true\nvalue = natEqRefl true\n", "TYPE_MISMATCH"},
+    {"natEqSound", "value : (a : ℕ) → (b : ℕ) → (e : Path Bool (natEq a b) true) → Path ℕ a b\nvalue a b e = natEqSound a b e\n", NULL},
+    {"natEqSound from natLe", "value : (a : ℕ) → (b : ℕ) → (e : Path Bool (natLe a b) true) → Path ℕ a b\nvalue a b e = natEqSound a b e\n", "TYPE_MISMATCH"},
+    {"natLeRefl", "value : (k : ℕ) → Path Bool (natLe k k) true\nvalue k = natLeRefl k\n", NULL},
+    {"natLeRefl at a wrong type", "value : (k : ℕ) → Path Bool (natLe (natAdd k 1) k) true\nvalue k = natLeRefl k\n", "TYPE_MISMATCH"},
+    {"natLeTrans",
+     "value : (a : ℕ) → (b : ℕ) → (c : ℕ) → (p : Path Bool (natLe a b) true) → (q : Path Bool (natLe b c) true) → Path Bool (natLe a c) true\n"
+     "value a b c p q = natLeTrans a b c p q\n", NULL},
+    {"natLeTrans with q not from b",
+     "value : (a : ℕ) → (b : ℕ) → (c : ℕ) → (p : Path Bool (natLe a b) true) → (q : Path Bool (natLe a c) true) → Path Bool (natLe a c) true\n"
+     "value a b c p q = natLeTrans a b c p q\n", "TYPE_MISMATCH"},
+    {"natLeMaxL", "value : (a : ℕ) → (b : ℕ) → Path Bool (natLe a (natMax a b)) true\nvalue a b = natLeMaxL a b\n", NULL},
+    {"natLeMaxL at the right side", "value : (a : ℕ) → (b : ℕ) → Path Bool (natLe b (natMax a b)) true\nvalue a b = natLeMaxL a b\n", "TYPE_MISMATCH"},
+    {"natLeMaxR", "value : (a : ℕ) → (b : ℕ) → Path Bool (natLe b (natMax a b)) true\nvalue a b = natLeMaxR a b\n", NULL},
+    {"natLeMaxR at a path", "value : (a : ℕ) → (e : Path ℕ a a) → Path Bool (natLe a (natMax a a)) true\nvalue a e = natLeMaxR a e\n", "TYPE_MISMATCH"},
+    {"natMaxLeast",
+     "value : (a : ℕ) → (b : ℕ) → (c : ℕ) → (p : Path Bool (natLe a c) true) → (q : Path Bool (natLe b c) true) → Path Bool (natLe (natMax a b) c) true\n"
+     "value a b c p q = natMaxLeast a b c p q\n", NULL},
+    {"natMaxLeast with p reversed",
+     "value : (a : ℕ) → (b : ℕ) → (c : ℕ) → (p : Path Bool (natLe c a) true) → (q : Path Bool (natLe b c) true) → Path Bool (natLe (natMax a b) c) true\n"
+     "value a b c p q = natMaxLeast a b c p q\n", "TYPE_MISMATCH"},
+    {"natLeAddMono",
+     "value : (a : ℕ) → (b : ℕ) → (c : ℕ) → (d : ℕ) → (p : Path Bool (natLe a b) true) → (q : Path Bool (natLe c d) true) → Path Bool (natLe (natAdd a c) (natAdd b d)) true\n"
+     "value a b c d p q = natLeAddMono a b c d p q\n", NULL},
+    {"natLeAddMono with q from p",
+     "value : (a : ℕ) → (b : ℕ) → (c : ℕ) → (d : ℕ) → (p : Path Bool (natLe a b) true) → (q : Path Bool (natLe a b) true) → Path Bool (natLe (natAdd a c) (natAdd b d)) true\n"
+     "value a b c d p q = natLeAddMono a b c d p q\n", "TYPE_MISMATCH"},
+    {"natLeSucc", "value : (k : ℕ) → Path Bool (natLe 1 (natAdd k 1)) true\nvalue k = natLeSucc k\n", NULL},
+    {"natLeSucc at a wrong type", "value : (k : ℕ) → Path Bool (natLe 2 (natAdd k 1)) true\nvalue k = natLeSucc k\n", "TYPE_MISMATCH"},
+    {"natEqSuccNe", "value : (k : ℕ) → Path Bool (natEq (natAdd k 1) k) false\nvalue k = natEqSuccNe k\n", NULL},
+    {"natEqSuccNe at true", "value : (k : ℕ) → Path Bool (natEq (natAdd k 1) k) true\nvalue k = natEqSuccNe k\n", "TYPE_MISMATCH"},
+    {"sumFinMono",
+     "value : (r : ℕ) → (f : Fin r → ℕ) → (g : Fin r → ℕ) → (p : (j : Fin r) → Path Bool (natLe (f j) (g j)) true) → Path Bool (natLe (sumFin r f) (sumFin r g)) true\n"
+     "value r f g p = sumFinMono r f g p\n", NULL},
+    {"sumFinMono with p reversed",
+     "value : (r : ℕ) → (f : Fin r → ℕ) → (g : Fin r → ℕ) → (p : (j : Fin r) → Path Bool (natLe (g j) (f j)) true) → Path Bool (natLe (sumFin r f) (sumFin r g)) true\n"
+     "value r f g p = sumFinMono r f g p\n", "TYPE_MISMATCH"},
+    {"natLeMulTwo",
+     "value : (a : ℕ) → (b : ℕ) → (p : Path Bool (natLe a b) true) → Path Bool (natLe (natMul 2 a) (natMul 2 b)) true\n"
+     "value a b p = natLeMulTwo a b p\n", NULL},
+    {"natLeMulTwo with p reversed",
+     "value : (a : ℕ) → (b : ℕ) → (p : Path Bool (natLe b a) true) → Path Bool (natLe (natMul 2 a) (natMul 2 b)) true\n"
+     "value a b p = natLeMulTwo a b p\n", "TYPE_MISMATCH"},
+    {"natLeAntisym",
+     "value : (a : ℕ) → (b : ℕ) → (p : Path Bool (natLe a b) true) → (q : Path Bool (natLe b a) true) → Path Bool (natEq a b) true\n"
+     "value a b p q = natLeAntisym a b p q\n", NULL},
+    {"natLeAntisym with q not from b a",
+     "value : (a : ℕ) → (b : ℕ) → (p : Path Bool (natLe a b) true) → (q : Path Bool (natLe a b) true) → Path Bool (natEq a b) true\n"
+     "value a b p q = natLeAntisym a b p q\n", "TYPE_MISMATCH"},
+    {"natEqSym",
+     "value : (a : ℕ) → (b : ℕ) → Path Bool (natEq a b) (natEq b a)\nvalue a b = natEqSym a b\n", NULL},
+    {"natEqSym at a wrong end",
+     "value : (a : ℕ) → (b : ℕ) → Path Bool (natEq a b) true\nvalue a b = natEqSym a b\n", "TYPE_MISMATCH"},
+    {"natMulTwoSucc",
+     "value : (k : ℕ) → Path ℕ (natMul 2 (natAdd k 1)) (natAdd (natMul 2 k) 2)\nvalue k = natMulTwoSucc k\n", NULL},
+    {"natMulTwoSucc at a wrong end",
+     "value : (k : ℕ) → Path ℕ (natMul 2 (natAdd k 1)) (natAdd (natMul 2 k) 1)\nvalue k = natMulTwoSucc k\n", "TYPE_MISMATCH"},
+    {"sumFinLe",
+     "value : (r : ℕ) → (f : Fin r → ℕ) → (k : Fin r) → Path Bool (natLe (f k) (sumFin r f)) true\n"
+     "value r f k = sumFinLe r f k\n", NULL},
+    {"sumFinLe with the sum on the left",
+     "value : (r : ℕ) → (f : Fin r → ℕ) → (k : Fin r) → Path Bool (natLe (sumFin r f) (f k)) true\n"
+     "value r f k = sumFinLe r f k\n", "TYPE_MISMATCH"},
+    {"sumFinLeTwo",
+     "value : (r : ℕ) → (f : Fin r → ℕ) → (k : Fin r) → (l : Fin r) → (h : Path Bool (natEq (witness k) (witness l)) false) → Path Bool (natLe (natAdd (f k) (f l)) (sumFin r f)) true\n"
+     "value r f k l h = sumFinLeTwo r f k l h\n", NULL},
+    {"sumFinLeTwo with h true",
+     "value : (r : ℕ) → (f : Fin r → ℕ) → (k : Fin r) → (l : Fin r) → (h : Path Bool (natEq (witness k) (witness l)) true) → Path Bool (natLe (natAdd (f k) (f l)) (sumFin r f)) true\n"
+     "value r f k l h = sumFinLeTwo r f k l h\n", "TYPE_MISMATCH"},
+    {"natEqRefl ends", "value : (k : ℕ) → Path Bool (natEq k k) true\nvalue k = natEqRefl k\n", NULL},
+    {"cong over natEqSound",
+     "value : (a : ℕ) → (b : ℕ) → (e : Path Bool (natEq a b) true) → Path ℕ (natAdd a 1) (natAdd b 1)\n"
+     "value a b e = cong (λ (n : ℕ) → natAdd n 1) (natEqSound a b e)\n", NULL},
+    {"natLeSucc at a literal", "value : Path Bool (natLe 1 4) true\nvalue = natLeSucc 3\n", NULL},
+    {"natAddAssoc", "value : (a : ℕ) → (b : ℕ) → (c : ℕ) → Path ℕ (natAdd (natAdd a b) c) (natAdd a (natAdd b c))\nvalue a b c = natAddAssoc a b c\n", NULL},
+    {"natAddAssoc reversed", "value : (a : ℕ) → (b : ℕ) → (c : ℕ) → Path ℕ (natAdd a (natAdd b c)) (natAdd (natAdd a b) c)\nvalue a b c = natAddAssoc a b c\n", "TYPE_MISMATCH"},
+    {"natAddComm", "value : (a : ℕ) → (b : ℕ) → Path ℕ (natAdd a b) (natAdd b a)\nvalue a b = natAddComm a b\n", NULL},
+    {"natAddComm at one order", "value : (a : ℕ) → (b : ℕ) → Path ℕ (natAdd a b) (natAdd a b)\nvalue a b = natAddComm a b\n", "TYPE_MISMATCH"},
+    {"sumFinBumpLe", "value : (r : ℕ) → (f : Fin r → ℕ) → (j : Fin r) → (k : ℕ) → Path Bool (natLe (sumFin r (λ (l : Fin r) → flagIf (natEq (witness l) (witness j)) (natAdd (f l) k) (f l))) (natAdd (sumFin r f) k)) true\nvalue r f j k = sumFinBumpLe r f j k\n", NULL},
+    {"sumFinBumpLe without k", "value : (r : ℕ) → (f : Fin r → ℕ) → (j : Fin r) → (k : ℕ) → Path Bool (natLe (sumFin r (λ (l : Fin r) → flagIf (natEq (witness l) (witness j)) (natAdd (f l) k) (f l))) (sumFin r f)) true\nvalue r f j k = sumFinBumpLe r f j k\n", "TYPE_MISMATCH"},
+    {"sumFinAdd", "value : (r : ℕ) → (f : Fin r → ℕ) → (g : Fin r → ℕ) → Path ℕ (sumFin r (λ (j : Fin r) → natAdd (f j) (g j))) (natAdd (sumFin r f) (sumFin r g))\nvalue r f g = sumFinAdd r f g\n", NULL},
+    {"sumFinAdd with f twice", "value : (r : ℕ) → (f : Fin r → ℕ) → (g : Fin r → ℕ) → Path ℕ (sumFin r (λ (j : Fin r) → natAdd (f j) (g j))) (natAdd (sumFin r f) (sumFin r f))\nvalue r f g = sumFinAdd r f g\n", "TYPE_MISMATCH"},
+    {"sumFinSwap", "value : (r : ℕ) → (f : Fin r → Fin r → ℕ) → Path ℕ (sumFin r (λ (a : Fin r) → sumFin r (λ (b : Fin r) → f a b))) (sumFin r (λ (b : Fin r) → sumFin r (λ (a : Fin r) → f a b)))\nvalue r f = sumFinSwap r f\n", NULL},
+    {"sumFinSwap at f b a", "value : (r : ℕ) → (f : Fin r → Fin r → ℕ) → Path ℕ (sumFin r (λ (a : Fin r) → sumFin r (λ (b : Fin r) → f a b))) (sumFin r (λ (b : Fin r) → sumFin r (λ (a : Fin r) → f b a)))\nvalue r f = sumFinSwap r f\n", "TYPE_MISMATCH"},
+    {"natLeAddCancel", "value : (a : ℕ) → (b : ℕ) → (c : ℕ) → (p : Path Bool (natLe (natAdd a c) (natAdd b c)) true) → Path Bool (natLe a b) true\nvalue a b c p = natLeAddCancel a b c p\n", NULL},
+    {"natLeAddCancel without c", "value : (a : ℕ) → (b : ℕ) → (c : ℕ) → (p : Path Bool (natLe a b) true) → Path Bool (natLe a b) true\nvalue a b c p = natLeAddCancel a b c p\n", "TYPE_MISMATCH"},
+    {"sumFinZero", "value : (r : ℕ) → Path ℕ (sumFin r (λ (j : Fin r) → 0)) 0\nvalue r = sumFinZero r\n", NULL},
+    {"finEqSound", "value : (r : ℕ) → (a : Fin r) → (b : Fin r) → (e : Path Bool (natEq (witness a) (witness b)) true) → Path (Fin r) a b\nvalue r a b e = finEqSound r a b e\n", NULL},
+    {"finEqSound from natLe", "value : (r : ℕ) → (a : Fin r) → (b : Fin r) → (e : Path Bool (natLe (witness a) (witness b)) true) → Path (Fin r) a b\nvalue r a b e = finEqSound r a b e\n", "TYPE_MISMATCH"},
+    {"sumFinZero at 1", "value : (r : ℕ) → Path ℕ (sumFin r (λ (j : Fin r) → 0)) 1\nvalue r = sumFinZero r\n", "TYPE_MISMATCH"},
     {"squash at i0", "data Trunc (A : Type 0) : Type where\n  inc : (a : A) → Trunc A\n  squash : (x : Trunc A) → (y : Trunc A) → Path (Trunc A) x y\nvalue : (A : Type 0) → (u : Trunc A) → (v : Trunc A) → Path (Trunc A) (squash A u v i0) u\nvalue A u v = refl\n", NULL},
     {"squash at i1", "data Trunc (A : Type 0) : Type where\n  inc : (a : A) → Trunc A\n  squash : (x : Trunc A) → (y : Trunc A) → Path (Trunc A) x y\nvalue : (A : Type 0) → (u : Trunc A) → (v : Trunc A) → Path (Trunc A) (squash A u v i1) v\nvalue A u v = refl\n", NULL},
     {"codata Stream", "codata Stream (A : Type 0) : Type where\n  corec : (head : A) → (tail : Stream A) → Stream A\n", NULL},
@@ -297,7 +406,12 @@ int main(void) {
     {"universe left of product", "Type 1", "(Type 0) × ℕ"},
     {"universe left of arrow", "Type 1", "(Type 0) → ℕ"},
     {"shadowed Sigma binder", "Type 0", "(n : ℕ) × (n : ℕ) × Path ℕ n n"},
-    {"annotated lambda", "ℕ → ℕ", "λ (x : ℕ) → natAdd x 1"}
+    {"annotated lambda", "ℕ → ℕ", "λ (x : ℕ) → natAdd x 1"},
+    {"neutral natEqRefl", "(k : ℕ) → Path Bool (natEq k k) true", "λ k → natEqRefl k"},
+    {"neutral natLeTrans",
+     "(a : ℕ) → (b : ℕ) → (c : ℕ) → Path Bool (natLe a b) true → Path Bool (natLe b c) true → Path Bool (natLe a c) true",
+     "λ a b c p q → natLeTrans a b c p q"},
+    {"builtin lemma binder stays free", "(natLeSucc : ℕ) → Path Bool (natLe 0 natLeSucc) true", "λ natLeSucc → natLeZ natLeSucc"}
   };
   static const struct { const char *label; const char *signature; const char *body; } displays[] = {
     {"display positive function", "Unit → ℤ", "λ u → pos 4"},

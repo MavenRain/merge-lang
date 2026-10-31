@@ -32,14 +32,23 @@ found nothing to port (S1 HANDOFF). docs/STATUS.md records the read.
 
 ## The progress object
 
-    {"parsed":"3 of 3","typed":"2 of 3","affine":"0 of 0","laws":"0 of 0"}
+    {"parsed":"3 of 3","typed":"2 of 3","laws":{"total":0,"proved":0,"bounded":0,"refuted":0},"pairs":{"total":0,"classified":0}}
 
 - m (the second number) is the number of program declarations. After a parse
   error, m is the complete declarations plus the one that failed. After a lex
   error, m is 0.
 - `parsed`: the declarations that parse. `typed`: the declarations that
   type-check before the first check error (all m when the program is ok).
-- `affine` and `laws` stay `"0 of 0"` until S3 and S4.
+- `laws` (PLAN 5.3, Q50 (a)): the laws of the replicated forms. Each form
+  has L1 to L4, L5 and L5r, one L6a for each GSet part, one L6b for each
+  MVReg part, one L7 for each allocated part, and one L8 for each op pair
+  (an op with itself too) that no library law covers. `total` counts all
+  of them; `proved` the laws that type-check (L6a and L6b are domain
+  lemmas); `bounded` the L8 pairs that the bounded search keeps; `refuted`
+  the L8 pair of REFUSE_NEEDS_COORDINATION. After a check error, the
+  counts stop at the error. A program with no form gives 0 for each key.
+- `pairs`: `total` is the op pairs of the forms; `classified` the pairs
+  with a class (a library law, the bounded search, or no invariant).
 
 ## Codes
 
@@ -63,6 +72,9 @@ reason. test/json/expect.txt holds the exact JSON lines of each fixture.
 | `REFUSE_OP_INFINITE_ARG` | error | check | An `op` parameter type is not finite (J1). An `op` parameter type is an atoms name, `Replica` or `Fin m` with a numeral m. The span is the parameter name. | test/json/REFUSE_OP_INFINITE_ARG.lang |
 | `REFUSE_RAW_WRITE` | error | check | An `op` body is not one part operation `WORD PART ARG..` (J2, Q35 (a)): `add p x` on a GSet, `write p x` on an MVReg, `dec p k` or `restock p k` on a Counter, `dec p k`, `transfer p j k` or `restock p k` on an allocated Counter. PART is a `state` name of the form. An `invariant` line that is not `nonneg PART` on a Counter or an allocated Counter also gives this code (Q37 (a)). The span is the `op` word, or the `invariant` word. | test/json/REFUSE_RAW_WRITE.lang |
 | `REFUSE_ALLOC_SUM` | error | check | The shares of an `allocate` line do not sum to the init of its Counter part, or a replica has no share or two shares (J1). An `allocate` on a part that is not a Counter (or a second `allocate`) gives `REFUSE_NO_MERGE`. The span is the `allocate` word. | test/json/REFUSE_ALLOC_SUM.lang |
+| `REFUSE_NEEDS_COORDINATION` | error | check | An op pair of a replicated form breaks an invariant after the merge (J4): the bounded search finds a schedule (prefix 1, 2 ops for each replica, the declared replicas) where the merged state makes the invariant false. The message gives the pair and the schedule. `found` is the merged state. `fix` tells you to declare an allocation rule or to remove the invariant. The span is the `op` word of the first op of the pair. | test/json/REFUSE_NEEDS_COORDINATION.lang |
+| `REFUSE_READ_WINNER` | error | check | An argument of a part operation in an `op` is the name of an MVReg read `x ← read p`. An MVReg read is a `Read` set, not a value: fold over `Read` (`readEmpty`, `readOne u`, `readConflict s`). The span is the argument and `found` is its name. A GSet read in that position gives `TYPE_MISMATCH`. | test/json/REFUSE_READ_WINNER.lang |
+| `REFUSE_RULE_MISMATCH` | error | check | The `for` clause of an `allocate` line names an invariant that L7 does not prove (J6). An escrow rule on c covers `nonneg c` only, and the clause is `nonneg d` with d not c. `expected` is c and `found` is d. A clause that is not `nonneg d` on a Counter or an allocated Counter gives `REFUSE_RAW_WRITE`, and an unknown d gives `NAME_UNKNOWN`. The span is the `for` word. | test/json/REFUSE_RULE_MISMATCH.lang |
 | `DOMAIN_FAMILY` | error | check | A family or a fold is outside the S2 data rules. A recursive field must have the type of its family, at the parameters of the family. A fold over an indexed family or a higher inductive family needs a dependent eliminator (S3). A path constructor is only in a cell signature. | test/json/DOMAIN_FAMILY.lang |
 | `REFUSE_NAME` | error | check | A declaration uses a core name, a domain name, a reserved word or a name that is already declared. A `codata` field must not be the type name, the clause name or a name that is already a field of the clause. Each `state` name in a `replicated` form must be distinct. | test/json/REFUSE_NAME.lang |
 | `TYPE_REFL` | error | check | `refl` where the two sides do not have the same normal form. The message gives the two normal forms. | test/json/TYPE_REFL.lang |
@@ -76,6 +88,7 @@ reason. test/json/expect.txt holds the exact JSON lines of each fixture.
 | `TYPE_ENDPOINT` | error | check | A path `λ i → t` where `t` at `i0` or at `i1` does not have the same normal form as the end that the `Path` or `PathP` type gives. The message gives the two normal forms. | test/json/TYPE_ENDPOINT.lang |
 | `TYPE_SYSTEM` | error | check | A system `[ φ ↦ u , ... ]` that does not agree with its `Partial ψ A` type: the join of the cell faces is not `ψ`, two branches do not have the same normal form where their faces meet, a face overlap is not in the face bounds (16 meets of 8 literals), or the system has more than 16 cells. An `hcomp` face that depends on its side binder is also refused. The message identifies the failing condition. | test/json/TYPE_SYSTEM.lang |
 | `TYPE_LINE` | error | check | A `transp A r u` where the line `A` is not constant where `r` holds. The checker compares `A i` with `A i0` on each meet of `r` and of the faces of the enclosing system cells. An atom in a meet stays free, so the test is conservative there. A face that is not in the face bounds needs a constant line. The message gives the line. | test/json/TYPE_LINE.lang |
+| `W_BOUNDED` | warning | check | An op pair of a replicated form with an invariant that no library law covers (L6a, L6b, L7), and the bounded search finds no violation on its K schedules (prefix 1, 2 ops for each replica, the declared replicas). One record for each such pair, at the `op` word of the first op. The mark of the pair is bounded, not proved. | test/json/W_BOUNDED.lang |
 | `W_NONCANON` | warning | check | The first declaration (or the tail of the file) whose text is not the `langc fmt` text. `found` is the input text; `expected` and `fix` are the canonical text. | test/json/W_NONCANON.lang |
 | `REFUSE_RUNTIME_CLOSURE` | error | lowering | A function value must exist at run time. The Wasm target cannot hold one (HOST-LIMIT). | no fixture: `langc ir` and `langc build` have no JSON mode; test/gate.sh checks test/ir/closure.lang |
 | `REFUSE_RUNTIME_TREE` | error | lowering | A fold over a tree must run at run time. The Wasm target cannot run it (HOST-LIMIT). | no fixture: `langc ir` and `langc build` have no JSON mode; test/gate.sh checks test/ir/tree.lang |

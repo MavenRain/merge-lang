@@ -30,6 +30,7 @@ index-fold.lang DOMAIN_FAMILY
 cell-list.lang REFUSE_CELL must be the one field of its constructor
 cell-pair.lang REFUSE_CELL must be the one field of its constructor
 cell-ghost.lang REFUSE_CELL
+machine-open.lang REFUSE_CELL with E closed
 cell-type-index.lang REFUSE_CELL
 cell-value-param.lang REFUSE_CELL is not a universe
 cell-field.lang REFUSE_CELL (or a function from closed data to it)

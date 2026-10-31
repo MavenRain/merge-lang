@@ -1,0 +1,10 @@
+-- W_BOUNDED: refill ∥ refill keeps nonneg stock on all schedules in the
+-- bounds, and no library law covers the pair (stock has no allocate).
+replicas A B
+
+atoms Amount := 1 ∣ 2
+
+replicated Shop
+  state stock : Counter (init 1)
+  op refill (k : Amount) := restock stock k
+  invariant nonneg stock

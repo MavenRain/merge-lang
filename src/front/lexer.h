@@ -44,6 +44,7 @@ typedef enum {
   TOK_KW_ALLOCATE,
   TOK_KW_BY,
   TOK_KW_ESCROW,
+  TOK_KW_FOR,
   TOK_KW_INIT
 } TokKind;
 

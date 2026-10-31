@@ -26,7 +26,7 @@ static const char *const OP_NAMES[] = {
   [OP_PARTIAL] = "Partial", [OP_SYSTEM] = "↦", [OP_SYSNIL] = "[]",
   [OP_FROMPARTIAL] = "fromPartial",
   [OP_TRANSP] = "transp", [OP_TPART] = "%tpart", [OP_TCOD] = "%tcod",
-  [OP_HCOMP] = "hcomp", [OP_SYSMAP] = "%sysmap", [OP_PCTOR] = "?"
+  [OP_HCOMP] = "hcomp", [OP_SYSMAP] = "%sysmap", [OP_PCTOR] = "?", [OP_NAT_LEMMA] = "%natLemma"
 };
 
 /* The number of arguments of each operation. VARIES: it comes from the
@@ -44,7 +44,37 @@ static const unsigned char OP_ARITY[] = {
   [OP_PLAM] = 1, [OP_PAPP] = 4, [OP_INEG] = 1, [OP_IMIN] = 2, [OP_IMAX] = 2,
   [OP_PARTIAL] = 2, [OP_SYSTEM] = 3, [OP_SYSNIL] = 0, [OP_FROMPARTIAL] = 1,
   [OP_TRANSP] = 3, [OP_TPART] = 1, [OP_TCOD] = 2,
-  [OP_HCOMP] = 4, [OP_SYSMAP] = 2, [OP_PCTOR] = VARIES
+  [OP_HCOMP] = 4, [OP_SYSMAP] = 2, [OP_PCTOR] = VARIES, [OP_NAT_LEMMA] = VARIES
+};
+
+/* The number of arguments of each builtin ℕ lemma: the ℕ (or Fin r → ℕ)
+   arguments, then the proofs. */
+static const unsigned char NAT_LEMMA_ARITY[] = {
+  [NAT_EQ_REFL] = 1, [NAT_EQ_SOUND] = 3, [NAT_LE_REFL] = 1, [NAT_LE_TRANS] = 5,
+  [NAT_LE_MAX_L] = 2, [NAT_LE_MAX_R] = 2, [NAT_MAX_LEAST] = 5,
+  [NAT_LE_ADD_MONO] = 6, [NAT_LE_SUCC] = 1, [NAT_EQ_SUCC_NE] = 1,
+  [NAT_SUM_FIN_MONO] = 4, [NAT_LE_MUL_TWO] = 3, [NAT_LE_ANTISYM] = 4,
+  [NAT_EQ_SYM] = 2, [NAT_MUL_TWO_SUCC] = 1, [NAT_SUM_FIN_LE] = 3,
+  [NAT_SUM_FIN_LE_TWO] = 5, [NAT_ADD_ASSOC] = 3, [NAT_ADD_COMM] = 2,
+  [NAT_SUM_FIN_BUMP_LE] = 4, [NAT_SUM_FIN_ADD] = 3, [NAT_SUM_FIN_SWAP] = 2,
+  [NAT_LE_ADD_CANCEL] = 4, [NAT_SUM_FIN_ZERO] = 1,
+  [NAT_FIN_EQ_SOUND] = 4
+};
+
+static const char *const NAT_LEMMA_NAMES[] = {
+  [NAT_EQ_REFL] = "natEqRefl", [NAT_EQ_SOUND] = "natEqSound",
+  [NAT_LE_REFL] = "natLeRefl", [NAT_LE_TRANS] = "natLeTrans",
+  [NAT_LE_MAX_L] = "natLeMaxL", [NAT_LE_MAX_R] = "natLeMaxR",
+  [NAT_MAX_LEAST] = "natMaxLeast", [NAT_LE_ADD_MONO] = "natLeAddMono",
+  [NAT_LE_SUCC] = "natLeSucc", [NAT_EQ_SUCC_NE] = "natEqSuccNe",
+  [NAT_SUM_FIN_MONO] = "sumFinMono", [NAT_LE_MUL_TWO] = "natLeMulTwo",
+  [NAT_LE_ANTISYM] = "natLeAntisym", [NAT_EQ_SYM] = "natEqSym",
+  [NAT_MUL_TWO_SUCC] = "natMulTwoSucc", [NAT_SUM_FIN_LE] = "sumFinLe",
+  [NAT_SUM_FIN_LE_TWO] = "sumFinLeTwo", [NAT_ADD_ASSOC] = "natAddAssoc",
+  [NAT_ADD_COMM] = "natAddComm", [NAT_SUM_FIN_BUMP_LE] = "sumFinBumpLe",
+  [NAT_SUM_FIN_ADD] = "sumFinAdd", [NAT_SUM_FIN_SWAP] = "sumFinSwap",
+  [NAT_LE_ADD_CANCEL] = "natLeAddCancel", [NAT_SUM_FIN_ZERO] = "sumFinZero",
+  [NAT_FIN_EQ_SOUND] = "finEqSound"
 };
 
 typedef enum {
@@ -1305,6 +1335,7 @@ static const Value *transp_ctor(Machine *m, const Value *const *a, uint32_t n) {
   case OP_PACK:
   case OP_CTOR:
   case OP_PCTOR:
+  case OP_NAT_LEMMA:
   case OP_OPTION_ELIM:
   case OP_PURE:
   case OP_MAP:
@@ -1450,6 +1481,7 @@ static const Value *transp_op(Machine *m, const Value *h, const Value *const *a,
   case OP_PACK:
   case OP_CTOR:
   case OP_PCTOR:
+  case OP_NAT_LEMMA:
   case OP_OPTION_ELIM:
   case OP_PURE:
   case OP_MAP:
@@ -1623,6 +1655,7 @@ static const Value *hcomp_op(Machine *m, const Value *const *a, uint32_t n) {
   case OP_PACK:
   case OP_CTOR:
   case OP_PCTOR:
+  case OP_NAT_LEMMA:
   case OP_OPTION_ELIM:
   case OP_PURE:
   case OP_MAP:
@@ -1916,6 +1949,8 @@ static uint32_t varied_arity(const Machine *m, Op op, uint32_t inst) {
     return f->param_count + f->index_count;
   if ((op == OP_FOLD_NAT || op == OP_FLAG_IF || op == OP_OPTION_ELIM) && inst < 2u)
     return 3u + inst;
+  if (op == OP_NAT_LEMMA && inst < (uint32_t)NAT_LEMMA_COUNT)
+    return NAT_LEMMA_ARITY[inst];
   if (op == OP_FOLD_FAMILY && f != NULL)
     return f->ctor_count + 1u;
   return UINT32_MAX;
@@ -1964,6 +1999,8 @@ static const Value *reduce_op(Machine *m, Op op, uint32_t inst, uint32_t field, 
   switch (op) {
   case OP_PCTOR:
     return reduce_pctor(m, inst, a, n);
+  case OP_NAT_LEMMA:
+    return val_op(m, VAL_STUCK, op, inst, field, a, n);
   case OP_NAT:
   case OP_BOOL:
   case OP_UNIT:
@@ -2330,6 +2367,8 @@ const Core *quote_value(Machine *m, uint32_t level, const Value *v) {
 }
 
 const char *op_name(const Machine *m, Op op, uint32_t inst, uint32_t field) {
+  if (op == OP_NAT_LEMMA)
+    return inst < (uint32_t)NAT_LEMMA_COUNT ? NAT_LEMMA_NAMES[inst] : "?";
   if ((op == OP_FLAG_IF || op == OP_OPTION_ELIM) && inst == 1u)
     return "elim";
   if (op == OP_FAMILY)
@@ -2399,6 +2438,9 @@ static int name_used(const Printer *p, const char *name) {
       return 1;
   for (i = 0; i < sizeof OP_NAMES / sizeof OP_NAMES[0]; i++)
     if (strcmp(name, OP_NAMES[i]) == 0)
+      return 1;
+  for (i = 0; i < sizeof NAT_LEMMA_NAMES / sizeof NAT_LEMMA_NAMES[0]; i++)
+    if (strcmp(name, NAT_LEMMA_NAMES[i]) == 0)
       return 1;
   if (strcmp(name, "elim") == 0)
     return 1; /* the motive-tagged Bool and Option operations */

@@ -1,0 +1,13 @@
+-- REFUSE_RULE_MISMATCH: the escrow rule of stock names the invariant of
+-- spare.
+replicas A B
+
+atoms Amount := 1 ∣ 2
+
+replicated Shop
+  state stock : Counter (init 1)
+  state spare : Counter (init 1)
+  op sell (k : Amount) := dec stock k
+  invariant nonneg stock
+  invariant nonneg spare
+  allocate stock by escrow (A ↦ 1, B ↦ 0) for nonneg spare

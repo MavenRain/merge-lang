@@ -1,0 +1,10 @@
+-- REFUSE_NEEDS_COORDINATION: sell ∥ sell breaks nonneg stock after the
+-- merge, and stock has no allocate.
+replicas A B
+
+atoms Amount := 1 ∣ 2
+
+replicated Shop
+  state stock : Counter (init 1)
+  op sell (k : Amount) := dec stock k
+  invariant nonneg stock

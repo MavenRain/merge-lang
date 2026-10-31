@@ -66,8 +66,40 @@ typedef enum {
   OP_TCOD,       /* internal: the codomain of a Pi or Sigma at x: [T, x] */
   OP_HCOMP,      /* hcomp A φ side u0: [A, φ, side, u0] */
   OP_SYSMAP,     /* internal: f on each branch of a system: [f, sys] */
-  OP_PCTOR       /* a path constructor: the params, the fields, then one interval for each dimension */
+  OP_PCTOR,      /* a path constructor: the params, the fields, then one interval for each dimension */
+  OP_NAT_LEMMA   /* a builtin ℕ lemma (Q53 (b)): always neutral; inst is the NatLemma */
 } Op;
+
+/* The builtin ℕ lemmas (Q53 (b)): a typing rule each in check.c, no
+   reduction. The inst of OP_NAT_LEMMA. */
+typedef enum {
+  NAT_EQ_REFL,
+  NAT_EQ_SOUND,
+  NAT_LE_REFL,
+  NAT_LE_TRANS,
+  NAT_LE_MAX_L,
+  NAT_LE_MAX_R,
+  NAT_MAX_LEAST,
+  NAT_LE_ADD_MONO,
+  NAT_LE_SUCC,
+  NAT_EQ_SUCC_NE,
+  NAT_SUM_FIN_MONO,
+  NAT_LE_MUL_TWO,
+  NAT_LE_ANTISYM,
+  NAT_EQ_SYM,
+  NAT_MUL_TWO_SUCC,
+  NAT_SUM_FIN_LE,
+  NAT_SUM_FIN_LE_TWO,
+  NAT_ADD_ASSOC,
+  NAT_ADD_COMM,
+  NAT_SUM_FIN_BUMP_LE,
+  NAT_SUM_FIN_ADD,
+  NAT_SUM_FIN_SWAP,
+  NAT_LE_ADD_CANCEL,
+  NAT_SUM_FIN_ZERO,
+  NAT_FIN_EQ_SOUND,
+  NAT_LEMMA_COUNT
+} NatLemma;
 
 /* The instance of pure, map and bind (former F5). */
 typedef enum {
@@ -211,6 +243,11 @@ typedef struct {
   int overflowed;
   size_t checked;  /* check_program: the declarations before the current one */
   int decl_failed; /* check_program: 1 when declaration CHECKED failed */
+  Diag **warns;    /* check_program: the W_BOUNDED records, in the pair order */
+  uint32_t warn_count;
+  uint32_t warn_cap;
+  size_t law_total, law_proved, law_bounded, law_refuted; /* check_program: the laws of the forms (U5) */
+  size_t pair_total, pair_classified;                     /* check_program: the op pairs of the forms */
 } Machine;
 
 /* Each function returns NULL (or 0) after a diagnostic. A NULL input gives a

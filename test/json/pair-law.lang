@@ -1,0 +1,19 @@
+-- pair-law: a library law covers each pair, so no pair goes to the bounded
+-- search. The nonneg invariant is on a part with no allocate (L7 does not
+-- cover the pairs). assign ∥ assign: both ops write the MVReg part owner
+-- (L6b). tag ∥ tag: both ops add to a GSet (L6a).
+replicas A B
+
+atoms User := ana ∣ ben
+
+replicated Desk
+  state stock : Counter (init 1)
+  state owner : MVReg User
+  op assign (u : User) := write owner u
+  invariant nonneg stock
+
+replicated Board
+  state stock : Counter (init 1)
+  state tags : GSet User
+  op tag (u : User) := add tags u
+  invariant nonneg stock

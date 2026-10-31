@@ -256,9 +256,13 @@ done
 echo "fmt: $canon canonical, $pairs non-canonical pairs"
 
 # Each examples/*.merge file is canonical and keeps its AST dump. `langc
-# check` elaborates its forms (S3e) and gives ok, exit 0 and no warning (S3x).
+# check` elaborates its forms (S3e) and gives ok, exit 0 and no warning (S3x),
+# except a file of merge_refused (`FILE CODE` lines, S4 design sec 7): it
+# gives exit 1 and its first `check --json` record has the code CODE.
+merge_refused="inventory.merge REFUSE_NEEDS_COORDINATION"
 merges=0
 merge_checks=0
+merge_refusals=0
 for f in examples/*.merge; do
   merges=$((merges + 1))
   status=0
@@ -270,15 +274,26 @@ for f in examples/*.merge; do
     echo "FAIL round trip $f: the AST dump changes after fmt"
     fail=$((fail + 1))
   fi
-  merge_checks=$((merge_checks + 1))
+  want=$(printf '%s\n' "$merge_refused" | awk -v f="$(basename "$f")" '$1 == f { print $2 }')
   status=0
-  out=$(build/langc check "$f" 2>"$tmp/err") || status=$?
-  if [ "$status" -ne 0 ] || [ "$out" != "ok" ] || [ -s "$tmp/err" ]; then
-    echo "FAIL check $f: want ok, exit 0 and no warning, got $out|exit $status|$(head -n 1 "$tmp/err")"
-    fail=$((fail + 1))
+  if [ -n "$want" ]; then
+    merge_refusals=$((merge_refusals + 1))
+    build/langc check --json "$f" >"$tmp/m.out" 2>/dev/null || status=$?
+    first=$(head -n 1 "$tmp/m.out")
+    case "$status:$first" in
+      "1:{\"code\":\"$want\","*) ;;
+      *) echo "FAIL check $f: want exit 1 and a first JSON record with code $want, got exit $status $(echo "$first" | cut -c1-120)"; fail=$((fail + 1)) ;;
+    esac
+  else
+    merge_checks=$((merge_checks + 1))
+    out=$(build/langc check "$f" 2>"$tmp/err") || status=$?
+    if [ "$status" -ne 0 ] || [ "$out" != "ok" ] || [ -s "$tmp/err" ]; then
+      echo "FAIL check $f: want ok, exit 0 and no warning, got $out|exit $status|$(head -n 1 "$tmp/err")"
+      fail=$((fail + 1))
+    fi
   fi
 done
-echo "merge examples: $merges canonical, $merge_checks checked"
+echo "merge examples: $merges canonical, $merge_checks checked, $merge_refusals refused"
 
 # JSON shape: `langc check --json` on each test/json/*.lang gives the lines of
 # test/json/expect.txt exactly (with the exit code and any stderr line).
@@ -297,8 +312,8 @@ if ! cmp -s test/json/expect.txt "$tmp/json.txt"; then
 fi
 # The progress line: typed "k of m" with k < m (a later declaration fails),
 # and an all-pass file.
-for want in 'progress-part:{"parsed":"3 of 3","typed":"2 of 3","affine":"0 of 0","laws":"0 of 0"}' \
-  'progress-pass:{"parsed":"2 of 2","typed":"2 of 2","affine":"0 of 0","laws":"0 of 0"}'; do
+for want in 'progress-part:{"parsed":"3 of 3","typed":"2 of 3","laws":{"total":0,"proved":0,"bounded":0,"refuted":0},"pairs":{"total":0,"classified":0}}' \
+  'progress-pass:{"parsed":"2 of 2","typed":"2 of 2","laws":{"total":0,"proved":0,"bounded":0,"refuted":0},"pairs":{"total":0,"classified":0}}'; do
   got=$(build/langc check --json "test/json/${want%%:*}.lang" 2>/dev/null | tail -n 1) || true
   [ "$got" = "${want#*:}" ] || { echo "FAIL progress ${want%%:*}: want ${want#*:}, got $got"; fail=$((fail + 1)); }
 done

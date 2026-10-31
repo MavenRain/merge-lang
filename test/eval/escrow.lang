@@ -12,13 +12,6 @@ replicated Shop
   invariant nonneg stock
   allocate stock by escrow (A ↦ 2, B ↦ 0)
 
--- No allocate: two concurrent takes can each pass and the merge breaks
--- the invariant.
-replicated Stock
-  state count : Counter (init 1)
-  op take (k : Amount) := dec count k
-  invariant nonneg count
-
 run : Option Shop → Shop
 run o = elim (λ (p : Option Shop) → Shop) ShopBot (λ (s : Shop) → s) o
 
@@ -45,9 +38,3 @@ refilled = escrowStock 2 ShopStockSplit (run (ShopRefill B (pack 1 refl) given))
 
 broken : Bool
 broken = ShopInv (pack (λ (x : Replica) (y : Replica) → 0) (λ (x : Replica) → 3))
-
-taken : Replica → Stock
-taken i = elim (λ (p : Option Stock) → Stock) StockBot (λ (s : Stock) → s) (StockTake i (pack 0 refl) StockBot)
-
-over : Bool
-over = StockInv (StockMerge (taken A) (taken B))
