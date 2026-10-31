@@ -4,6 +4,7 @@
 #define LANG_FRONT_CHECK_H
 
 #include "front/core.h"
+#include "front/search.h"
 
 #define ENTRY_PARAMS_MAX 16u
 
@@ -18,6 +19,16 @@ typedef struct {
 /* Checks the domain declarations, then the program, into M. Returns 1, or 0
    after a diagnostic. */
 int check_program(Arena *arena, const DeclList *decls, Machine *m, Diag *diag);
+/* check_program in sim mode (langc sim, Q57 (a)): a replicated form gets
+   no form_search, so REFUSE_NEEDS_COORDINATION does not occur. */
+int check_program_sim(Arena *arena, const DeclList *decls, Machine *m, Diag *diag);
+/* The sim search (S5 design sec 2, Q56 (a)) of the replicated form at
+   index I of DECLS, after check_program_sim: each op in each branch, in
+   the bounds B. Returns 1, or 0 after a diagnostic. */
+int sim_form(Machine *m, const DeclList *decls, size_t i, SearchBounds b, SearchOutcome *out);
+/* The sim transcript after the header (S5 design sec 4) of the violation
+   OUT of the form at decl I, on stdout. Returns 0 after a diagnostic. */
+int sim_print(Machine *m, const DeclList *decls, size_t i, SearchBounds b, const SearchOutcome *out);
 /* Returns 1 when TYPE is the type of an entry. */
 int entry_of(Machine *m, const Value *type, Entry *out);
 /* Evaluates the definition NAME on ARGS and prints the result. Returns 0, 1

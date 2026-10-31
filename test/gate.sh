@@ -295,6 +295,31 @@ for f in examples/*.merge; do
 done
 echo "merge examples: $merges canonical, $merge_checks checked, $merge_refusals refused"
 
+# The determinism gate (S5 design sec 5): for each test/sim/NAME.out, `langc
+# sim examples/NAME.merge` runs two times. Each run gives the bytes of the
+# golden file, and the two runs give the same exit code: 1 for a file of
+# merge_refused, else 0. The stderr of sim is not merged into stdout.
+sims=0
+sim_bad=0
+for g in test/sim/*.out; do
+  sims=$((sims + 1))
+  f="examples/$(basename "$g" .out).merge"
+  code=$(printf '%s\n' "$merge_refused" | awk -v f="$(basename "$f")" '$1 == f { print $2 }')
+  want=0
+  [ -z "$code" ] || want=1
+  s1=0
+  s2=0
+  build/langc sim "$f" >"$tmp/sim1.out" 2>/dev/null || s1=$?
+  build/langc sim "$f" >"$tmp/sim2.out" 2>/dev/null || s2=$?
+  if [ "$s1" -ne "$want" ] || [ "$s2" -ne "$want" ] || ! cmp -s "$tmp/sim1.out" "$tmp/sim2.out" ||
+    ! cmp -s "$tmp/sim1.out" "$g"; then
+    echo "FAIL sim $f: want exit $want two times and the bytes of $g, got exit $s1 and $s2"
+    sim_bad=$((sim_bad + 1))
+    fail=$((fail + 1))
+  fi
+done
+echo "sim: $sims golden, $sim_bad mismatches"
+
 # JSON shape: `langc check --json` on each test/json/*.lang gives the lines of
 # test/json/expect.txt exactly (with the exit code and any stderr line).
 jsons=0

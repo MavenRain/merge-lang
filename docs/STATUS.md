@@ -1,7 +1,7 @@
 # merge-lang status
 
 The build implements slices S1, S1b, S2, S2b, S2c, S2d, S3a, S3e, S3x,
-S3b and S4 of `docs/PLAN.md` section 9: the port of the evolve-lang 1f87a5a
+S3b, S4 and S5 of `docs/PLAN.md` section 9: the port of the evolve-lang 1f87a5a
 surface and cubical kernel (S1), induction in the kernel (S1b), the
 merge-lang domain with the laws L1 to L4 as guest terms (S2), ℤ with the
 `stock` read (S2b), path constructors of dimension 2 with the `fold` over
@@ -9,11 +9,95 @@ a higher inductive type (S2c), `isSet` for each part with `mergeAll` on
 the program side (S2d), the parse and `fmt` of the merge forms (S3a), the
 elaboration of the forms to guest terms (S3e), the check of the four
 examples in the gate (S3x), an `op` body as an `Ops` script of part
-reads and part operations (S3b), and the checker: the classes, the
-bounded search, the coordination codes and the laws L5 to L8 (S4). It
-does not complete
-M0. There is no merge engine, no replica simulator and no coordination
-report yet.
+reads and part operations (S3b), the checker: the classes, the bounded
+search, the coordination codes and the laws L5 to L8 (S4), and the
+replica simulator `langc sim` with golden transcripts and a determinism
+gate (S5). It does not complete
+M0. There is no merge engine and no coordination report yet.
+
+## S5 (2026-10-31)
+
+- Scope (`docs/PLAN.md` section 9, the S5 row; Q56 (a), Q57 (a), Q58
+  (b), Q59 (a)): `langc sim`, the transcript, two golden files and the
+  determinism gate. The base is the USER S4 commit 5b4138b.
+- U1 (Q56 (a), Q57 (a)): the command `langc sim PROG [--replicas N]
+  [--prefix P] [--ops M]` in `src/main.c`. The defaults are P 1, M 2
+  and N the declared replicas (Q17 (a)). A flag that is given two times,
+  a flag with no numeral, or a bound above `SEARCH_CAP` gets `USAGE`.
+  `check_program_sim` checks the program in sim mode: a replicated form
+  gets no `form_search`, so `REFUSE_NEEDS_COORDINATION` does not occur.
+  Each other refusal stays. `sim_form` runs `search_pair` with the
+  sentinel `SEARCH_ANY_OP` (`src/front/search.h`): each op in each
+  branch, and a leaf needs no pair. K counts all complete, enabled and
+  I-valid schedules in the bounds.
+- U2 (Q59 (a)): the part renderer (Counter, Escrow), the step and
+  `requires` lines and the counterexample transcript (`sim_print` in
+  `src/front/check.c`). The first violation in the 5.2 order is the
+  minimal counterexample (J5). In a refused transcript, K is the count
+  of kept schedules before the counterexample, plus 1. Golden
+  `test/sim/inventory.out`: 10 lines, `schedules 33`, `sell ∥ sell`
+  refuted with `stock = -1`, the code `REFUSE_NEEDS_COORDINATION` and
+  the escrow fix line, rc 1.
+- U3 (Q58 (b)): golden `test/sim/inventory-escrow.out`: 3 lines,
+  `schedules 620`, `invariant kept on all 620 schedules (bounded: 1, 2,
+  2)`, rc 0, stderr empty. `owner.merge` and `tags.merge` get no golden
+  file in S5 (S6).
+- U4: the determinism gate in `test/gate.sh`, after the merge examples
+  loop. For each `test/sim/NAME.out`, the gate runs `build/langc sim
+  examples/NAME.merge` two times. Each run must be equal (`cmp`) to the
+  golden file, and the two runs must give the same rc (1 for a file of
+  `merge_refused`, else 0). Count line: `sim: 2 golden, 0 mismatches`.
+- Fix: the class row pair line of `sim_print` prints O1 <= O2 in the
+  declaration order, not in the branch order. `inventory.out` does not
+  change (`sell ∥ sell`).
+- U5 mutants: 4 of 6 KILLED by `test/sim/inventory.out`, `check-clang`
+  rc 0 on each, `make -B` for each build. O1 the `dfs` branch loop from
+  the last replica down (K 43, not 33). O3 the `place` op loop from the
+  last op down (K 49, not 33). N1 the outer loop from `max` down and N2
+  no `stop` after the first violation (the transcript differs from line
+  3). 2 SURVIVED, as the design expects: O2 `next_args` with the last
+  argument as the most significant digit (no golden file refutes with a
+  2-argument op, Q58 (b), and K does not change with the order) and N3
+  the class row pair from the highest branch (no golden file has 3
+  replicas).
+- Known edges:
+  - `langc sim` on `owner.merge` or `tags.merge` (no `invariant`, so no
+    `NAMEInv`) gives `INTERNAL: search: no Bot, Merge, Inv or replica
+    def`, rc 1.
+  - A GSet or MVReg part in a transcript prints the `value_display`
+    text. No example has one.
+  - An Escrow transfer is not in the parenthesis of the `merged:` line:
+    a transfer does not change the stock.
+  - O2 and N3 survive until a golden file has a 2-argument op in a
+    refutation and 3 replicas.
+- `make check` EXIT 0: examples 13 checked, 0 failed; parse refusals 23;
+  check refusals 76; evals 206; ir 13 lowered; wasm 16 modules valid;
+  differential 1230 cases, 0 mismatches; fmt 163 canonical, 14
+  non-canonical pairs; merge examples 4 canonical, 3 checked, 1 refused;
+  sim 2 golden, 0 mismatches; json 35 fixtures, diagnostics 46 codes (32
+  with a fixture, 14 with no fixture); gate 0 failures; review, domain
+  and diagnostic edit regressions passed; cubical 124 checks, 41 round
+  trips. The S4 counts are the same; the sim line is new.
+
+### Review corrections (2026-10-31)
+
+- With `--replicas 0`, reconnect keeps the synced ancestor. The empty
+  schedule counts once, and enabled prefix schedules still count.
+- Stock text comes from the guest `counterStock` or `escrowStock`
+  function. Positive values above `INT64_MAX` stay positive, and the
+  transcript identifies the invariant that actually failed.
+- An allocation suggestion distributes the declared initial stock,
+  so the shares satisfy `REFUSE_ALLOC_SUM` even after prefix restocking.
+- A two-step counterexample with one step in each of two branches names
+  its operation pair. More complex counterexamples report `schedule:
+  needs coordination`, since the first operation of each branch can
+  preserve the invariant.
+- State rendering grows its buffer and reports `EVAL_PRINT` if a value
+  still exceeds the printer depth or 1 MiB limit. It does not accept a
+  truncated state as a complete counterexample.
+- `test/sim.c` adds seven C regression checks to `make check` and the
+  clang syntax check. The two existing golden transcripts keep their
+  bytes and schedule counts.
 
 ## S4 (2026-10-31)
 
@@ -648,12 +732,19 @@ checks and 38 round trips; the other S2d counts above are unchanged.
   (Q46 (b), Q51 (a), Q54 (c)); L6a and L6b as domain lemmas (Q55 (a));
   L7 per allocated part (Q52 (a)); 25 builtin ℕ lemmas (Q53 (b)); the
   `laws` and `pairs` counts of `check --json`.
+- S5: `langc sim` with the bounds flags (Q17 (a)) and sim mode (Q57
+  (a)); the sim search with `SEARCH_ANY_OP` (Q56 (a)); the transcript
+  renderer for Counter and Escrow parts and the minimal counterexample
+  (Q59 (a)); the golden files `test/sim/inventory.out` and
+  `test/sim/inventory-escrow.out` (Q58 (b)); the determinism gate in
+  `test/gate.sh`.
 
 ## Remaining M0 work
 
-1. S5: `langc sim`: schedules, order, reduction, transcript; golden
-   `test/sim/*.out` (the demo); the determinism gate (`docs/PLAN.md`
-   section 9, the S5 row). It needs the USER S4 commit.
+1. S6: the JSON report: a port of `json.c`, `NAME.report.json`, the 5.3
+   schema shared with `check --json`; golden reports; mutants on the
+   class map (`docs/PLAN.md` section 9, the S6 row). `owner.merge` and
+   `tags.merge` come in with S6 (Q58 (b)). It needs the USER S5 commit.
 2. The later slices of `docs/PLAN.md` section 9. Each needs the slice
    before it.
 
@@ -694,6 +785,11 @@ checks and 38 round trips; the other S2d counts above are unchanged.
 - J4 reads the classes statically: an L6b pair skips the search, even
   when its ops also change a `nonneg` Counter.
 - A pair that the search keeps is bounded (`W_BOUNDED`), not proved.
+- `langc sim` needs an `invariant` in each replicated form: a form with
+  no invariant gets `INTERNAL` (S5 Known edges).
+- The sim transcript renders Counter and Escrow parts. A GSet or MVReg
+  part prints its `value_display` text.
+- A kept invariant in `langc sim` is bounded, not proved.
 
 ## Internal boundaries
 
@@ -702,9 +798,11 @@ the builtin table and the refusal rules) and the lowering to the IR.
 `src/main.c` holds the commands of `langc`, the JSON output and the
 `W_NONCANON` test. The C tests are in `test/` (`test/cubical.c`,
 `test/diagnostics.c`, `test/fronttool.c`). The guest fixtures are in
-`test/check`, `test/eval`, `test/fmt`, `test/ir` and `test/json`. The gate
-compares the refusal, evaluation and JSON output with `expect.txt` files,
-formatted text with `.canon` files, and evaluator results with Wasm.
+`test/check`, `test/eval`, `test/fmt`, `test/ir`, `test/json` and
+`test/sim`. The gate compares the refusal, evaluation and JSON output with
+`expect.txt` files, formatted text with `.canon` files, sim transcripts
+with `test/sim/*.out` files (two runs each), and evaluator results with
+Wasm.
 A program can declare
 CM and CC signatures that pass R1, but cannot declare base data, an axiom
 or a general recursive definition (`docs/PLAN.md` section 2).

@@ -248,6 +248,7 @@ typedef struct {
   uint32_t warn_cap;
   size_t law_total, law_proved, law_bounded, law_refuted; /* check_program: the laws of the forms (U5) */
   size_t pair_total, pair_classified;                     /* check_program: the op pairs of the forms */
+  int sim; /* check_program_sim (Q57 (a)): a replicated form gets no form_search */
 } Machine;
 
 /* Each function returns NULL (or 0) after a diagnostic. A NULL input gives a

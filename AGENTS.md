@@ -7,9 +7,9 @@ state that replicas change while they are disconnected and merge when they
 reconnect. Do not use it for text co-editing, server-only databases or
 Redis scripts.
 
-## Status (S4)
+## Status (S5)
 
-S1, S1b, S2, S2b, S2c, S2d, S3a, S3e, S3x, S3b and S4 are built: the port of the evolve-lang
+S1, S1b, S2, S2b, S2c, S2d, S3a, S3e, S3x, S3b, S4 and S5 are built: the port of the evolve-lang
 1f87a5a surface and cubical kernel (S1), induction in the kernel (S1b:
 `natMax`, a `fold` over ℕ with a motive, `elim` for Bool and `Option`,
 and `sumFin`), the domain with the laws L1 to L4 as guest terms (S2:
@@ -29,13 +29,15 @@ forms, with `REFUSE_NO_MERGE`, `REFUSE_OP_INFINITE_ARG`,
 examples in the gate (S3x), and `op` scripts (S3b: a cell monad field
 `E → T A` with `E` closed data, the library `Ops A` with the runner
 `NAMERun`, the script syntax `x ← read PART; ...`, and `PLe` with
-`PLeTrans` for each part), and the checker (S4: the classes J4 to J6,
+`PLeTrans` for each part), the checker (S4: the classes J4 to J6,
 the bounded search, `REFUSE_NEEDS_COORDINATION`,
 `REFUSE_RULE_MISMATCH`, `REFUSE_READ_WINNER`, `W_BOUNDED`, the laws L5,
 L5r, L6a, L6b, L7 and L8, the `Replica S` machine, the `laws` and
-`pairs` counts of `check --json`; `docs/STATUS.md`).
-`langc check --json` and `langc fmt` work.
-`langc sim`, the Wasm merge engine, the JSON
+`pairs` counts of `check --json`), and the replica simulator (S5:
+`langc sim`, the transcript, the golden files `test/sim/*.out` and the
+determinism gate; `docs/STATUS.md`).
+`langc check --json`, `langc fmt` and `langc sim` work.
+The Wasm merge engine, the JSON
 coordination report, `langc mcp`, `SKILL.md` and the graded examples are
 planned (`docs/PLAN.md` section 7 and section 9). Do not cite them as built.
 `langc` is a native program, not a Wasm module.
@@ -48,6 +50,11 @@ planned (`docs/PLAN.md` section 7 and section 9). Do not cite them as built.
   `typed` counts.
 - `build/langc fmt PROG`: print the canonical text of a program. `langc
   check` gives `W_NONCANON` when a program region is not canonical.
+- `build/langc sim PROG [--replicas N] [--prefix P] [--ops M]`: run the
+  replica simulator on a merge program. It prints the schedule count K.
+  For a refuted invariant, it prints the minimal counterexample
+  transcript (rc 1). A kept invariant is bounded, not proved (rc 0). The
+  golden files are `test/sim/*.out`.
 
 ## Rules for a change
 

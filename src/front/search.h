@@ -10,6 +10,9 @@
 
 #define SEARCH_CAP 100000u
 #define SEARCH_ARGS_MAX 8u
+/* O1 and O2 for langc sim (S5 design sec 2, Q56 (a)): each op in each
+   branch, and a leaf needs no pair. */
+#define SEARCH_ANY_OP UINT32_MAX
 
 /* The guest values of one replicated form. An op parameter type is Fin
    SIZE (an atoms name, Replica or Fin m), so the argument j is pack j p,
@@ -48,7 +51,8 @@ typedef enum {
 } SearchResult;
 
 /* K is the count of enabled, I-valid schedules with O1 in one branch and
-   O2 in a different branch. A violation keeps its schedule (the 4.6
+   O2 in a different branch (with SEARCH_ANY_OP, each enabled, I-valid
+   schedule). A violation keeps its schedule (the 4.6
    fields: the steps with the state after each, and the merged state). */
 typedef struct {
   SearchResult result;

@@ -6,11 +6,11 @@ merge of each state part and the domain invariants. The checker puts each
 pair of concurrent operations in one of three classes: independent,
 explicit conflict, or needs coordination. For a pair that needs
 coordination, it gives a concrete counterexample or it accepts a declared
-resource allocation rule. The host is TinyCC. The planned targets are a
-Wasm merge engine, a deterministic replica simulator (`langc sim`) and a
-JSON coordination report.
+resource allocation rule. The host is TinyCC. The deterministic replica simulator (`langc sim`)
+is built. The planned targets are a Wasm merge engine and a JSON
+coordination report.
 
-## Status (S4)
+## Status (S5)
 
 This repository is the tcc-wasm kit seed of lang-template, the design, the
 plan, slice S1 (the port of the evolve-lang 1f87a5a surface and cubical
@@ -31,12 +31,15 @@ terms, with the codes `REFUSE_NO_MERGE`, `REFUSE_OP_INFINITE_ARG`,
 runs `langc check` on the four examples `examples/*.merge`), slice
 S3b (a cell monad field `E → T A` with `E` closed data, the library
 `Ops A`, an `op` body as a script of part reads and part operations,
-and `PLe` with `PLeTrans` for each part) and slice S4 (the checker: the
+and `PLe` with `PLeTrans` for each part), slice S4 (the checker: the
 classes J4 to J6, the bounded search, `REFUSE_NEEDS_COORDINATION`,
 `REFUSE_RULE_MISMATCH`, `REFUSE_READ_WINNER`, `W_BOUNDED`, the laws L5,
 L5r, L6a, L6b, L7 and L8, the `Replica S` machine, and the `laws` and
-`pairs` counts of `check --json`; `docs/STATUS.md`). There is no merge
-engine, no replica simulator and no coordination report yet.
+`pairs` counts of `check --json`) and slice S5 (`langc sim`: the
+schedules in the 5.2 order, the transcript, the minimal counterexample,
+the golden files `test/sim/*.out` and the determinism gate;
+`docs/STATUS.md`). There is no merge engine and no coordination report
+yet.
 `make check` passes. `docs/PLAN.md` section 9 gives the slices.
 
 The compiler `langc` is a native program that tcc builds. It is not a Wasm

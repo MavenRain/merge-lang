@@ -3928,10 +3928,14 @@ static int form_alloc(Checker *c, const FormItem *it, Part *parts, size_t k, con
 
 /* NAMEPARTSplit : Replica → ℕ (Q38 (a)), the share chain over witness i,
    with the span of the allocate word. */
+static const char *form_split_name(const Cogen *g, const Part *p) {
+  return cg_join(g, cg_join(g, g->d->name, cg_word(g, p->it->name.text)), "Split");
+}
+
 static int form_split(Cogen *g, Part *p, uint64_t r) {
   g->line = p->alloc->line;
   g->col = p->alloc->col;
-  p->split = cg_join(g, cg_join(g, g->d->name, cg_word(g, p->it->name.text)), "Split");
+  p->split = form_split_name(g, p);
   if (p->split == NULL)
     return FAIL(g->c, "OOM", "out of memory");
   return cg_def_origin(g, ORIGIN_PROGRAM, p->split, cg_pi(g, NULL, cg_var(g, "Replica"), cg_var(g, "Nat")),
@@ -4373,28 +4377,19 @@ static int pair_covered(const Part *parts, size_t k, const OpWrites *ow, uint32_
   return l7 || (ow[o1].adds && ow[o2].adds) || (l6b && mvreg_only);
 }
 
-static int form_search(const Cogen *g, const Part *parts, size_t k, const Decl *replicas, const FormItem *const *ops,
-                       const OpWrites *ow, uint32_t n) {
+/* The SearchForm of the form G->d with the N ops OPS: the defs NAMEBot,
+   NAMEMerge, NAMEInv and each NAMEWord, and the proof of the first
+   replica name (form_search and sim_form). */
+static int search_form(const Cogen *g, const Decl *replicas, const FormItem *const *ops, uint32_t n, SearchForm *f) {
   Checker *c = g->c;
   Machine *m = c->m;
-  const Decl *d = g->d;
   uint32_t *words = arena_alloc(m->arena, (n + 1u) * sizeof *words), *arity = arena_alloc(m->arena, (n + 1u) * sizeof *arity);
   const uint32_t **sizes = arena_alloc(m->arena, (n + 1u) * sizeof *sizes);
-  SearchBounds b = {1u, 2u, (uint32_t)replicas->name_count};
-  SearchForm f;
   const Value *first;
-  uint32_t o1, o2, j;
-  size_t a, pj;
-  int l7 = 1;
-  if (n == 0u)
-    return 1;
+  uint32_t j;
+  size_t a;
   if (words == NULL || arity == NULL || sizes == NULL)
     return FAIL(c, "OOM", "out of memory");
-  for (a = 0; a < d->item_count; a++) {
-    const FormItem *it = &d->items[a];
-    pj = it->kind == ITEM_INVARIANT ? part_index(parts, k, it->body->right->name) : k;
-    l7 = l7 && (it->kind != ITEM_INVARIANT || (pj < k && parts[pj].alloc != NULL));
-  }
   for (j = 0; j < n; j++) {
     uint32_t *sz = arena_alloc(m->arena, (ops[j]->param_count + 1u) * sizeof *sz);
     if (sz == NULL)
@@ -4406,21 +4401,43 @@ static int form_search(const Cogen *g, const Part *parts, size_t k, const Decl *
     if (words[j] == NO_DEF)
       return FAIL(c, "INTERNAL", "search: no def for the op %s", ops[j]->name.text);
   }
-  f.bot = form_def(g, "Bot");
-  f.merge = form_def(g, "Merge");
-  f.inv = form_def(g, "Inv");
-  f.words = words;
-  f.arity = arity;
-  f.sizes = sizes;
-  f.op_count = n;
+  f->bot = form_def(g, "Bot");
+  f->merge = form_def(g, "Merge");
+  f->inv = form_def(g, "Inv");
+  f->words = words;
+  f->arity = arity;
+  f->sizes = sizes;
+  f->op_count = n;
   j = replicas->name_count == 0u ? NO_DEF : find_def(m, replicas->names[0].text);
-  if (f.bot == NO_DEF || f.merge == NO_DEF || f.inv == NO_DEF || j == NO_DEF)
-    return FAIL(c, "INTERNAL", "search: no Bot, Merge, Inv or replica def for %s", d->name);
+  if (f->bot == NO_DEF || f->merge == NO_DEF || f->inv == NO_DEF || j == NO_DEF)
+    return FAIL(c, "INTERNAL", "search: no Bot, Merge, Inv or replica def for %s", g->d->name);
   if ((first = def_value(m, j)) == NULL)
     return 0;
   if (!val_is(first, OP_PACK) || first->argc != 2u)
     return FAIL(c, "INTERNAL", "search: the replica %s is not pack j p", replicas->names[0].text);
-  f.proof = first->args[1];
+  f->proof = first->args[1];
+  return 1;
+}
+
+static int form_search(const Cogen *g, const Part *parts, size_t k, const Decl *replicas, const FormItem *const *ops,
+                       const OpWrites *ow, uint32_t n) {
+  Checker *c = g->c;
+  Machine *m = c->m;
+  const Decl *d = g->d;
+  SearchBounds b = {1u, 2u, (uint32_t)replicas->name_count};
+  SearchForm f;
+  uint32_t o1, o2;
+  size_t a, pj;
+  int l7 = 1;
+  if (n == 0u)
+    return 1;
+  for (a = 0; a < d->item_count; a++) {
+    const FormItem *it = &d->items[a];
+    pj = it->kind == ITEM_INVARIANT ? part_index(parts, k, it->body->right->name) : k;
+    l7 = l7 && (it->kind != ITEM_INVARIANT || (pj < k && parts[pj].alloc != NULL));
+  }
+  if (!search_form(g, replicas, ops, n, &f))
+    return 0;
   for (o1 = 0; o1 < n; o1++) {
     for (o2 = o1; o2 < n; o2++) m->law_total += !pair_covered(parts, k, ow, o1, o2, l7);
   }
@@ -4559,7 +4576,7 @@ static int check_replicated(Checker *c, const Decl *d) {
   g.col = first->col;
   return cg_def_origin(&g, ORIGIN_PROGRAM, cg_join(&g, d->name, "Inv"), cg_pi(&g, NULL, shop, cg_var(&g, "Bool")),
                        cg_lam(&g, "s", shop, inv)) &&
-         form_search(&g, parts, k, replicas, ops, ow, n);
+         (c->m->sim || form_search(&g, parts, k, replicas, ops, ow, n));
 }
 
 static int check_decl(Checker *c, const Decl *d) {
@@ -4581,7 +4598,7 @@ static int check_decl(Checker *c, const Decl *d) {
   return d->kind == DECL_FAMILY ? check_family(c, d) : check_def(c, d);
 }
 
-int check_program(Arena *arena, const DeclList *decls, Machine *m, Diag *diag) {
+static int check_all(Arena *arena, const DeclList *decls, Machine *m, Diag *diag, int sim) {
   Checker c;
   size_t ctors = 0;
   size_t defs = decls->count;
@@ -4592,6 +4609,7 @@ int check_program(Arena *arena, const DeclList *decls, Machine *m, Diag *diag) {
   m->arena = arena;
   m->diag = diag;
   m->fuel = EVAL_FUEL_STEPS;
+  m->sim = sim;
   /* A codata with F fields gives one family (D_pos), at most 1 + F
      constructors and at most 3 + 2F definitions (check_cofamily). */
   for (i = 0; i < decls->count; i++) {
@@ -4647,6 +4665,347 @@ int check_program(Arena *arena, const DeclList *decls, Machine *m, Diag *diag) {
   m->def = NULL;
   m->checked = decls->count;
   m->decl_failed = 0;
+  return 1;
+}
+
+int check_program(Arena *arena, const DeclList *decls, Machine *m, Diag *diag) {
+  return check_all(arena, decls, m, diag, 0);
+}
+
+int check_program_sim(Arena *arena, const DeclList *decls, Machine *m, Diag *diag) {
+  return check_all(arena, decls, m, diag, 1);
+}
+
+/* The replicated form at decl I for langc sim (sim_form and sim_print): a
+   Checker and a Cogen at the decl, the ops in item order, the parts (the
+   allocate lines change their Counter parts to Escrow parts) and the
+   SearchForm. The check in sim mode made the defs. */
+typedef struct {
+  Checker c;
+  Cogen g;
+  const Decl *replicas;
+  const FormItem **ops;
+  uint32_t n;
+  Part *parts;
+  size_t k;
+  SearchForm f;
+} SimForm;
+
+static int sim_ctx(Machine *m, const DeclList *decls, size_t i, SimForm *x) {
+  const Decl *d = &decls->items[i];
+  size_t j;
+  memset(x, 0, sizeof *x);
+  x->c.m = m;
+  x->c.decls = decls;
+  x->c.decl_index = i;
+  x->c.self = NO_FAMILY;
+  x->g.c = &x->c;
+  x->g.d = d;
+  x->g.line = d->line;
+  x->g.col = d->col;
+  m->def = d->name;
+  x->ops = arena_alloc(m->arena, (d->item_count + 1u) * sizeof *x->ops);
+  x->parts = arena_alloc(m->arena, (d->item_count + 1u) * sizeof *x->parts);
+  if (x->ops == NULL || x->parts == NULL)
+    return FAIL(&x->c, "OOM", "out of memory");
+  if ((x->replicas = form_decl(&x->c, DECL_REPLICAS, NULL)) == NULL)
+    return FAIL(&x->c, "INTERNAL", "sim: no replicas form before %s", d->name);
+  for (j = 0; j < d->item_count; j++) {
+    if (d->items[j].kind == ITEM_OP)
+      x->ops[x->n++] = &d->items[j];
+    if (d->items[j].kind == ITEM_STATE && !form_part(&x->c, &d->items[j], &x->parts[x->k++]))
+      return 0;
+  }
+  for (j = 0; j < d->item_count; j++) {
+    if (d->items[j].kind == ITEM_ALLOCATE && !form_alloc(&x->c, &d->items[j], x->parts, x->k, x->replicas))
+      return 0;
+  }
+  for (j = 0; j < x->k; j++) {
+    if (x->parts[j].alloc != NULL && (x->parts[j].split = form_split_name(&x->g, &x->parts[j])) == NULL)
+      return FAIL(&x->c, "OOM", "out of memory");
+  }
+  return search_form(&x->g, x->replicas, x->ops, x->n, &x->f);
+}
+
+int sim_form(Machine *m, const DeclList *decls, size_t i, SearchBounds b, SearchOutcome *out) {
+  SimForm x;
+  return sim_ctx(m, decls, i, &x) && search_pair(m, &x.f, b, SEARCH_ANY_OP, SEARCH_ANY_OP, out);
+}
+
+/* The part J of the K parts of the state S: the right-nested pack chain of
+   form_shop. NULL when S has another shape. */
+static const Value *sim_get(const Value *s, size_t k, size_t j) {
+  size_t a;
+  for (a = 0; a < j && s != NULL; a++) s = val_is(s, OP_PACK) && s->argc == 2u ? s->args[1] : NULL;
+  return j + 1u == k || s == NULL ? s : val_is(s, OP_PACK) && s->argc == 2u ? s->args[0] : NULL;
+}
+
+/* The Counter or Escrow part P at the value V (S5 design sec 4): INC and
+   DEC at each replica. Counter is
+   pack inc dec. Escrow is pack mat dec: the increment at j is mat j j (a
+   restock), and the init is the sum of the shares (form_alloc). Each
+   function goes to pack j p, the core member, and gives a numeral. */
+static int sim_count(SimForm *x, const Part *p, const Value *v, uint64_t *inc, uint64_t *dec) {
+  Machine *m = x->c.m;
+  size_t j;
+  if (!val_is(v, OP_PACK) || v->argc != 2u)
+    return FAIL(&x->c, "INTERNAL", "sim: the part %s is not pack a b", p->it->name.text);
+  for (j = 0; j < x->replicas->name_count; j++) {
+    const Value *at = val_make(m, OP_PACK, 0, 2u, val_nat(m, j), x->f.proof, NULL);
+    const Value *a = apply_value(m, v->args[0], at), *b = apply_value(m, v->args[1], at);
+    a = p->kind == PART_ESCROW ? apply_value(m, a, at) : a;
+    if (a == NULL || b == NULL)
+      return 0;
+    if (a->kind != VAL_NAT || b->kind != VAL_NAT)
+      return FAIL(&x->c, "INTERNAL", "sim: the part %s has no numeral at %s", p->it->name.text, x->replicas->names[j].text);
+    inc[j] = a->nat;
+    dec[j] = b->nat;
+  }
+  return 1;
+}
+
+/* Read stock with the same guest function as the invariant. A raw Escrow
+   has zero initial rights, given by either row of counterBot. */
+static const Value *sim_stock(SimForm *x, const Part *p, const Value *v) {
+  Machine *m = x->c.m;
+  const Value *r = val_nat(m, x->replicas->name_count), *init;
+  if (p->kind == PART_COUNTER) {
+    init = val_nat(m, p->s0);
+  } else if (p->split != NULL) {
+    init = def_value(m, find_def(m, p->split));
+  } else {
+    const Value *bot = apply_value(m, def_value(m, find_def(m, "counterBot")), r);
+    init = val_is(bot, OP_PACK) && bot->argc == 2u ? bot->args[0] : NULL;
+  }
+  return apply_value(m, apply_value(m, apply_value(m, def_value(m, find_def(m,
+                     p->kind == PART_COUNTER ? "counterStock" : "escrowStock")), r), init), v);
+}
+
+/* Display a complete value, growing the buffer within a fixed print limit.
+   A printer limit gives a diagnostic instead of a partial state. */
+static const char *sim_display(SimForm *x, const Value *v) {
+  Machine *m = x->c.m;
+  size_t cap;
+  for (cap = 1024u; cap <= (1u << 20); cap *= 2u) {
+    char *buf = arena_alloc(m->arena, cap);
+    if (buf == NULL) {
+      FAIL(&x->c, "OOM", "out of memory");
+      return NULL;
+    }
+    if (value_display(m, v, buf, cap))
+      return buf;
+    if (m->diag->set)
+      return NULL;
+  }
+  FAIL(&x->c, "EVAL_PRINT", "sim: a state value exceeds the print limit");
+  return NULL;
+}
+
+/* The value text of the part PJ of the state S in TEXT: the stock V of a
+   Counter or Escrow part (with PAREN: `V (init I, increments R n, ...,
+   decrements R n, ...)`, the nonzero entries in replica order), else the
+   displayed value (GSet, MVReg). */
+static int sim_value(SimForm *x, size_t pj, const Value *s, int paren, const char **text, int *negative) {
+  Machine *m = x->c.m;
+  const Part *p = &x->parts[pj];
+  const Value *v = sim_get(s, x->k, pj);
+  size_t r = x->replicas->name_count, j, w, used, cap = 96u;
+  uint64_t *inc = arena_alloc(m->arena, (r + 1u) * sizeof *inc), *dec = arena_alloc(m->arena, (r + 1u) * sizeof *dec);
+  char num[48];
+  char *buf;
+  if (inc == NULL || dec == NULL)
+    return FAIL(&x->c, "OOM", "out of memory");
+  if (v == NULL)
+    return FAIL(&x->c, "INTERNAL", "sim: the state has no part %s", p->it->name.text);
+  if (p->kind == PART_GSET || p->kind == PART_MVREG)
+    return (*text = sim_display(x, v)) != NULL;
+  if (!sim_count(x, p, v, inc, dec))
+    return 0;
+  v = sim_stock(x, p, v);
+  if (v == NULL || (*text = sim_display(x, v)) == NULL)
+    return 0;
+  *negative = (*text)[0] == '-';
+  if (!paren)
+    return 1;
+  /* Each nonzero row entry needs its name, a separator and a uint64.
+     Reserve both rows even when most entries are zero. */
+  for (j = 0; j < r; j++) cap += 2u * (strlen(x->replicas->names[j].text) + 24u);
+  buf = arena_alloc(m->arena, cap);
+  if (buf == NULL)
+    return FAIL(&x->c, "OOM", "out of memory");
+  used = text_put(buf, cap, 0, *text);
+  snprintf(num, sizeof num, " (init %llu", (unsigned long long)p->s0);
+  used = text_put(buf, cap, used, num);
+  for (w = 0; w < 2u; w++) {
+    const uint64_t *row = w == 0u ? inc : dec;
+    int first = 1;
+    for (j = 0; j < r; j++) {
+      if (row[j] != 0u) {
+        used = text_put(buf, cap, used, !first ? ", " : w == 0u ? ", increments " : ", decrements ");
+        used = text_put(buf, cap, used, x->replicas->names[j].text);
+        snprintf(num, sizeof num, " %llu", (unsigned long long)row[j]);
+        used = text_put(buf, cap, used, num);
+        first = 0;
+      }
+    }
+  }
+  (void)text_put(buf, cap, used, ")");
+  *text = buf;
+  return 1;
+}
+
+/* HEAD, then `PART VALUE (...)` for each part of the state S (three spaces
+   between the parts). */
+static int sim_state(SimForm *x, const char *head, const Value *s) {
+  size_t pj;
+  int v = 0;
+  const char *text;
+  printf("%s", head);
+  for (pj = 0; pj < x->k; pj++) {
+    if (!sim_value(x, pj, s, 1, &text, &v))
+      return 0;
+    printf("%s%s %s", pj == 0u ? " " : "   ", x->parts[pj].it->name.text, text);
+  }
+  putchar('\n');
+  return 1;
+}
+
+/* The head and the arguments of the write T (WORD PART ARGS) in OUT (CAP
+   entries). Returns the count, 0 when CAP is too small. */
+static size_t sim_spine(const Term *t, const Term **out, size_t cap) {
+  const Term *h = t;
+  size_t n = 1, j;
+  for (; h != NULL && h->kind == TERM_APP; h = h->left) n++;
+  if (h == NULL || n > cap)
+    return 0;
+  out[0] = h;
+  for (j = n - 1u; t->kind == TERM_APP; t = t->left) out[j--] = t->right;
+  return n;
+}
+
+/* The text of the dec argument T of the op OP at the step ST: a numeral, an
+   op parameter (the member text of its argument), else the name. */
+static const char *sim_term_text(SimForm *x, const FormItem *op, const SearchStep *st, const Term *t) {
+  char *num;
+  size_t j;
+  if (t->kind == TERM_NAT && (num = arena_alloc(x->c.m->arena, 24u)) != NULL)
+    snprintf(num, 24u, "%llu", (unsigned long long)t->nat);
+  if (t->kind == TERM_NAT)
+    return num;
+  for (j = 0; j < op->param_count && t->kind == TERM_VAR; j++) {
+    if (strcmp(op->params[j].name, t->name) == 0)
+      return form_arg_text(&x->g, op->params[j].type, x->replicas, st->args[j]);
+  }
+  return t->kind == TERM_VAR ? t->name : "?";
+}
+
+#define SIM_SPINE 8u
+
+/* A step line (sec 4): `R: OP ARGS`, then `   PART V -> W` for each part
+   that the op writes (BEFORE is the state before the step), then `
+   requires c ≥ k: held` for each `dec c k` in the body. An Ops op body is
+   one line, with one requires clause for each dec in the script. */
+static int sim_step(SimForm *x, const SearchStep *st, const Value *before) {
+  const FormItem *op = x->ops[st->op];
+  const Term *sp[SIM_SPINE];
+  char *wrote = arena_alloc(x->c.m->arena, x->k + 1u);
+  const char *before_text, *after_text;
+  size_t j, w, n;
+  int v = 0;
+  if (wrote == NULL)
+    return FAIL(&x->c, "OOM", "out of memory");
+  memset(wrote, 0, x->k + 1u);
+  printf("%s: %s", st->seg == 0u ? "prefix" : x->replicas->names[st->seg - 1u].text, op->name.text);
+  for (j = 0; j < op->param_count; j++) {
+    const char *arg = form_arg_text(&x->g, op->params[j].type, x->replicas, st->args[j]);
+    if (arg == NULL)
+      return FAIL(&x->c, "OOM", "out of memory");
+    printf(" %s", arg);
+  }
+  for (w = 0; w <= op->step_count; w++) {
+    const Term *t = w < op->step_count ? op->steps[w].write : op->body;
+    n = t == NULL ? 0u : sim_spine(t, sp, SIM_SPINE);
+    j = n >= 2u && sp[1]->kind == TERM_VAR ? part_index(x->parts, x->k, sp[1]->name) : x->k;
+    if (j < x->k)
+      wrote[j] = 1;
+  }
+  for (j = 0; j < x->k; j++) {
+    if (wrote[j] && (!sim_value(x, j, before, 0, &before_text, &v) || !sim_value(x, j, st->after, 0, &after_text, &v)))
+      return 0;
+    if (wrote[j])
+      printf("   %s %s -> %s", x->parts[j].it->name.text, before_text, after_text);
+  }
+  for (w = 0; w <= op->step_count; w++) {
+    const Term *t = w < op->step_count ? op->steps[w].write : op->body;
+    const char *k = NULL;
+    n = t == NULL ? 0u : sim_spine(t, sp, SIM_SPINE);
+    if (n >= 3u && sp[0]->kind == TERM_VAR && strcmp(sp[0]->name, "dec") == 0 && sp[1]->kind == TERM_VAR &&
+        (k = sim_term_text(x, op, st, sp[2])) == NULL)
+      return FAIL(&x->c, "OOM", "out of memory");
+    if (k != NULL)
+      printf("   requires %s ≥ %s: held", sp[1]->name, k);
+  }
+  putchar('\n');
+  return 1;
+}
+
+int sim_print(Machine *m, const DeclList *decls, size_t i, SearchBounds b, const SearchOutcome *out) {
+  SimForm x;
+  const char *text;
+  const Value *anc;
+  const Decl *d = &decls->items[i];
+  uint32_t s, o[2] = {0, 0}, seen = 0, last = 0, branch_steps = 0;
+  size_t j, pj, broken = 0;
+  int v = 0, have = 0;
+  if (!sim_ctx(m, decls, i, &x))
+    return 0;
+  /* The broken invariant: the first nonneg PART (form_inv) with V < 0 on
+     the merged state. */
+  for (j = 0; j < d->item_count && !have; j++) {
+    const FormItem *it = &d->items[j];
+    pj = it->kind == ITEM_INVARIANT ? part_index(x.parts, x.k, it->body->right->name) : x.k;
+    if (pj < x.k && !sim_value(&x, pj, out->merged, 0, &text, &v))
+      return 0;
+    broken = pj < x.k && v ? pj : broken;
+    have = pj < x.k && v;
+  }
+  if (!have)
+    return FAIL(&x.c, "INTERNAL", "sim: no invariant of %s is broken on the merged state", d->name);
+  if ((anc = def_value(m, x.f.bot)) == NULL)
+    return 0;
+  for (s = 0; s < out->step_count && out->steps[s].seg == 0u; s++) {
+    if (!sim_step(&x, &out->steps[s], anc))
+      return 0;
+    anc = out->steps[s].after;
+  }
+  if (!sim_state(&x, "ancestor:", anc))
+    return 0;
+  for (; s < out->step_count; s++) {
+    const SearchStep *st = &out->steps[s];
+    if (!sim_step(&x, st, s > 0u && out->steps[s - 1u].seg == st->seg ? out->steps[s - 1u].after : anc))
+      return 0;
+    o[seen < 2u ? seen : 1u] = seen < 2u && (seen == 0u || st->seg != last) ? st->op : o[seen < 2u ? seen : 1u];
+    seen += seen < 2u && (seen == 0u || st->seg != last);
+    last = st->seg;
+    branch_steps++;
+  }
+  printf("reconnect: merge");
+  for (j = 0; j < b.replicas; j++) printf(" %s", x.replicas->names[j].text);
+  putchar('\n');
+  if (!sim_state(&x, "merged:", out->merged) || !sim_value(&x, broken, out->merged, 0, &text, &v))
+    return 0;
+  printf("REFUTED invariant nonneg %s: %s = %s\n", x.parts[broken].it->name.text, x.parts[broken].it->name.text, text);
+  /* Only two one-step branches witness a particular op pair. More
+     complex schedules can start with a pair that preserves the invariant. */
+  if (branch_steps == 2u && seen == 2u)
+    printf("%s ∥ %s: needs coordination (REFUSE_NEEDS_COORDINATION)\n", x.ops[o[1] < o[0] ? o[1] : o[0]]->name.text,
+           x.ops[o[1] > o[0] ? o[1] : o[0]]->name.text);
+  else
+    puts("schedule: needs coordination (REFUSE_NEEDS_COORDINATION)");
+  printf("fix: allocate %s by escrow (", x.parts[broken].it->name.text);
+  for (j = 0; j < x.replicas->name_count; j++)
+    printf("%s%s ↦ %llu", j == 0u ? "" : ", ", x.replicas->names[j].text, j == 0u ? (unsigned long long)x.parts[broken].s0 : 0ULL);
+  puts(")");
   return 1;
 }
 

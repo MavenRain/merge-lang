@@ -18,8 +18,13 @@ typedef enum {
   CMD_IR,
   CMD_ABI,
   CMD_BUILD,
-  CMD_FMT
+  CMD_FMT,
+  CMD_SIM
 } Command;
+
+/* The sim bounds (S5 design sec 1): replicas N, prefix P, ops M. */
+enum { BOUND_REPLICAS, BOUND_PREFIX, BOUND_OPS, BOUND_COUNT };
+static const char *const BOUND_FLAGS[BOUND_COUNT] = {"--replicas", "--prefix", "--ops"};
 
 typedef struct {
   Command command;
@@ -30,6 +35,8 @@ typedef struct {
   const char *out_path;
   int runtime;
   int json;
+  uint32_t bound[BOUND_COUNT]; /* sim: Q17 (a) defaults P 1, M 2, N declared */
+  int bound_set[BOUND_COUNT];
 } Options;
 
 static const struct {
@@ -42,6 +49,7 @@ static const struct {
   {"abi", CMD_ABI},
   {"build", CMD_BUILD},
   {"fmt", CMD_FMT},
+  {"sim", CMD_SIM},
 };
 
 static int usage(FILE *err) {
@@ -50,7 +58,8 @@ static int usage(FILE *err) {
         "       langc ir PROG\n"
         "       langc abi PROG\n"
         "       langc build PROG -o OUT [--runtime]\n"
-        "       langc fmt PROG\n", err);
+        "       langc fmt PROG\n"
+        "       langc sim PROG [--replicas N] [--prefix P] [--ops M]\n", err);
   return 2;
 }
 
@@ -76,6 +85,30 @@ static int parse_build_options(int argc, char **argv, Options *opt, Diag *diag) 
   return opt->out_path != NULL ? 1 : diag_fail(diag, "USAGE", NULL, "build needs -o OUT");
 }
 
+/* A bound: one decimal numeral, at most SEARCH_CAP. */
+static int parse_bound(const char *s, uint32_t *out) {
+  uint32_t n = 0;
+  size_t i;
+  for (i = 0; s[i] >= '0' && s[i] <= '9' && n <= SEARCH_CAP; i++) n = n * 10u + (uint32_t)(s[i] - '0');
+  *out = n;
+  return i > 0u && s[i] == '\0' && n <= SEARCH_CAP;
+}
+
+static int parse_sim_options(int argc, char **argv, Options *opt, Diag *diag) {
+  opt->bound[BOUND_PREFIX] = 1u;
+  opt->bound[BOUND_OPS] = 2u;
+  for (int i = 3; i < argc; i += 2) {
+    int k = 0;
+    while (k < BOUND_COUNT && strcmp(argv[i], BOUND_FLAGS[k]) != 0) k++;
+    if (k == BOUND_COUNT || i + 1 >= argc) return diag_fail(diag, "USAGE", NULL, "unknown sim argument '%s'", argv[i]);
+    if (opt->bound_set[k]) return diag_fail(diag, "USAGE", NULL, "sim: %s is given twice", argv[i]);
+    if (!parse_bound(argv[i + 1], &opt->bound[k]))
+      return diag_fail(diag, "USAGE", NULL, "sim: %s needs a numeral at most %u", argv[i], SEARCH_CAP);
+    opt->bound_set[k] = 1;
+  }
+  return 1;
+}
+
 static int parse_options(int argc, char **argv, Options *opt, Diag *diag) {
   memset(opt, 0, sizeof *opt);
   if (argc < 3 || !find_command(argv[1], &opt->command)) {
@@ -98,6 +131,8 @@ static int parse_options(int argc, char **argv, Options *opt, Diag *diag) {
       return 1;
     case CMD_BUILD:
       return parse_build_options(argc, argv, opt, diag);
+    case CMD_SIM:
+      return parse_sim_options(argc, argv, opt, diag);
   }
   return 0;
 }
@@ -135,6 +170,7 @@ static int run_target(const Options *opt, Machine *machine, Diag *diag) {
     case CMD_EVAL:
     case CMD_BUILD:
     case CMD_FMT:
+    case CMD_SIM:
       break;
   }
   out = fopen(opt->out_path, "wb");
@@ -159,9 +195,55 @@ static int run(const Options *opt, Arena *arena, Diag *diag) {
     case CMD_ABI:
     case CMD_BUILD:
     case CMD_FMT: /* run_fmt does fmt */
+    case CMD_SIM: /* run_sim does sim */
       break;
   }
   return run_target(opt, &machine, diag);
+}
+
+/* langc sim (S5 design sec 1 and 2): check in sim mode (Q57 (a)), then the
+   sim search of each replicated form in the declaration order, to the
+   first violation. K on a refusal is the kept count plus 1 (Q59 (a)). A
+   violation prints the sim_print transcript (sec 4) after the header. */
+static int run_sim(const Options *opt, Arena *arena, Diag *diag) {
+  char *text = NULL;
+  size_t len = 0, i, at = 0;
+  Front front;
+  Machine machine;
+  SearchOutcome out;
+  SearchBounds b = {opt->bound[BOUND_PREFIX], opt->bound[BOUND_OPS], opt->bound[BOUND_REPLICAS]};
+  const Decl *replicas = NULL;
+  uint64_t kept = 0;
+  int refuted = 0;
+  if (!read_source(arena, opt->prog_path, &text, &len, diag)) return 2;
+  if (!front_load(arena, opt->prog_path, text, len, &front, diag)) return 1;
+  if (!check_program_sim(arena, &front.decls, &machine, diag)) return 1;
+  for (i = 0; i < front.decls.count && replicas == NULL; i++)
+    replicas = front.decls.items[i].kind == DECL_REPLICAS ? &front.decls.items[i] : NULL;
+  if (replicas == NULL) return diag_fail(diag, "USAGE", NULL, "sim: %s has no replicas form", opt->prog_path) + 2;
+  b.replicas = opt->bound_set[BOUND_REPLICAS] ? b.replicas : (uint32_t)replicas->name_count;
+  if (b.replicas > replicas->name_count)
+    return diag_fail(diag, "USAGE", NULL, "sim: --replicas %u is above the %zu declared replicas", b.replicas, replicas->name_count) + 2;
+  if ((uint64_t)b.prefix + (uint64_t)b.ops * b.replicas > SEARCH_CAP)
+    return diag_fail(diag, "USAGE", NULL, "sim: the bounds give more than %u instances", SEARCH_CAP) + 2;
+  for (i = 0; i < front.decls.count && !refuted; i++) {
+    if (front.decls.items[i].kind != DECL_REPLICATED) continue;
+    if (!sim_form(&machine, &front.decls, i, b, &out)) return 1;
+    if (out.result == SEARCH_ABOVE_CAP)
+      return diag_fail(diag, "INTERNAL", NULL, "sim: %s visits more than %u schedules", front.decls.items[i].name, SEARCH_CAP) + 1;
+    kept += out.kept;
+    refuted = out.result == SEARCH_VIOLATION;
+    at = i;
+  }
+  printf("merge-lang sim %s\nreplicas", opt->prog_path);
+  for (i = 0; i < b.replicas; i++) printf(" %s", replicas->names[i].text);
+  printf("; bounds prefix %u, ops %u; schedules %llu\n", b.prefix, b.ops, (unsigned long long)(kept + (uint64_t)refuted));
+  if (refuted) {
+    (void)sim_print(&machine, &front.decls, at, b, &out); /* rc 1 both ways: a failure is INTERNAL */
+    return 1;
+  }
+  printf("invariant kept on all %llu schedules (bounded: %u, %u, %u)\n", (unsigned long long)kept, b.prefix, b.ops, b.replicas);
+  return 0;
 }
 
 /* The span of declaration D. A domain declaration is in domain/domain.lang. */
@@ -323,6 +405,7 @@ int main(int argc, char **argv) {
   arena_init(&arena, ARENA_LIMIT_BYTES);
   int status = opt.command == CMD_FMT     ? run_fmt(&opt, &arena, &diag)
                : opt.command == CMD_CHECK ? run_check(&opt, &arena, &diag)
+               : opt.command == CMD_SIM   ? run_sim(&opt, &arena, &diag)
                                           : run(&opt, &arena, &diag);
   arena_release(&arena);
   /* run_check prints its own diagnostics. */

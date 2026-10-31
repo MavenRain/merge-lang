@@ -1,0 +1,3 @@
+merge-lang sim examples/inventory-escrow.merge
+replicas A B; bounds prefix 1, ops 2; schedules 620
+invariant kept on all 620 schedules (bounded: 1, 2, 2)

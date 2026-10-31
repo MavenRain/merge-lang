@@ -82,10 +82,11 @@ static void count_visit(Search *s) {
 }
 
 /* A complete schedule: keep it when O1 is in one branch and O2 is in a
-   different branch, then merge the N branch states in replica order. */
+   different branch (always with SEARCH_ANY_OP), then merge the N branch
+   states in replica order. */
 static void leaf(Search *s) {
   uint32_t i, j, r;
-  int pair = 0;
+  int pair = s->o1 == SEARCH_ANY_OP;
   const Value *merged, *ancestor = before(s, s->total, 0u);
   count_visit(s);
   for (i = 0; i < s->total && !pair; i++) {
@@ -107,6 +108,9 @@ static void leaf(Search *s) {
       return;
     }
   }
+  /* With no branches, reconnect keeps the synced ancestor. */
+  if (merged == NULL)
+    merged = ancestor;
   switch (holds(s, merged)) {
   case 1:
     s->out->kept++;
@@ -146,7 +150,8 @@ static int next_args(const Search *s, SearchStep *st) {
 
 /* Each instance at position D in segment SEG, which has COUNT instances
    before D, in the 5.2 order: the op, then the arguments. A branch
-   instance is an instance of O1 or O2. A dropped instance (none, or a
+   instance is an instance of O1 or O2 (of each op with SEARCH_ANY_OP).
+   A dropped instance (none, or a
    state that is not I-valid) ends its schedule. */
 static void place(Search *s, uint32_t d, uint32_t seg, uint32_t count) {
   SearchStep *st = &s->path[d];
@@ -154,7 +159,7 @@ static void place(Search *s, uint32_t d, uint32_t seg, uint32_t count) {
   if (count >= (seg == 0u ? s->b.prefix : s->b.ops))
     return;
   for (o = 0; o < s->f->op_count && !s->stop; o++) {
-    int more = seg == 0u || o == s->o1 || o == s->o2;
+    int more = seg == 0u || s->o1 == SEARCH_ANY_OP || o == s->o1 || o == s->o2;
     st->seg = seg;
     st->op = o;
     memset(st->args, 0, sizeof st->args);

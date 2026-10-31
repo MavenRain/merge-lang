@@ -31,18 +31,23 @@ build/diagnostics: test/diagnostics.c $(SRC) $(HEADERS) build/domain.c
 build/cubical: $(CUBICAL_TOOL) $(HEADERS) build/domain.c
 	$(TCC) $(CFLAGS) -o build/cubical $(CUBICAL_TOOL) build/domain.c
 
+build/sim: test/sim.c $(SRC) $(HEADERS) build/domain.c
+	$(TCC) $(CFLAGS) -o build/sim test/sim.c $(filter-out src/main.c,$(SRC)) build/domain.c
+
 check-clang: build/domain.c
 	$(CC) $(CLANG_FLAGS) $(SRC) build/domain.c
 	$(CC) $(CLANG_FLAGS) $(FRONT_TOOL)
 	$(CC) $(CLANG_FLAGS) test/diagnostics.c $(filter-out src/main.c,$(SRC)) build/domain.c
 	$(CC) $(CLANG_FLAGS) $(CUBICAL_TOOL) build/domain.c
+	$(CC) $(CLANG_FLAGS) test/sim.c $(filter-out src/main.c,$(SRC)) build/domain.c
 
-check: build/langc build/fronttool build/diagnostics build/cubical check-clang
+check: build/langc build/fronttool build/diagnostics build/cubical build/sim check-clang
 	sh test/gate.sh
 	sh test/review.sh
 	build/fronttool
 	build/diagnostics
 	build/cubical
+	build/sim
 
 clean:
 	rm -rf build
