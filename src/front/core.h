@@ -222,6 +222,42 @@ typedef struct {
   const Value *value; /* computed when first used */
 } DefInfo;
 
+/* The class of an op pair (S6-DESIGN sec 3). */
+typedef enum { ROW_INDEPENDENT, ROW_EXPLICIT_CONFLICT, ROW_NEEDS_COORDINATION } RowClass;
+/* How the class of a pair is known. */
+typedef enum { MARK_PROVED, MARK_BOUNDED, MARK_REFUTED } RowMark;
+
+/* One op of a counterexample: SEG 0 is the ancestor, SEG R + 1 is replica R.
+   STATE is the transcript text of the state after the op. */
+typedef struct {
+  uint32_t seg;
+  const char *op;
+  const char *const *args;
+  uint32_t arg_count;
+  const char *state;
+} RowStep;
+
+/* The counterexample of a refuted pair (S6-DESIGN sec 4). Each text is the
+   sim transcript text. */
+typedef struct {
+  uint32_t prefix, ops, replicas;
+  const char *const *replica_names;
+  const RowStep *steps;
+  uint32_t step_count;
+  const char *ancestor, *merged;
+  const char *inv_name, *inv_values; /* `nonneg P` and `P = V` */
+} RowCex;
+
+/* One op pair of a replicated form. A NULL text is a JSON null. */
+typedef struct {
+  const char *form, *a, *b;
+  RowClass cls;
+  const char *part, *invariant, *rule;
+  RowMark mark;
+  const char *code, *fix;
+  const RowCex *cex;
+} PairRow;
+
 /* The checked program and the evaluation state. No global state: every
    function gets this context. */
 typedef struct {
@@ -248,6 +284,9 @@ typedef struct {
   uint32_t warn_cap;
   size_t law_total, law_proved, law_bounded, law_refuted; /* check_program: the laws of the forms (U5) */
   size_t pair_total, pair_classified;                     /* check_program: the op pairs of the forms */
+  PairRow *rows; /* check_program: one row for each classified pair, in the pair order */
+  uint32_t row_count;
+  uint32_t row_cap;
   int sim; /* check_program_sim (Q57 (a)): a replicated form gets no form_search */
 } Machine;
 

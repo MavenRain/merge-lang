@@ -5,6 +5,7 @@
 #include <string.h>
 
 #include "front/check.h"
+#include "front/json.h"
 #include "front/lexer.h"
 #include "front/parser.h"
 
@@ -50,17 +51,14 @@ static int json_encoding(void) {
     arena_init(&arena, (size_t)1 << 16);
     diag_init(&diag);
     int lexed = lex_source(&arena, "test-encoding", cases[i].source, strlen(cases[i].source), &tokens, &diag);
-    FILE *out = tmpfile();
-    char got[2048] = {0};
+    Diag sink;
+    Out out;
     char want[128];
     snprintf(want, sizeof want, "\"found\":\"%s\"", cases[i].found);
-    if (out != NULL) {
-      if (diag.set) diag_print_json(&diag, out);
-      rewind(out);
-      fread(got, 1, sizeof got - 1, out);
-      fclose(out);
-    }
-    if (lexed || out == NULL || strstr(got, want) == NULL) {
+    diag_init(&sink);
+    out_init(&out, &arena, &sink);
+    int printed = diag.set && diag_print_json(&diag, &out);
+    if (lexed || !printed || strstr(out.data, want) == NULL) {
       fprintf(stderr, "FAIL JSON encoding case %zu: expected %s\n", i, want);
       passed = 0;
     }

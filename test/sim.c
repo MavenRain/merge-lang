@@ -71,6 +71,10 @@ int main(void) {
   const char *prefix =
       "replicas A B\n\nreplicated Shop\n  state stock : Counter (init 0)\n"
       "  op sell := dec stock 1\n  op refill := restock stock 1\n  invariant nonneg stock\n";
+  const char *unrelated_inv =
+      "replicas A B\n\natoms Tag := urgent\n\nreplicated Tags\n"
+      "  state tags : GSet Tag\n  op tag (t : Tag) := add tags t\n\n"
+      "TagsInv : Tags → Bool\nTagsInv s = false\n";
   const char *multi =
       "replicas A B\n\nreplicated Shop\n  state stock : Counter (init 1)\n"
       "  op refill := restock stock 1\n  op sell := dec stock 2\n  invariant nonneg stock\n";
@@ -96,6 +100,7 @@ int main(void) {
   int ok = 1;
   ok &= sim_case("zero replicas", inventory, (SearchBounds){0, 2, 0}, 1, NULL, NULL);
   ok &= sim_case("zero replicas with prefix", inventory, (SearchBounds){1, 2, 0}, 3, NULL, NULL);
+  ok &= sim_case("unrelated Inv definition", unrelated_inv, (SearchBounds){1, 2, 2}, 18, NULL, NULL);
   ok &= sim_case("allocation after prefix", prefix, (SearchBounds){1, 2, 2}, 14, prefix_want, NULL);
   ok &= sim_case("multi-step classification", multi, (SearchBounds){0, 2, 2}, 15, multi_want, "refill ∥ refill");
   ok &= sim_case("wide stock", wide, (SearchBounds){1, 2, 2}, 4, wide_want, "REFUTED invariant nonneg reserve");
@@ -107,6 +112,6 @@ int main(void) {
   for (int j = 0; j < 20; j++) used += (size_t)snprintf(tags + used, sizeof tags - used, "add tags t%d; ", j);
   (void)snprintf(tags + used, sizeof tags - used, "dec stock 1\n  invariant nonneg stock\n");
   ok &= sim_case("complete set rendering", tags, (SearchBounds){1, 2, 2}, 4, tags_want, "...");
-  if (ok) puts("sim regressions: 7 checks");
+  if (ok) puts("sim regressions: 8 checks");
   return ok ? 0 : 1;
 }

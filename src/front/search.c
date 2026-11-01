@@ -48,9 +48,13 @@ static const Value *step(Search *s, const SearchStep *st, const Value *in) {
   return NULL;
 }
 
-/* 1 when NAMEInv is true at V, 0 when it is false, -1 after a failure. */
+/* 1 when NAMEInv is true at V (or the form has no invariant), 0 when it is
+   false, -1 after a failure. */
 static int holds(Search *s, const Value *v) {
-  const Value *r = apply_value(s->m, def_value(s->m, s->f->inv), v);
+  const Value *r;
+  if (s->f->inv == SEARCH_NO_INV)
+    return 1;
+  r = apply_value(s->m, def_value(s->m, s->f->inv), v);
   if (r == NULL) {
     s->failed = 1;
     s->stop = 1;

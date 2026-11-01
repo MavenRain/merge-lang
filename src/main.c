@@ -6,6 +6,7 @@
 #include "front/check.h"
 #include "front/fmt.h"
 #include "front/front.h"
+#include "front/json.h"
 #include "front/lower.h"
 #include "front/parser.h"
 #include "target.h"
@@ -193,7 +194,7 @@ static int run(const Options *opt, Arena *arena, Diag *diag) {
     case CMD_CHECK: /* run_check does check */
     case CMD_IR:
     case CMD_ABI:
-    case CMD_BUILD:
+    case CMD_BUILD: /* run_build does build */
     case CMD_FMT: /* run_fmt does fmt */
     case CMD_SIM: /* run_sim does sim */
       break;
@@ -204,7 +205,16 @@ static int run(const Options *opt, Arena *arena, Diag *diag) {
 /* langc sim (S5 design sec 1 and 2): check in sim mode (Q57 (a)), then the
    sim search of each replicated form in the declaration order, to the
    first violation. K on a refusal is the kept count plus 1 (Q59 (a)). A
-   violation prints the sim_print transcript (sec 4) after the header. */
+   violation prints the sim_print transcript (sec 4) after the header. With
+   no invariant in a form, the search takes it as true, and with no
+   invariant in all forms, there is no verdict line (S6 design Q67 (a)). */
+static int has_invariant(const Decl *d) {
+  size_t j;
+  int found = 0;
+  for (j = 0; j < d->item_count && !found; j++) found = d->items[j].kind == ITEM_INVARIANT;
+  return found;
+}
+
 static int run_sim(const Options *opt, Arena *arena, Diag *diag) {
   char *text = NULL;
   size_t len = 0, i, at = 0;
@@ -214,7 +224,7 @@ static int run_sim(const Options *opt, Arena *arena, Diag *diag) {
   SearchBounds b = {opt->bound[BOUND_PREFIX], opt->bound[BOUND_OPS], opt->bound[BOUND_REPLICAS]};
   const Decl *replicas = NULL;
   uint64_t kept = 0;
-  int refuted = 0;
+  int refuted = 0, invariant = 0;
   if (!read_source(arena, opt->prog_path, &text, &len, diag)) return 2;
   if (!front_load(arena, opt->prog_path, text, len, &front, diag)) return 1;
   if (!check_program_sim(arena, &front.decls, &machine, diag)) return 1;
@@ -233,6 +243,7 @@ static int run_sim(const Options *opt, Arena *arena, Diag *diag) {
       return diag_fail(diag, "INTERNAL", NULL, "sim: %s visits more than %u schedules", front.decls.items[i].name, SEARCH_CAP) + 1;
     kept += out.kept;
     refuted = out.result == SEARCH_VIOLATION;
+    invariant = invariant || has_invariant(&front.decls.items[i]);
     at = i;
   }
   printf("merge-lang sim %s\nreplicas", opt->prog_path);
@@ -242,7 +253,8 @@ static int run_sim(const Options *opt, Arena *arena, Diag *diag) {
     (void)sim_print(&machine, &front.decls, at, b, &out); /* rc 1 both ways: a failure is INTERNAL */
     return 1;
   }
-  printf("invariant kept on all %llu schedules (bounded: %u, %u, %u)\n", (unsigned long long)kept, b.prefix, b.ops, b.replicas);
+  if (invariant)
+    printf("invariant kept on all %llu schedules (bounded: %u, %u, %u)\n", (unsigned long long)kept, b.prefix, b.ops, b.replicas);
   return 0;
 }
 
@@ -323,54 +335,105 @@ static void noncanon(Arena *arena, const char *path, const char *text, size_t le
   }
 }
 
-/* The last line of `check --json`. The count is the number of program
-   declarations: after a parse failure, the complete ones and the failed
-   one; after a lex failure, 0. */
-static void print_progress(const Front *front, const Machine *machine, int parsed, int typed, FILE *out) {
-  size_t done = front->lexed ? front->decls.count - front->domain_count : 0;
-  size_t count = done + (size_t)(front->lexed && !parsed);
-  size_t checked = machine->checked > front->domain_count ? machine->checked - front->domain_count : 0;
-  size_t ok = typed ? count : parsed ? checked : 0;
-  fprintf(out,
-          "{\"parsed\":\"%zu of %zu\",\"typed\":\"%zu of %zu\",\"laws\":{\"total\":%zu,\"proved\":%zu,\"bounded\":%zu,"
-          "\"refuted\":%zu},\"pairs\":{\"total\":%zu,\"classified\":%zu}}\n",
-          done, count, ok, count, machine->law_total, machine->law_proved, machine->law_bounded, machine->law_refuted,
-          machine->pair_total, machine->pair_classified);
+/* The check of `check` and `build`: the source, the front end, the check,
+   the default spans and the W_NONCANON warning. LOADED, PARSED and TYPED
+   tell how far it went; the error (at most one) is in the caller's DIAG. */
+typedef struct {
+  Front front;
+  Machine machine;
+  Diag warn;
+  int loaded, parsed, typed;
+} Checked;
+
+static void check_source(const Options *opt, Arena *arena, Checked *c, Diag *diag) {
+  char *text = NULL;
+  size_t len = 0;
+  memset(&c->front, 0, sizeof c->front);
+  memset(&c->machine, 0, sizeof c->machine);
+  diag_init(&c->warn);
+  c->loaded = read_source(arena, opt->prog_path, &text, &len, diag);
+  c->parsed = c->loaded && front_load(arena, opt->prog_path, text, len, &c->front, diag);
+  c->typed = c->parsed && check_program(arena, &c->front.decls, &c->machine, diag);
+  if (c->parsed && !c->typed && c->machine.decl_failed) {
+    diag_default_span(diag, decl_span(opt->prog_path, &c->front.decls.items[c->machine.checked]));
+  }
+  if (c->parsed) noncanon(arena, opt->prog_path, text, len, &c->front, &c->warn);
+  for (uint32_t i = 0; i < c->machine.warn_count; i++) {
+    diag_default_span(c->machine.warns[i], (Span){opt->prog_path, 0, 0, 0, 0});
+  }
+}
+
+/* Writes the report document of C (one line) and a newline to OUT. 0 on a
+   failure: a report failure puts a diagnostic in SINK, an IO failure does
+   not. */
+static int write_report(const Options *opt, Arena *arena, Checked *c, const Diag *diag, FILE *out, Diag *sink) {
+  ReportInput in = {arena, sink, opt->prog_path, c->parsed, c->typed, diag, &c->warn};
+  const char *doc = NULL;
+  size_t doc_len = 0;
+  return report_document(&c->machine, &c->front, &in, &doc, &doc_len) && fwrite(doc, 1, doc_len, out) == doc_len
+         && fputc('\n', out) != EOF;
 }
 
 /* `check` in both modes: the error (at most one), then the W_BOUNDED
    warnings (one for each bounded op pair), then the W_NONCANON warning (at
-   most one), then `ok` (text) or the progress line (JSON). A warning does
-   not change the exit code. */
+   most one), then `ok` (text). JSON mode gives one report document (one
+   line) that holds these diagnostics. A warning does not change the exit
+   code. */
 static int run_check(const Options *opt, Arena *arena, Diag *diag) {
-  char *text = NULL;
-  size_t len = 0;
-  Front front;
-  Machine machine;
-  Diag warn;
-  memset(&front, 0, sizeof front);
-  memset(&machine, 0, sizeof machine);
-  diag_init(&warn);
-  int loaded = read_source(arena, opt->prog_path, &text, &len, diag);
-  int parsed = loaded && front_load(arena, opt->prog_path, text, len, &front, diag);
-  int typed = parsed && check_program(arena, &front.decls, &machine, diag);
-  if (parsed && !typed && machine.decl_failed) {
-    diag_default_span(diag, decl_span(opt->prog_path, &front.decls.items[machine.checked]));
-  }
-  if (parsed) noncanon(arena, opt->prog_path, text, len, &front, &warn);
-  for (uint32_t i = 0; i < machine.warn_count; i++) diag_default_span(machine.warns[i], (Span){opt->prog_path, 0, 0, 0, 0});
+  Checked c;
+  check_source(opt, arena, &c, diag);
   if (opt->json) {
-    if (diag->set) diag_print_json(diag, stdout);
-    for (uint32_t i = 0; i < machine.warn_count; i++) diag_print_json(machine.warns[i], stdout);
-    if (warn.set) diag_print_json(&warn, stdout);
-    print_progress(&front, &machine, parsed, typed, stdout);
+    Diag sink;
+    diag_init(&sink);
+    int printed = write_report(opt, arena, &c, diag, stdout, &sink)
+                  || diag_fail(&sink, "IO", NULL, "cannot write the JSON output");
+    if (!printed) {
+      diag_print(&sink, stderr);
+      return 2;
+    }
   } else {
     if (diag->set) diag_print(diag, stderr);
-    for (uint32_t i = 0; i < machine.warn_count; i++) diag_print(machine.warns[i], stderr);
-    if (warn.set) diag_print(&warn, stderr);
-    if (typed) puts("ok");
+    for (uint32_t i = 0; i < c.machine.warn_count; i++) diag_print(c.machine.warns[i], stderr);
+    if (c.warn.set) diag_print(&c.warn, stderr);
+    if (c.typed) puts("ok");
   }
-  return typed ? 0 : loaded ? 1 : 2;
+  return c.typed ? 0 : c.loaded ? 1 : 2;
+}
+
+/* The report path of OUT (S6 design sec 1, Q61): OUT with the suffix `.wasm`
+   replaced by `.report.json`, or with `.report.json` added. NULL when there
+   is no memory. */
+static const char *report_path(Arena *arena, const char *out) {
+  static const char suffix[] = ".report.json";
+  size_t len = strlen(out);
+  size_t keep = len >= 5 && strcmp(out + len - 5, ".wasm") == 0 ? len - 5 : len;
+  char *path = arena_alloc(arena, keep + sizeof suffix);
+  if (path == NULL) return NULL;
+  memcpy(path, out, keep);
+  memcpy(path + keep, suffix, sizeof suffix);
+  return path;
+}
+
+/* `build` (S6 design sec 1): the check, then the report (also on a refusal,
+   and on a lex or parse failure), then the lowering and OUT when the check
+   is ok. A refusal gives exit 1 and no OUT; an IO failure on the report
+   gives exit 2. The report bytes equal the `check --json` stdout. */
+static int run_build(const Options *opt, Arena *arena, Diag *diag) {
+  Checked c;
+  Diag sink;
+  check_source(opt, arena, &c, diag);
+  diag_init(&sink);
+  const char *path = report_path(arena, opt->out_path);
+  FILE *out = path == NULL ? NULL : fopen(path, "wb");
+  int written = out != NULL && write_report(opt, arena, &c, diag, out, &sink);
+  int closed = out == NULL || fclose(out) == 0;
+  if (path == NULL) diag_fail(&sink, "OOM", NULL, "no memory for the report path of '%s'", opt->out_path);
+  if (!written || !closed) {
+    diag_fail(&sink, "IO", NULL, "cannot write '%s'", path);
+    diag_print(&sink, stderr);
+    return 2;
+  }
+  return c.typed ? run_target(opt, &c.machine, diag) : c.loaded ? 1 : 2;
 }
 
 /* Lexes and parses the program only (no domain, no check), then prints the
@@ -406,6 +469,7 @@ int main(int argc, char **argv) {
   int status = opt.command == CMD_FMT     ? run_fmt(&opt, &arena, &diag)
                : opt.command == CMD_CHECK ? run_check(&opt, &arena, &diag)
                : opt.command == CMD_SIM   ? run_sim(&opt, &arena, &diag)
+               : opt.command == CMD_BUILD ? run_build(&opt, &arena, &diag)
                                           : run(&opt, &arena, &diag);
   arena_release(&arena);
   /* run_check prints its own diagnostics. */

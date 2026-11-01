@@ -64,8 +64,5 @@ void diag_default_span(Diag *diag, Span span);
 void diag_attach(Diag *diag, const char *expected, const char *found, const char *fix);
 /* Prints `langc: CODE: DEF: message`. */
 void diag_print(const Diag *diag, FILE *out);
-/* Prints one JSON object on one line: code, severity, span, expected, found,
-   fix, retry, message. */
-void diag_print_json(const Diag *diag, FILE *out);
 
 #endif

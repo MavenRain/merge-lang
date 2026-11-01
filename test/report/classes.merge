@@ -1,0 +1,13 @@
+-- Report classes (S6 Q69 (a)): a conflict on the second MVReg part, and
+-- pairs where only one op writes an MVReg part (these stay independent).
+replicas A B
+
+atoms User := ana ∣ ben
+
+replicated Card
+  state lead : MVReg User
+  state owner : MVReg User
+  state tags : GSet User
+  op pick (u : User) := write lead u
+  op assign (u : User) := write owner u
+  op tag (u : User) := add tags u

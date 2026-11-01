@@ -19,6 +19,11 @@ void fmt_text_init(FmtText *out, Arena *arena);
 /* Appends the canonical text of one declaration. No newline after the last
    line. */
 void fmt_decl(FmtText *out, const Decl *decl);
+/* Appends the canonical text of one form item (as in fmt_decl, but with no
+   line break and no indent before it). */
+void fmt_item(FmtText *out, const FormItem *it);
+/* Appends the canonical text of a term at the binder level. */
+void fmt_term(FmtText *out, const Term *t);
 /* Appends region I of the canonical text: a blank line when I > 0, the
    comments from *NEXT_COMMENT up to the last line of declaration I (each on
    its own line), the declaration and a newline. Moves *NEXT_COMMENT past

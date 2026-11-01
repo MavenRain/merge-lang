@@ -13,6 +13,9 @@
 /* O1 and O2 for langc sim (S5 design sec 2, Q56 (a)): each op in each
    branch, and a leaf needs no pair. */
 #define SEARCH_ANY_OP UINT32_MAX
+/* The inv of a form with no invariant: the search takes it as true (S6
+   design Q67 (a)). */
+#define SEARCH_NO_INV UINT32_MAX
 
 /* The guest values of one replicated form. An op parameter type is Fin
    SIZE (an atoms name, Replica or Fin m), so the argument j is pack j p,
@@ -20,7 +23,7 @@
 typedef struct {
   uint32_t bot;   /* the def index of NAMEBot */
   uint32_t merge; /* the def index of NAMEMerge */
-  uint32_t inv;   /* the def index of NAMEInv */
+  uint32_t inv;   /* the def index of NAMEInv, or SEARCH_NO_INV */
   const uint32_t *words; /* the def index of NAMEWord, one for each op */
   const uint32_t *arity; /* the parameter count of each op */
   const uint32_t *const *sizes; /* the size of each parameter type of each op */

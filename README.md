@@ -7,10 +7,10 @@ pair of concurrent operations in one of three classes: independent,
 explicit conflict, or needs coordination. For a pair that needs
 coordination, it gives a concrete counterexample or it accepts a declared
 resource allocation rule. The host is TinyCC. The deterministic replica simulator (`langc sim`)
-is built. The planned targets are a Wasm merge engine and a JSON
-coordination report.
+and the JSON coordination report (`langc check --json`, `langc build`)
+are built. The planned target is a Wasm merge engine.
 
-## Status (S5)
+## Status (S6)
 
 This repository is the tcc-wasm kit seed of lang-template, the design, the
 plan, slice S1 (the port of the evolve-lang 1f87a5a surface and cubical
@@ -35,11 +35,12 @@ and `PLe` with `PLeTrans` for each part), slice S4 (the checker: the
 classes J4 to J6, the bounded search, `REFUSE_NEEDS_COORDINATION`,
 `REFUSE_RULE_MISMATCH`, `REFUSE_READ_WINNER`, `W_BOUNDED`, the laws L5,
 L5r, L6a, L6b, L7 and L8, the `Replica S` machine, and the `laws` and
-`pairs` counts of `check --json`) and slice S5 (`langc sim`: the
+`pairs` counts of `check --json`), slice S5 (`langc sim`: the
 schedules in the 5.2 order, the transcript, the minimal counterexample,
-the golden files `test/sim/*.out` and the determinism gate;
-`docs/STATUS.md`). There is no merge engine and no coordination report
-yet.
+the golden files `test/sim/*.out` and the determinism gate) and slice
+S6 (the JSON coordination report of `check --json` and `build`, and the
+golden reports `test/report/*.report.json`; `docs/STATUS.md`). There is
+no merge engine yet.
 `make check` passes. `docs/PLAN.md` section 9 gives the slices.
 
 The compiler `langc` is a native program that tcc builds. It is not a Wasm
@@ -51,8 +52,25 @@ replica state that is sent arrives some time. It does not model message
 loss, durability, Byzantine replicas or clocks (`docs/PLAN.md` 6.2). A law
 has one of three marks: proved (a guest term type-checks), bounded (the
 simulator found no violation in all schedules up to the bounds; this is
-not a proof) or refuted (a counterexample). The planned report never says
-proved for a bounded result.
+not a proof) or refuted (a counterexample). The report never says proved
+for a bounded result.
+
+## Coordination report
+
+`langc check --json SRC` prints one JSON document. It has the progress
+counts, the diagnostics and one row for each classified pair of operations
+of each replicated form. A refusal stops classification at the first
+violation, so its rows end with the refuted pair. A row gives the class (`independent`,
+`explicit-conflict` or `needs-coordination`), the mark (`proved`,
+`bounded` or `refuted`) and, for a refuted row, the code, the fix and
+the counterexample. `langc build SRC -o OUT.wasm` writes the same
+document to `OUT.report.json`, also when the program is refused.
+`docs/STATUS.md` (`## S6`) gives the fields.
+
+`langc sim SRC` counts the schedules of each replicated form in the
+bounds. A form with no `invariant` counts all enabled schedules. A file
+with no invariants prints the header with the schedule count and no
+verdict line.
 
 ## When to use merge-lang
 

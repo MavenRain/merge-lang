@@ -1,7 +1,7 @@
 # merge-lang status
 
 The build implements slices S1, S1b, S2, S2b, S2c, S2d, S3a, S3e, S3x,
-S3b, S4 and S5 of `docs/PLAN.md` section 9: the port of the evolve-lang 1f87a5a
+S3b, S4, S5 and S6 of `docs/PLAN.md` section 9: the port of the evolve-lang 1f87a5a
 surface and cubical kernel (S1), induction in the kernel (S1b), the
 merge-lang domain with the laws L1 to L4 as guest terms (S2), ℤ with the
 `stock` read (S2b), path constructors of dimension 2 with the `fold` over
@@ -10,10 +10,102 @@ the program side (S2d), the parse and `fmt` of the merge forms (S3a), the
 elaboration of the forms to guest terms (S3e), the check of the four
 examples in the gate (S3x), an `op` body as an `Ops` script of part
 reads and part operations (S3b), the checker: the classes, the bounded
-search, the coordination codes and the laws L5 to L8 (S4), and the
+search, the coordination codes and the laws L5 to L8 (S4), the
 replica simulator `langc sim` with golden transcripts and a determinism
-gate (S5). It does not complete
-M0. There is no merge engine and no coordination report yet.
+gate (S5), and the JSON coordination report of `check --json` and
+`build` (S6). It does not complete M0. There is no merge engine yet.
+
+## S6 (2026-11-01)
+
+- Scope (`docs/PLAN.md` section 9, the S6 row; Q60 (a) to Q69 (a)): the
+  JSON writer, the coordination report of `check --json` and `build`,
+  and five golden reports. The base is the USER S5 commit 290f396.
+- U1: the writer `src/front/json.{c,h}`, a port of
+  `hosts/tcc-json/src/json.{c,h}`. The output buffer `Out` has an arena,
+  a diagnostic and a definition in place of the `Machine` of the port.
+  `put_string` uses the UTF-8 rule of `base.c`. `diag_print_json` moves
+  from `base.c` to `json.c`. The Makefile `FRONT` list has `json.c`.
+- U2: `test/report.c`, the C checks of the report rows of
+  `examples/owner.merge`, `tags.merge`, `inventory.merge` (refused, the
+  counterexample field by field) and `inventory-escrow.merge`. Count
+  line: `report rows: 7 checks`.
+- U3 (Q60 (a), Q62 (a), Q64 (a), Q65 (a), Q66 (a)): `langc check --json
+  SRC` prints one JSON document: `version`, `file`, `replicas`,
+  `bounds`, `progress` (`parsed`, `typed`, `laws`, `pairs`), `pairs` and
+  `diagnostics`. Each row of `pairs` is one op pair O1 <= O2 of one
+  replicated form: `form`, `a`, `b`, `class` (`independent`,
+  `explicit-conflict` or `needs-coordination`), `part` (for
+  explicit-conflict), `invariant` and `rule` (for an L7 row), `mark`
+  (`proved`, `bounded` or `refuted`), `code`, `fix` and
+  `counterexample`. A field that does not apply is `null`.
+  `test/json/expect.txt` has one document for each of the 35 fixtures.
+- U4 (Q61 (a), Q63 (a), Q69 (a)): `langc build SRC -o OUT` writes the
+  report next to OUT: OUT with `.wasm` replaced by `.report.json`, else
+  OUT with `.report.json` added. Build writes the report also on a
+  refusal, on a lex or parse failure and on a source read failure. The
+  rc is 0, 1 (refused) or 2 (source IO, report IO or out of memory).
+  Golden reports `test/report/{owner,tags,inventory,inventory-escrow,
+  classes}.report.json`. The new fixture `test/report/classes.merge`
+  has two MVReg parts and a GSet part: 6 rows, 2 explicit-conflict
+  (`lead`, `owner`) and 4 independent, all proved. The gate builds each
+  golden into `$TMPDIR` and compares it (`cmp`); for 4 of the 5, the
+  report bytes are the bytes of `check --json`. Count line: `report: 5
+  golden, 0 mismatches, 4 same as check --json`.
+- Fix (U4): with no invariant, a pair that no law covers is independent
+  and proved (`COVER_L6A`), not bounded. `classes.merge` found it.
+- U5 (Q67 (a)): `langc sim` on a form with no invariant takes the
+  invariant as true (`SEARCH_NO_INV`). The output is the header with K
+  and no verdict line, rc 0. Golden `test/sim/owner.out` (schedules
+  147) and `test/sim/tags.out` (schedules 676). This closes the S5 edge
+  `INTERNAL: search: no Bot, Merge, Inv or replica def`. The INTERNAL
+  text is now `search: no Bot, Merge or replica def for NAME`.
+- No diagnostic code changed.
+- U6 mutants: 8/8 KILLED by a golden report, `check-clang` rc 0 on
+  each, `make -B` for each build. K1 the L6b MVReg test (classes). K2
+  two class names swapped (owner, tags, inventory-escrow, classes). K3
+  an L6a row marked bounded (tags, classes). K4 the pair loops from O1
+  + 1 (all five). K5 `part` from the first MVReg part (classes). K6
+  `rule` for L6b rows only, so an L7 row gives `null`
+  (inventory-escrow). K7 the rows in reverse order (inventory-escrow,
+  classes). K8 the no-invariant path keeps the cover (classes). O2 (the
+  S5 survivor) does not apply: `classes.merge` has no refuted row.
+- Known edges:
+  - An L7 row names the first invariant only.
+  - Step arguments are JSON strings (a row holds text only).
+  - A source read failure in `build` also writes a report (rc 2), as
+    `check --json` prints a document.
+  - On a report IO failure, `build` prints the IO diagnostic and then
+    the refusal (if there is one).
+  - A build refusal on stderr has the default declaration span (as
+    `check`).
+  - In a file with forms with an invariant and forms with no invariant,
+    `sim` prints the verdict line, and its K counts the schedules of
+    all forms.
+  - O2 (`next_args` order) stays open: no golden file has a refuted row
+    with a 2-argument op. GSet and MVReg text in a transcript is not in
+    S6 (Q68 (a)).
+- `make check` EXIT 0: examples 13 checked, 0 failed; parse refusals 23;
+  check refusals 76; evals 206; ir 13 lowered; wasm 16 modules valid;
+  differential 1230 cases, 0 mismatches; fmt 163 canonical, 14
+  non-canonical pairs; merge examples 4 canonical, 3 checked, 1 refused;
+  sim 4 golden, 0 mismatches; report 5 golden, 0 mismatches, 4 same as
+  check --json; json 35 fixtures, diagnostics 46 codes (32 with a
+  fixture, 14 with no fixture); gate 0 failures; review, domain and
+  diagnostic edit regressions passed; cubical 124 checks, 41 round
+  trips; sim regressions 7 checks; report rows 7 checks. The S5 counts
+  are the same; the sim line has 2 more golden files, and the report
+  lines are new.
+
+### Review corrections
+
+- Determine whether a form has an invariant from its form items. An
+  unrelated user definition such as `TagsInv : Tags → Bool` must not
+  filter a form with no invariant. The regression previously counted
+  zero schedules; it now counts all 18 enabled schedules.
+- `test/sim.c` adds that case: `sim regressions: 8 checks`.
+- `AGENTS.md` and `docs/DIAGNOSTICS.md` describe the single report
+  document and its diagnostic array. README clarifies partial reports
+  after a refusal and verdicts for files containing mixed forms.
 
 ## S5 (2026-10-31)
 

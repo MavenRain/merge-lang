@@ -1,0 +1,2 @@
+merge-lang sim examples/owner.merge
+replicas A B; bounds prefix 1, ops 2; schedules 147

@@ -297,8 +297,9 @@ static void put_step(FmtText *out, const OpStep *s) {
   put_str(out, s->part.text);
 }
 
-static void put_item(FmtText *out, const FormItem *it) {
-  put_str(out, "\n  ");
+void fmt_term(FmtText *out, const Term *t) { put_term(out, t, LEVEL_BINDER); }
+
+void fmt_item(FmtText *out, const FormItem *it) {
   switch (it->kind) {
     case ITEM_STATE:
       put_str(out, "state ");
@@ -340,6 +341,11 @@ static void put_item(FmtText *out, const FormItem *it) {
       }
       break;
   }
+}
+
+static void put_item(FmtText *out, const FormItem *it) {
+  put_str(out, "\n  ");
+  fmt_item(out, it);
 }
 
 void fmt_decl(FmtText *out, const Decl *decl) {

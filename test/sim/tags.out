@@ -1,0 +1,2 @@
+merge-lang sim examples/tags.merge
+replicas A B; bounds prefix 1, ops 2; schedules 676

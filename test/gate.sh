@@ -258,7 +258,8 @@ echo "fmt: $canon canonical, $pairs non-canonical pairs"
 # Each examples/*.merge file is canonical and keeps its AST dump. `langc
 # check` elaborates its forms (S3e) and gives ok, exit 0 and no warning (S3x),
 # except a file of merge_refused (`FILE CODE` lines, S4 design sec 7): it
-# gives exit 1 and its first `check --json` record has the code CODE.
+# gives exit 1 and the first diagnostic of its `check --json` report has the
+# code CODE.
 merge_refused="inventory.merge REFUSE_NEEDS_COORDINATION"
 merges=0
 merge_checks=0
@@ -281,8 +282,8 @@ for f in examples/*.merge; do
     build/langc check --json "$f" >"$tmp/m.out" 2>/dev/null || status=$?
     first=$(head -n 1 "$tmp/m.out")
     case "$status:$first" in
-      "1:{\"code\":\"$want\","*) ;;
-      *) echo "FAIL check $f: want exit 1 and a first JSON record with code $want, got exit $status $(echo "$first" | cut -c1-120)"; fail=$((fail + 1)) ;;
+      "1:{\"version\":1,"*"\"diagnostics\":[{\"code\":\"$want\","*) ;;
+      *) echo "FAIL check $f: want exit 1 and a first diagnostic with code $want, got exit $status $(echo "$first" | cut -c1-120)"; fail=$((fail + 1)) ;;
     esac
   else
     merge_checks=$((merge_checks + 1))
@@ -320,6 +321,42 @@ for g in test/sim/*.out; do
 done
 echo "sim: $sims golden, $sim_bad mismatches"
 
+# The build report (S6 design sec 1): for each test/report/NAME.report.json,
+# `langc build SRC -o OUT` runs two times (SRC is test/report/NAME.merge when
+# it is there, else examples/NAME.merge). The two runs give the same exit
+# code, and each report gives the bytes of the golden file. A report with no
+# diagnostics also gives the bytes of the `check --json` stdout.
+reports=0
+report_bad=0
+report_same=0
+for g in test/report/*.report.json; do
+  reports=$((reports + 1))
+  n=$(basename "$g" .report.json)
+  f="examples/$n.merge"
+  [ ! -f "test/report/$n.merge" ] || f="test/report/$n.merge"
+  rm -f "$tmp/$n.report.json" "$tmp/$n.r1"
+  s1=0
+  s2=0
+  build/langc build "$f" -o "$tmp/$n.wasm" 2>/dev/null || s1=$?
+  cp "$tmp/$n.report.json" "$tmp/$n.r1" 2>/dev/null
+  build/langc build "$f" -o "$tmp/$n.wasm" 2>/dev/null || s2=$?
+  if [ "$s1" -ne "$s2" ] || ! cmp -s "$tmp/$n.r1" "$tmp/$n.report.json" || ! cmp -s "$tmp/$n.report.json" "$g"; then
+    echo "FAIL report $f: want the same exit two times and the bytes of $g, got exit $s1 and $s2"
+    report_bad=$((report_bad + 1))
+    fail=$((fail + 1))
+  fi
+  if rg -q -F '"diagnostics":[]' "$g"; then
+    build/langc check --json "$f" >"$tmp/report-check.json" 2>/dev/null
+    if cmp -s "$tmp/report-check.json" "$g"; then
+      report_same=$((report_same + 1))
+    else
+      echo "FAIL report $f: the check --json output is not $g"
+      fail=$((fail + 1))
+    fi
+  fi
+done
+echo "report: $reports golden, $report_bad mismatches, $report_same same as check --json"
+
 # JSON shape: `langc check --json` on each test/json/*.lang gives the lines of
 # test/json/expect.txt exactly (with the exit code and any stderr line).
 jsons=0
@@ -335,16 +372,19 @@ if ! cmp -s test/json/expect.txt "$tmp/json.txt"; then
   echo "FAIL json: the output is not test/json/expect.txt: $(diff test/json/expect.txt "$tmp/json.txt" | rg '^[<>]' | head -n 2 | cut -c1-160 | tr '\n' ' ')"
   fail=$((fail + 1))
 fi
-# The progress line: typed "k of m" with k < m (a later declaration fails),
-# and an all-pass file.
+# The progress object of the report: typed "k of m" with k < m (a later
+# declaration fails), and an all-pass file.
 for want in 'progress-part:{"parsed":"3 of 3","typed":"2 of 3","laws":{"total":0,"proved":0,"bounded":0,"refuted":0},"pairs":{"total":0,"classified":0}}' \
   'progress-pass:{"parsed":"2 of 2","typed":"2 of 2","laws":{"total":0,"proved":0,"bounded":0,"refuted":0},"pairs":{"total":0,"classified":0}}'; do
-  got=$(build/langc check --json "test/json/${want%%:*}.lang" 2>/dev/null | tail -n 1) || true
-  [ "$got" = "${want#*:}" ] || { echo "FAIL progress ${want%%:*}: want ${want#*:}, got $got"; fail=$((fail + 1)); }
+  got=$(build/langc check --json "test/json/${want%%:*}.lang" 2>/dev/null) || true
+  case "$got" in
+    *",\"progress\":${want#*:},\"pairs\":"*) ;;
+    *) echo "FAIL progress ${want%%:*}: want ${want#*:}, got $(echo "$got" | cut -c1-200)"; fail=$((fail + 1)) ;;
+  esac
 done
 
 # docs/DIAGNOSTICS.md has one row for each code in src/. Each code has
-# test/json/CODE.lang (its first JSON line has that code), or its row gives
+# test/json/CODE.lang (its first JSON diagnostic has that code), or its row gives
 # "no fixture:" and a reason; not the two.
 rg -o -I -N -r '$1$2$3' '"((?:LEX|PARSE|REFUSE|TYPE|NAME|EVAL|DOMAIN|W)_[A-Z_]+)"|"(OOM|IO|IO_SIZE|USAGE|INTERNAL)"|langc: ((?:EVAL|REFUSE|TYPE)_[A-Z_]+):' src |
   LC_ALL=C sort -u >"$tmp/src-codes.txt"
@@ -364,8 +404,8 @@ while read -r code; do
     fixtures=$((fixtures + 1))
     first=$(build/langc check --json "test/json/$code.lang" 2>/dev/null | head -n 1) || true
     case "$first" in
-      "{\"code\":\"$code\","*) ;;
-      *) echo "FAIL test/json/$code.lang: the first JSON line is not code $code: $(echo "$first" | cut -c1-120)"; fail=$((fail + 1)) ;;
+      *"\"diagnostics\":[{\"code\":\"$code\","*) ;;
+      *) echo "FAIL test/json/$code.lang: the first JSON diagnostic is not code $code: $(echo "$first" | cut -c1-120)"; fail=$((fail + 1)) ;;
     esac
   elif [ ! -f "test/json/$code.lang" ] && [ "$reason" -eq 1 ]; then
     reasons=$((reasons + 1))

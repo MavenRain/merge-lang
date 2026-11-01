@@ -4,6 +4,7 @@
    hint) or its type is inferred. Two types are equal when their normal forms
    are equal (front/eval.c). The checker writes core terms (front/core.h). */
 #include "front/check.h"
+#include "front/fmt.h"
 #include "front/search.h"
 
 #include <string.h>
@@ -4254,6 +4255,47 @@ static Diag *machine_warn(Machine *m) {
   return rec;
 }
 
+/* A new row of the pair O1 ∥ O2 of the form D (independent, proved, no
+   texts), or NULL when the arena is full. */
+static PairRow *machine_row(Machine *m, const Decl *d, const FormItem *const *ops, uint32_t o1, uint32_t o2) {
+  PairRow *grown, *row;
+  if (m->row_count == m->row_cap) {
+    grown = arena_alloc(m->arena, (m->row_cap == 0u ? 4u : 2u * m->row_cap) * sizeof *grown);
+    if (grown == NULL)
+      return NULL;
+    if (m->row_count > 0u)
+      memcpy(grown, m->rows, m->row_count * sizeof *grown);
+    m->rows = grown;
+    m->row_cap = m->row_cap == 0u ? 4u : 2u * m->row_cap;
+  }
+  row = &m->rows[m->row_count++];
+  memset(row, 0, sizeof *row);
+  row->form = d->name;
+  row->a = ops[o1]->name.text;
+  row->b = ops[o2]->name.text;
+  row->cls = ROW_INDEPENDENT;
+  row->mark = MARK_PROVED;
+  return row;
+}
+
+/* The `langc fmt` text of the item IT (TERM: of its body term), or NULL
+   when the arena is full. */
+static const char *form_text(Machine *m, const FormItem *it, int term) {
+  FmtText t;
+  char *text;
+  fmt_text_init(&t, m->arena);
+  if (term)
+    fmt_term(&t, it->body);
+  else
+    fmt_item(&t, it);
+  if (t.oom || (text = arena_alloc(m->arena, t.len + 1u)) == NULL)
+    return NULL;
+  if (t.len > 0u)
+    memcpy(text, t.data, t.len);
+  text[t.len] = '\0';
+  return text;
+}
+
 /* The def index of the form def D SUFFIX, else NO_DEF. */
 static uint32_t form_def(const Cogen *g, const char *suffix) {
   const char *name = cg_join(g, g->d->name, suffix);
@@ -4299,15 +4341,25 @@ static const char *form_arg_text(const Cogen *g, const Term *t, const Decl *repl
    those invariants, built on this path only, so an ok check gets no new
    def) must hold on the merged state: L7 proves it, so false is INTERNAL.
    Else REFUSE_NEEDS_COORDINATION at the op word of O1: the schedule (the
-   4.6 counterexample) in the message, the merged state in found. */
+   4.6 counterexample) in the message, the merged state in found. The
+   refuted row (S6-DESIGN sec 3) gets the counterexample (row_cex). */
+static int row_cex(const Cogen *g, const Part *parts, size_t k, const Decl *replicas, const FormItem *const *ops,
+                   uint32_t n, const SearchForm *f, SearchBounds b, const SearchOutcome *out, const RowCex **cex,
+                   const FormItem **broken);
+
 static int form_violation(const Cogen *g, const Part *parts, size_t k, const Decl *replicas, const FormItem *const *ops,
-                          uint32_t o1, uint32_t o2, const SearchOutcome *out) {
+                          uint32_t n, const SearchForm *f, SearchBounds b, uint32_t o1, uint32_t o2,
+                          const SearchOutcome *out) {
   Checker *c = g->c;
   Machine *m = c->m;
   const Decl *d = g->d;
   const Term *shop = cg_var(g, d->name), *s = cg_var(g, "s"), *inv = NULL;
   const size_t cap = 1024u;
+  const char *fix = "declare an allocation rule, for example `allocate stock by escrow (...)`, or remove the invariant";
   char *sched = arena_alloc(m->arena, cap), *state = arena_alloc(m->arena, cap);
+  const RowCex *cex;
+  const FormItem *broken;
+  PairRow *row;
   const Value *fn, *r;
   uint32_t i, j, l7d;
   size_t a, used = 0;
@@ -4350,9 +4402,17 @@ static int form_violation(const Cogen *g, const Part *parts, size_t k, const Dec
   }
   if (!value_print(m, NULL, 0u, out->merged, state, cap) && m->diag->set)
     return 0;
+  if (!row_cex(g, parts, k, replicas, ops, n, f, b, out, &cex, &broken))
+    return 0;
+  if ((row = machine_row(m, d, ops, o1, o2)) == NULL || (row->invariant = form_text(m, broken, 1)) == NULL)
+    return FAIL(c, "OOM", "out of memory");
+  row->cls = ROW_NEEDS_COORDINATION;
+  row->mark = MARK_REFUTED;
+  row->code = "REFUSE_NEEDS_COORDINATION";
+  row->fix = fix;
+  row->cex = cex;
   (void)diag_fail_at(m->diag, "REFUSE_NEEDS_COORDINATION", d->name, word_span(ops[o1]->line, ops[o1]->col, "op"), NULL, NULL,
-                     "declare an allocation rule, for example `allocate stock by escrow (...)`, or remove the invariant",
-                     "%s ∥ %s: the pair breaks an invariant after merge; the schedule %s", ops[o1]->name.text,
+                     fix, "%s ∥ %s: the pair breaks an invariant after merge; the schedule %s", ops[o1]->name.text,
                      ops[o2]->name.text, sched);
   diag_attach(m->diag, NULL, state, NULL);
   return 0;
@@ -4366,20 +4426,51 @@ static int form_violation(const Cogen *g, const Part *parts, size_t k, const Dec
    kept pair with K > 0 gives one W_BOUNDED record at the op word of O1.
    Each pair that goes to the search is one L8 law: bounded when kept,
    refuted at a violation. */
-static int pair_covered(const Part *parts, size_t k, const OpWrites *ow, uint32_t o1, uint32_t o2, int l7) {
+typedef enum { COVER_NONE, COVER_L6B, COVER_L7, COVER_L6A } Cover;
+
+/* The library law that covers O1 ∥ O2, in the first-match order of the
+   class map (S6-DESIGN sec 3): L6b (*PART is the first MVReg part that both
+   ops write), L7, L6a, else COVER_NONE. */
+static Cover pair_cover(const Part *parts, size_t k, const OpWrites *ow, uint32_t o1, uint32_t o2, int l7, size_t *part) {
   size_t pj;
   int l6b = 0;
   int mvreg_only = 1;
+  *part = k;
   for (pj = 0; pj < k; pj++) {
-    l6b = l6b || (parts[pj].kind == PART_MVREG && ow[o1].writes[pj] && ow[o2].writes[pj]);
+    int both = parts[pj].kind == PART_MVREG && ow[o1].writes[pj] && ow[o2].writes[pj];
+    *part = both && *part == k ? pj : *part;
+    l6b = l6b || both;
     mvreg_only = mvreg_only && (parts[pj].kind == PART_MVREG || (!ow[o1].writes[pj] && !ow[o2].writes[pj]));
   }
-  return l7 || (ow[o1].adds && ow[o2].adds) || (l6b && mvreg_only);
+  return l6b && mvreg_only ? COVER_L6B : l7 ? COVER_L7 : ow[o1].adds && ow[o2].adds ? COVER_L6A : COVER_NONE;
+}
+
+static int pair_covered(const Part *parts, size_t k, const OpWrites *ow, uint32_t o1, uint32_t o2, int l7) {
+  size_t part;
+  return pair_cover(parts, k, ow, o1, o2, l7, &part) != COVER_NONE;
+}
+
+/* The row of the pair O1 ∥ O2 that the law COVER covers, or that the search
+   kept (COVER_NONE: bounded, W_BOUNDED when WARNED). An L7 row gets the
+   texts INV and RULE. */
+static int form_row(Checker *c, const Decl *d, const Part *parts, const FormItem *const *ops, uint32_t o1, uint32_t o2,
+                    Cover cover, size_t part, int warned, const char *inv, const char *rule) {
+  PairRow *row = machine_row(c->m, d, ops, o1, o2);
+  if (row == NULL)
+    return FAIL(c, "OOM", "out of memory");
+  row->cls = cover == COVER_L6B ? ROW_EXPLICIT_CONFLICT : ROW_INDEPENDENT;
+  row->part = cover == COVER_L6B ? parts[part].it->name.text : NULL;
+  row->invariant = cover == COVER_L7 ? inv : NULL;
+  row->rule = cover == COVER_L7 ? rule : NULL;
+  row->mark = cover == COVER_NONE ? MARK_BOUNDED : MARK_PROVED;
+  row->code = warned ? "W_BOUNDED" : NULL;
+  return 1;
 }
 
 /* The SearchForm of the form G->d with the N ops OPS: the defs NAMEBot,
-   NAMEMerge, NAMEInv and each NAMEWord, and the proof of the first
-   replica name (form_search and sim_form). */
+   NAMEMerge, NAMEInv (SEARCH_NO_INV when the form has no invariant) and
+   each NAMEWord, and the proof of the first replica name (form_search and
+   sim_form). */
 static int search_form(const Cogen *g, const Decl *replicas, const FormItem *const *ops, uint32_t n, SearchForm *f) {
   Checker *c = g->c;
   Machine *m = c->m;
@@ -4388,6 +4479,7 @@ static int search_form(const Cogen *g, const Decl *replicas, const FormItem *con
   const Value *first;
   uint32_t j;
   size_t a;
+  int invariant = 0;
   if (words == NULL || arity == NULL || sizes == NULL)
     return FAIL(c, "OOM", "out of memory");
   for (j = 0; j < n; j++) {
@@ -4403,14 +4495,18 @@ static int search_form(const Cogen *g, const Decl *replicas, const FormItem *con
   }
   f->bot = form_def(g, "Bot");
   f->merge = form_def(g, "Merge");
-  f->inv = form_def(g, "Inv");
+  for (a = 0; a < g->d->item_count; a++) invariant |= g->d->items[a].kind == ITEM_INVARIANT;
+  /* A user definition named NAMEInv is unrelated when the form has no invariant. */
+  f->inv = invariant ? form_def(g, "Inv") : SEARCH_NO_INV;
+  if (invariant && f->inv == NO_DEF)
+    return FAIL(c, "INTERNAL", "search: no Inv def for %s", g->d->name);
   f->words = words;
   f->arity = arity;
   f->sizes = sizes;
   f->op_count = n;
   j = replicas->name_count == 0u ? NO_DEF : find_def(m, replicas->names[0].text);
-  if (f->bot == NO_DEF || f->merge == NO_DEF || f->inv == NO_DEF || j == NO_DEF)
-    return FAIL(c, "INTERNAL", "search: no Bot, Merge, Inv or replica def for %s", g->d->name);
+  if (f->bot == NO_DEF || f->merge == NO_DEF || j == NO_DEF)
+    return FAIL(c, "INTERNAL", "search: no Bot, Merge or replica def for %s", g->d->name);
   if ((first = def_value(m, j)) == NULL)
     return 0;
   if (!val_is(first, OP_PACK) || first->argc != 2u)
@@ -4429,13 +4525,21 @@ static int form_search(const Cogen *g, const Part *parts, size_t k, const Decl *
   uint32_t o1, o2;
   size_t a, pj;
   int l7 = 1;
+  const FormItem *first = NULL;
+  const char *inv = NULL, *rule = NULL;
   if (n == 0u)
     return 1;
   for (a = 0; a < d->item_count; a++) {
     const FormItem *it = &d->items[a];
     pj = it->kind == ITEM_INVARIANT ? part_index(parts, k, it->body->right->name) : k;
     l7 = l7 && (it->kind != ITEM_INVARIANT || (pj < k && parts[pj].alloc != NULL));
+    first = first == NULL && it->kind == ITEM_INVARIANT ? it : first;
   }
+  /* An L7 row names the first invariant and the allocate rule of its part. */
+  pj = first != NULL ? part_index(parts, k, first->body->right->name) : k;
+  if (l7 && pj < k &&
+      ((inv = form_text(m, first, 1)) == NULL || (rule = form_text(m, parts[pj].alloc, 0)) == NULL))
+    return FAIL(c, "OOM", "out of memory");
   if (!search_form(g, replicas, ops, n, &f))
     return 0;
   for (o1 = 0; o1 < n; o1++) {
@@ -4445,7 +4549,10 @@ static int form_search(const Cogen *g, const Part *parts, size_t k, const Decl *
     for (o2 = o1; o2 < n; o2++) {
       SearchOutcome out;
       Diag *rec;
-      if (!pair_covered(parts, k, ow, o1, o2, l7)) {
+      size_t part;
+      Cover cover = pair_cover(parts, k, ow, o1, o2, l7, &part);
+      int warned = 0;
+      if (cover == COVER_NONE) {
         if (!search_pair(m, &f, b, o1, o2, &out))
           return 0;
         if (out.result == SEARCH_ABOVE_CAP)
@@ -4454,10 +4561,11 @@ static int form_search(const Cogen *g, const Part *parts, size_t k, const Decl *
         if (out.result == SEARCH_VIOLATION) {
           m->law_refuted++;
           m->pair_classified++;
-          return form_violation(g, parts, k, replicas, ops, o1, o2, &out);
+          return form_violation(g, parts, k, replicas, ops, n, &f, b, o1, o2, &out);
         }
         m->law_bounded++;
         if (out.result == SEARCH_KEPT && out.kept > 0u) {
+          warned = 1;
           if ((rec = machine_warn(m)) == NULL)
             return FAIL(c, "OOM", "out of memory");
           (void)diag_fail_at(rec, "W_BOUNDED", d->name, word_span(ops[o1]->line, ops[o1]->col, "op"), NULL, NULL, NULL,
@@ -4465,6 +4573,8 @@ static int form_search(const Cogen *g, const Part *parts, size_t k, const Decl *
                              ops[o1]->name.text, ops[o2]->name.text, (unsigned long long)out.kept, b.prefix, b.ops, b.replicas);
         }
       }
+      if (!form_row(c, d, parts, ops, o1, o2, cover, part, warned, inv, rule))
+        return 0;
       m->pair_classified++;
     }
   }
@@ -4567,9 +4677,20 @@ static int check_replicated(Checker *c, const Decl *d) {
     return 0;
   c->m->law_proved++;
   c->m->pair_total += (size_t)n * (n + 1u) / 2u;
-  /* No invariant: each pair is independent, with no L8. */
+  /* No invariant: each pair is independent (explicit-conflict by L6b), with
+     no L8. */
   if (first == NULL) {
+    uint32_t o1, o2;
     c->m->pair_classified += (size_t)n * (n + 1u) / 2u;
+    for (o1 = 0; o1 < n; o1++) {
+      for (o2 = o1; o2 < n; o2++) {
+        size_t part;
+        /* With no invariant, a pair that no law covers is proved (sec 3). */
+        Cover cover = pair_cover(parts, k, ow, o1, o2, 0, &part);
+        if (!form_row(c, d, parts, ops, o1, o2, cover == COVER_NONE ? COVER_L6A : cover, part, 0, NULL, NULL))
+          return 0;
+      }
+    }
     return 1;
   }
   g.line = first->line;
@@ -4854,19 +4975,119 @@ static int sim_value(SimForm *x, size_t pj, const Value *s, int paren, const cha
   return 1;
 }
 
-/* HEAD, then `PART VALUE (...)` for each part of the state S (three spaces
-   between the parts). */
-static int sim_state(SimForm *x, const char *head, const Value *s) {
-  size_t pj;
+/* The text of the state S in TEXT: `PART VALUE (...)` for each part (three
+   spaces between the parts). The transcript (sim_state) and the report
+   (row_cex) use it (S6-DESIGN sec 4). */
+static int sim_state_text(SimForm *x, const Value *s, const char **text) {
+  Machine *m = x->c.m;
+  const char **vals = arena_alloc(m->arena, (x->k + 1u) * sizeof *vals);
+  size_t pj, used = 0, cap = 1u;
+  char *buf;
   int v = 0;
-  const char *text;
-  printf("%s", head);
+  if (vals == NULL)
+    return FAIL(&x->c, "OOM", "out of memory");
   for (pj = 0; pj < x->k; pj++) {
-    if (!sim_value(x, pj, s, 1, &text, &v))
+    if (!sim_value(x, pj, s, 1, &vals[pj], &v))
       return 0;
-    printf("%s%s %s", pj == 0u ? " " : "   ", x->parts[pj].it->name.text, text);
+    cap += 4u + strlen(x->parts[pj].it->name.text) + strlen(vals[pj]);
   }
-  putchar('\n');
+  if ((buf = arena_alloc(m->arena, cap)) == NULL)
+    return FAIL(&x->c, "OOM", "out of memory");
+  buf[0] = '\0';
+  for (pj = 0; pj < x->k; pj++) {
+    used = text_put(buf, cap, used, pj == 0u ? "" : "   ");
+    used = text_put(buf, cap, used, x->parts[pj].it->name.text);
+    used = text_put(buf, cap, used, " ");
+    used = text_put(buf, cap, used, vals[pj]);
+  }
+  *text = buf;
+  return 1;
+}
+
+/* HEAD, then the text of the state S after one space. */
+static int sim_state(SimForm *x, const char *head, const Value *s) {
+  const char *text;
+  if (!sim_state_text(x, s, &text))
+    return 0;
+  printf("%s%s%s\n", head, text[0] == '\0' ? "" : " ", text);
+  return 1;
+}
+
+static int row_cex(const Cogen *g, const Part *parts, size_t k, const Decl *replicas, const FormItem *const *ops,
+                   uint32_t n, const SearchForm *f, SearchBounds b, const SearchOutcome *out, const RowCex **cex,
+                   const FormItem **broken) {
+  Machine *m = g->c->m;
+  const Decl *d = g->d;
+  SimForm x;
+  RowCex *r = arena_alloc(m->arena, sizeof *r);
+  RowStep *steps = arena_alloc(m->arena, (out->step_count + 1u) * sizeof *steps);
+  const char **names = arena_alloc(m->arena, (replicas->name_count + 1u) * sizeof *names), *text = NULL;
+  const Value *anc;
+  char *name_buf, *value_buf;
+  size_t a, pj = k, cap;
+  uint32_t s, j;
+  int v = 0;
+  memset(&x, 0, sizeof x);
+  x.c = *g->c;
+  x.g = *g;
+  x.g.c = &x.c;
+  x.replicas = replicas;
+  x.ops = (const FormItem **)ops;
+  x.n = n;
+  x.parts = (Part *)parts;
+  x.k = k;
+  x.f = *f;
+  if (r == NULL || steps == NULL || names == NULL)
+    return FAIL(&x.c, "OOM", "out of memory");
+  /* The broken invariant: the first nonneg PART with V < 0 on the merged
+     state, as sim_print. */
+  *broken = NULL;
+  for (a = 0; a < d->item_count && *broken == NULL; a++) {
+    const FormItem *it = &d->items[a];
+    pj = it->kind == ITEM_INVARIANT ? part_index(parts, k, it->body->right->name) : k;
+    if (pj < k && !sim_value(&x, pj, out->merged, 0, &text, &v))
+      return 0;
+    *broken = pj < k && v ? it : NULL;
+  }
+  if (*broken == NULL)
+    return FAIL(&x.c, "INTERNAL", "report: no invariant of %s is broken on the merged state", d->name);
+  cap = 2u * strlen(parts[pj].it->name.text) + strlen(text) + 16u;
+  if ((name_buf = arena_alloc(m->arena, cap)) == NULL || (value_buf = arena_alloc(m->arena, cap)) == NULL)
+    return FAIL(&x.c, "OOM", "out of memory");
+  snprintf(name_buf, cap, "nonneg %s", parts[pj].it->name.text);
+  snprintf(value_buf, cap, "%s = %s", parts[pj].it->name.text, text);
+  if ((anc = def_value(m, f->bot)) == NULL)
+    return 0;
+  for (s = 0; s < out->step_count; s++) {
+    const SearchStep *st = &out->steps[s];
+    const FormItem *op = ops[st->op];
+    const char **args = arena_alloc(m->arena, (op->param_count + 1u) * sizeof *args);
+    if (args == NULL)
+      return FAIL(&x.c, "OOM", "out of memory");
+    for (j = 0; j < op->param_count; j++) {
+      if ((args[j] = form_arg_text(g, op->params[j].type, replicas, st->args[j])) == NULL)
+        return FAIL(&x.c, "OOM", "out of memory");
+    }
+    if (!sim_state_text(&x, st->after, &steps[s].state))
+      return 0;
+    steps[s].seg = st->seg;
+    steps[s].op = op->name.text;
+    steps[s].args = args;
+    steps[s].arg_count = (uint32_t)op->param_count;
+    anc = st->seg == 0u ? st->after : anc;
+  }
+  if (!sim_state_text(&x, anc, &r->ancestor) || !sim_state_text(&x, out->merged, &r->merged))
+    return 0;
+  for (j = 0; j < replicas->name_count; j++) names[j] = replicas->names[j].text;
+  r->prefix = b.prefix;
+  r->ops = b.ops;
+  r->replicas = b.replicas;
+  r->replica_names = names;
+  r->steps = steps;
+  r->step_count = out->step_count;
+  r->inv_name = name_buf;
+  r->inv_values = value_buf;
+  *cex = r;
   return 1;
 }
 

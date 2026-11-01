@@ -1,15 +1,18 @@
 # merge-lang diagnostics
 
-`langc` stops at the first error. `langc check` can also give one warning,
-`W_NONCANON`. In text mode, each diagnostic is one line on stderr:
+`langc` stops at the first error. `langc check` can also give `W_BOUNDED`
+warnings for operation pairs and at most one `W_NONCANON` warning. In text mode, each diagnostic is one line on stderr:
 `langc: CODE: NAME: message`. NAME is the definition, or `-` when there is
-no definition. With `langc check --json FILE`, each diagnostic is one JSON
-object on one line of stdout. The error comes first (at most one), then the
-warning (at most one), then the progress object. The exit code is the same
+no definition. `langc check --json FILE` prints one JSON report document
+on one line of stdout. Its `diagnostics` array contains the error (at most
+one), then the `W_BOUNDED` warnings, then `W_NONCANON` (at most one). The
+`progress` field contains the counts described below. The other report
+fields and the build report path are described in `docs/STATUS.md` section
+S6. The exit code is the same
 in the two modes: 0 ok, 1 refused, 2 usage or IO. A warning does not change
 the exit code.
 
-## The JSON record
+## The diagnostic object
 
     {"code":"CODE","severity":"error","span":{"file":"F","line":1,"col":1,"end_line":1,"end_col":2},"expected":null,"found":null,"fix":null,"retry":true,"message":"..."}
 
@@ -31,6 +34,8 @@ The S1 reading of the port sources (agent-lang 06854bf, dil-lang 9e57528)
 found nothing to port (S1 HANDOFF). docs/STATUS.md records the read.
 
 ## The progress object
+
+This object is the report document's `progress` field.
 
     {"parsed":"3 of 3","typed":"2 of 3","laws":{"total":0,"proved":0,"bounded":0,"refuted":0},"pairs":{"total":0,"classified":0}}
 
