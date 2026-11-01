@@ -1,0 +1,7 @@
+replicas A B
+
+atoms Amount := 1 ∣ 2
+
+replicated Large
+  state stock : Counter (init 0)
+  op refill (k : Amount) (unused : Fin 2048) := restock stock k

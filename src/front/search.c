@@ -15,7 +15,18 @@ typedef struct {
   SearchOutcome *out;
   int stop;   /* after a violation, the cap or a failure */
   int failed; /* after a diagnostic */
+  SearchVisit visit; /* NULL in search_pair */
+  void *ctx;
 } Search;
+
+/* Calls the visitor, if any. Returns 0 (with S->stop) when it stops. */
+static int visit(Search *s, uint32_t count, const Value *merged) {
+  if (s->visit == NULL || s->visit(s->ctx, s->path, count, merged))
+    return 1;
+  s->failed = 1;
+  s->stop = 1;
+  return 0;
+}
 
 static int internal(Search *s, const char *what) {
   s->failed = 1;
@@ -115,6 +126,8 @@ static void leaf(Search *s) {
   /* With no branches, reconnect keeps the synced ancestor. */
   if (merged == NULL)
     merged = ancestor;
+  if (!visit(s, s->total, merged))
+    return;
   switch (holds(s, merged)) {
   case 1:
     s->out->kept++;
@@ -178,6 +191,11 @@ static void place(Search *s, uint32_t d, uint32_t seg, uint32_t count) {
         dfs(s, d + 1u, count + 1u);
       } else {
         count_visit(s);
+        /* Each round reaches the same refused instances: visit them in
+           the round that ends at D. */
+        st->after = NULL;
+        if (after == NULL && d + 1u == s->total && !s->stop && !visit(s, d + 1u, NULL))
+          return;
       }
       more = next_args(s, st);
     }
@@ -219,6 +237,36 @@ int search_pair(Machine *m, const SearchForm *f, SearchBounds b, uint32_t o1, ui
   if (s.bot == NULL)
     return 0;
   /* An ancestor that is not I-valid gives no schedule (K = 0). */
+  if (holds(&s, s.bot) != 1)
+    return !s.failed;
+  for (s.total = 0; s.total <= max && !s.stop; s.total++) dfs(&s, 0u, 0u);
+  return !s.failed;
+}
+
+int search_visit(Machine *m, const SearchForm *f, SearchBounds b, SearchVisit visitor, void *ctx, SearchOutcome *out) {
+  Search s;
+  uint32_t max = b.prefix + b.ops * b.replicas, j;
+  memset(out, 0, sizeof *out);
+  memset(&s, 0, sizeof s);
+  s.m = m;
+  s.f = f;
+  s.b = b;
+  s.o1 = SEARCH_ANY_OP;
+  s.o2 = SEARCH_ANY_OP;
+  s.out = out;
+  s.visit = visitor;
+  s.ctx = ctx;
+  out->result = SEARCH_KEPT;
+  for (j = 0; j < f->op_count; j++) {
+    if (f->arity[j] > SEARCH_ARGS_MAX)
+      return internal(&s, "an op has more than 8 parameters");
+  }
+  s.path = arena_alloc(m->arena, (max + 1u) * sizeof *s.path);
+  if (s.path == NULL)
+    return diag_fail(m->diag, "OOM", m->def, "out of memory");
+  s.bot = def_value(m, f->bot);
+  if (s.bot == NULL)
+    return 0;
   if (holds(&s, s.bot) != 1)
     return !s.failed;
   for (s.total = 0; s.total <= max && !s.stop; s.total++) dfs(&s, 0u, 0u);

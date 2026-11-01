@@ -7,9 +7,9 @@ state that replicas change while they are disconnected and merge when they
 reconnect. Do not use it for text co-editing, server-only databases or
 Redis scripts.
 
-## Status (S6)
+## Status (S7)
 
-S1, S1b, S2, S2b, S2c, S2d, S3a, S3e, S3x, S3b, S4, S5 and S6 are built: the port of the evolve-lang
+S1, S1b, S2, S2b, S2c, S2d, S3a, S3e, S3x, S3b, S4, S5, S6 and S7 are built: the port of the evolve-lang
 1f87a5a surface and cubical kernel (S1), induction in the kernel (S1b:
 `natMax`, a `fold` over ℕ with a motive, `elim` for Bool and `Option`,
 and `sumFin`), the domain with the laws L1 to L4 as guest terms (S2:
@@ -37,9 +37,12 @@ L5r, L6a, L6b, L7 and L8, the `Replica S` machine, the `laws` and
 `langc sim`, the transcript, the golden files `test/sim/*.out` and the
 determinism gate), and the JSON coordination report (S6: `check --json`
 and `build`, the op pair rows and counterexamples, and golden reports
-in `test/report/*.report.json`; `docs/STATUS.md`).
-`langc check --json`, `langc fmt` and `langc sim` work.
-The Wasm merge engine, `langc mcp`, `SKILL.md` and the graded examples are
+in `test/report/*.report.json`), and the Wasm merge engine (S7: the six
+entries of each replicated form, the golden ABI files
+`test/engine/*.abi` and the differential gate of `test/engine.c`;
+`docs/STATUS.md`).
+`langc check --json`, `langc build`, `langc fmt` and `langc sim` work.
+`langc mcp`, `SKILL.md` and the graded examples are
 planned (`docs/PLAN.md` section 7 and section 9). Do not cite them as built.
 `langc` is a native program, not a Wasm module.
 
@@ -51,7 +54,11 @@ planned (`docs/PLAN.md` section 7 and section 9). Do not cite them as built.
   (`docs/DIAGNOSTICS.md`, `docs/STATUS.md` section S6).
 - `build/langc build PROG -o OUT.wasm`: write the check report to
   `OUT.report.json`, including on a refusal, then lower and emit the
-  module when the check passes.
+  module when the check passes. The module is the merge engine: for
+  each replicated form NAME, `NAME.apply`, `NAME.merge`, `NAME.check`,
+  `NAME.encode`, `NAME.decode` and `NAME.bot`, and the shared `memory`,
+  `alloc` and `reset` (`docs/PLAN.md` 5.1). On a refusal there is no
+  module.
 - `build/langc fmt PROG`: print the canonical text of a program. `langc
   check` gives `W_NONCANON` when a program region is not canonical.
 - `build/langc sim PROG [--replicas N] [--prefix P] [--ops M]`: run the

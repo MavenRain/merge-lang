@@ -93,6 +93,7 @@ typedef struct {
   IrScalar result;
   uint32_t local_count; /* includes the parameters */
   IrBlock body;
+  int keeps_heap; /* 1: the entry does not reset the heap (an engine entry); 0 for a kit entry */
 } IrFunc;
 
 typedef struct {

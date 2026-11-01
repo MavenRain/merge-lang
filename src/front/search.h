@@ -70,4 +70,16 @@ typedef struct {
    diagnostic (an evaluation failure, or INTERNAL). */
 int search_pair(Machine *m, const SearchForm *f, SearchBounds b, uint32_t o1, uint32_t o2, SearchOutcome *out);
 
+/* A visitor of search_visit (S7 design sec 6). At each schedule: STEPS
+   (the state after each in AFTER) and the MERGED state, before the
+   invariant test. At each refused instance (the op gives none): the
+   steps to the refused instance, whose AFTER is NULL, and MERGED NULL.
+   It returns 0 to stop the search (the caller has the reason). */
+typedef int (*SearchVisit)(void *ctx, const SearchStep *steps, uint32_t count, const Value *merged);
+
+/* search_pair with SEARCH_ANY_OP for O1 and O2, which calls VISIT in the
+   5.2 order. A refused instance is visited once. Returns 0 after a
+   diagnostic or when VISIT returns 0. */
+int search_visit(Machine *m, const SearchForm *f, SearchBounds b, SearchVisit visit, void *ctx, SearchOutcome *out);
+
 #endif

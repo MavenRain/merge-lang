@@ -4853,6 +4853,154 @@ int sim_form(Machine *m, const DeclList *decls, size_t i, SearchBounds b, Search
   return sim_ctx(m, decls, i, &x) && search_pair(m, &x.f, b, SEARCH_ANY_OP, SEARCH_ANY_OP, out);
 }
 
+static const EngineWord ENGINE_WORD[] = {
+  [PW_ADD] = ENGINE_ADD,
+  [PW_WRITE] = ENGINE_WRITE,
+  [PW_DEC] = ENGINE_DEC,
+  [PW_RESTOCK] = ENGINE_RESTOCK,
+  [PW_ESCROW_DEC] = ENGINE_DEC,
+  [PW_TRANSFER] = ENGINE_TRANSFER,
+  [PW_ESCROW_RESTOCK] = ENGINE_RESTOCK,
+};
+
+/* Evaluate a checked write argument for every finite parameter pack.
+   Fresh parameter names keep the generated result type out of their scope.
+   Amounts use the same numeral-atoms conversion as op_step. */
+static const uint64_t *engine_argument(SimForm *x, const FormItem *source, const FormItem *scope,
+                                       const Term *arg, const uint32_t *sizes, uint64_t packs, int member, uint64_t n) {
+  Machine *m = x->c.m;
+  const Cogen *g = &x->g;
+  const Term *type = member ? cg_app(g, cg_var(g, "Fin"), cg_nat(g, n)) : cg_var(g, "Nat");
+  const Value *sort, *fn;
+  uint64_t *values = arena_alloc(m->arena, packs * sizeof *values);
+  if (values == NULL) {
+    FAIL(&x->c, "OOM", "out of memory");
+    return NULL;
+  }
+  for (size_t a = source->param_count; a > 0; a--)
+    arg = op_rename(g, arg, source->params[a - 1u].name, scope->params[a - 1u].name);
+  if (!member && arg != NULL) arg = op_amount(g, scope, arg);
+  for (size_t a = scope->param_count; a > 0; a--) {
+    const Field *p = &scope->params[a - 1u];
+    arg = cg_lam(g, p->name, p->type, arg);
+    type = cg_pi(g, p->name, p->type, type);
+  }
+  if (arg == NULL || type == NULL) {
+    FAIL(&x->c, "OOM", "out of memory");
+    return NULL;
+  }
+  fn = here(&x->c, check(&x->c, arg, here(&x->c, infer(&x->c, type, &sort))));
+  if (fn == NULL) return NULL;
+  for (uint64_t p = 0; p < packs; p++) {
+    uint64_t digits = p;
+    const Value *v = fn;
+    for (size_t a = 0; a < scope->param_count && v != NULL; a++) {
+      const Value *digit = val_make(m, OP_PACK, 0, 2u, val_nat(m, digits % sizes[a]), x->f.proof, NULL);
+      v = apply_value(m, v, digit);
+      digits /= sizes[a];
+    }
+    if (v == NULL) return NULL;
+    if (member && val_is(v, OP_PACK) && v->argc == 2u) v = v->args[0];
+    if (v->kind != VAL_NAT) {
+      FAIL(&x->c, "INTERNAL", "engine: an argument of op %s did not evaluate to a numeral", source->name.text);
+      return NULL;
+    }
+    values[p] = v->nat;
+  }
+  return values;
+}
+
+/* The write step W of the op IT (the form_op shape, with no read): the
+   word, the part and the parameter of each argument. */
+static int engine_step(SimForm *x, const FormItem *it, const FormItem *scope, const uint32_t *sizes,
+                        uint64_t packs, const Term *w, EngineStep *out) {
+  const Term *args[3] = {NULL, NULL, NULL}, *head = w;
+  size_t argc = 0, wd, n = sizeof PART_OPS / sizeof PART_OPS[0];
+  for (; head != NULL && head->kind == TERM_APP && argc < 3u; argc++) {
+    args[argc] = head->right;
+    head = head->left;
+  }
+  out->part = argc > 0u && args[argc - 1u]->kind == TERM_VAR ? op_part(x->parts, x->k, args[argc - 1u]->name) : x->k;
+  wd = out->part < x->k && head != NULL && head->kind == TERM_VAR ? part_word(head->name, &x->parts[out->part]) : n;
+  wd = wd < n && PART_OPS[wd].args + 1u == argc ? wd : n;
+  if (wd == n)
+    return FAIL(&x->c, "INTERNAL", "engine: a step of op %s is not one part operation", it->name.text);
+  out->word = ENGINE_WORD[wd];
+  out->args = engine_argument(x, it, scope, args[0], sizes, packs,
+                              out->word == ENGINE_ADD || out->word == ENGINE_WRITE, x->parts[out->part].n);
+  if (out->args == NULL) return 0;
+  out->to = argc == 3u ? engine_argument(x, it, scope, args[1], sizes, packs, 1, x->replicas->name_count) : NULL;
+  return out->args != NULL && (argc != 3u || out->to != NULL);
+}
+
+/* The op IT: the parameter sizes, then the evaluated write steps in order. */
+static int engine_op(SimForm *x, const FormItem *it, EngineOp *out) {
+  Machine *m = x->c.m;
+  uint32_t *sizes = arena_alloc(m->arena, (it->param_count + 1u) * sizeof *sizes);
+  EngineStep *steps = arena_alloc(m->arena, (it->step_count + 1u) * sizeof *steps);
+  FormItem scope;
+  size_t a, t;
+  uint64_t packs = 1;
+  if (sizes == NULL || steps == NULL || !op_scope(&x->g, it, &scope))
+    return FAIL(&x->c, "OOM", "out of memory");
+  for (a = 0; a < it->param_count; a++) {
+    const Term *type = it->params[a].type;
+    sizes[a] = op_param_size(&x->c, type, x->replicas->name_count);
+    if (sizes[a] == 0 || sizes[a] > ENGINE_PACK_MAX / packs)
+      return FAIL(&x->c, "INTERNAL", "engine: the argument pack of op %s is empty or above 4096", it->name.text);
+    packs *= sizes[a];
+  }
+  for (t = 0; t < it->step_count; t++) {
+    if (it->steps[t].name != NULL)
+      return FAIL(&x->c, "INTERNAL", "engine: op %s reads a part (no engine template for a read step)", it->name.text);
+    if (!engine_step(x, it, &scope, sizes, packs, it->steps[t].write, &steps[t]))
+      return 0;
+  }
+  if (!engine_step(x, it, &scope, sizes, packs, it->body, &steps[it->step_count]))
+    return 0;
+  *out = (EngineOp){it->name.text, (uint32_t)it->param_count, sizes, steps, it->step_count + 1u};
+  return 1;
+}
+
+int engine_form(Machine *m, const DeclList *decls, size_t i, EngineForm *out) {
+  static const EnginePartKind KIND[] = {
+    [PART_GSET] = ENGINE_GSET, [PART_MVREG] = ENGINE_MVREG, [PART_COUNTER] = ENGINE_COUNTER, [PART_ESCROW] = ENGINE_ESCROW};
+  const Decl *d = &decls->items[i];
+  SimForm x;
+  EnginePart *parts;
+  EngineOp *ops;
+  size_t *nonneg, j, inv = 0;
+  uint64_t a;
+  if (!sim_ctx(m, decls, i, &x))
+    return 0;
+  parts = arena_alloc(m->arena, (x.k + 1u) * sizeof *parts);
+  ops = arena_alloc(m->arena, (x.n + 1u) * sizeof *ops);
+  nonneg = arena_alloc(m->arena, (d->item_count + 1u) * sizeof *nonneg);
+  if (parts == NULL || ops == NULL || nonneg == NULL)
+    return FAIL(&x.c, "OOM", "out of memory");
+  for (j = 0; j < x.k; j++) {
+    uint64_t *split = x.parts[j].split == NULL ? NULL : arena_alloc(m->arena, (x.replicas->name_count + 1u) * sizeof *split);
+    if (x.parts[j].kind == PART_NONE || (x.parts[j].split != NULL && split == NULL))
+      return FAIL(&x.c, x.parts[j].kind == PART_NONE ? "INTERNAL" : "OOM", "engine: part %zu of %s", j, d->name);
+    for (a = 0; split != NULL && a < x.replicas->name_count; a++) split[a] = x.parts[j].shares[a].nat;
+    parts[j] = (EnginePart){KIND[x.parts[j].kind], x.parts[j].n, x.parts[j].s0, split};
+  }
+  for (j = 0; j < x.n; j++) {
+    if (!engine_op(&x, x.ops[j], &ops[j]))
+      return 0;
+  }
+  for (j = 0; j < d->item_count; j++) {
+    const Term *b = d->items[j].body;
+    if (d->items[j].kind != ITEM_INVARIANT)
+      continue;
+    nonneg[inv] = b != NULL && b->kind == TERM_APP && b->right->kind == TERM_VAR ? part_index(x.parts, x.k, b->right->name) : x.k;
+    if (nonneg[inv++] == x.k)
+      return FAIL(&x.c, "INTERNAL", "engine: invariant %zu of %s is not nonneg PART", inv, d->name);
+  }
+  *out = (EngineForm){d->name, x.replicas->name_count, parts, x.k, ops, x.n, nonneg, inv, x.f};
+  return 1;
+}
+
 /* The part J of the K parts of the state S: the right-nested pack chain of
    form_shop. NULL when S has another shape. */
 static const Value *sim_get(const Value *s, size_t k, size_t j) {

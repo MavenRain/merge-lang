@@ -1,0 +1,6 @@
+Card.apply
+Card.merge
+Card.check
+Card.encode
+Card.decode
+Card.bot

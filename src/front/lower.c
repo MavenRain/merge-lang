@@ -1161,6 +1161,7 @@ static int lower_entry(Machine *m, uint32_t index, const Entry *e, IrFunc *fn) {
   fn->result = e->result_bool ? IR_SCALAR_BOOL : IR_SCALAR_NAT;
   fn->local_count = l.local_count;
   fn->body = block_of(&body);
+  fn->keeps_heap = 0;
   return 1;
 }
 

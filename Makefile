@@ -5,7 +5,7 @@ CFLAGS = -std=c99 -Wall -Werror -Isrc
 CLANG_FLAGS = -std=c99 -Wall -Wextra -Wswitch-enum -Werror -fsyntax-only -Isrc
 FRONT = src/front/base.c src/front/json.c src/front/lexer.c src/front/parser.c src/front/fmt.c src/front/front.c src/front/eval.c src/front/check.c src/front/search.c src/front/lower.c
 TARGET = src/wasm.c
-SRC = src/main.c $(FRONT) $(TARGET)
+SRC = src/main.c $(FRONT) $(TARGET) src/engine.c
 FRONT_TOOL = test/fronttool.c $(filter-out src/front/front.c src/front/lower.c,$(FRONT))
 CUBICAL_TOOL = test/cubical.c $(filter-out src/front/lower.c,$(FRONT))
 HEADERS = $(wildcard src/*.h src/front/*.h)
@@ -37,6 +37,9 @@ build/sim: test/sim.c $(SRC) $(HEADERS) build/domain.c
 build/report: test/report.c $(SRC) $(HEADERS) build/domain.c
 	$(TCC) $(CFLAGS) -o build/report test/report.c $(filter-out src/main.c,$(SRC)) build/domain.c
 
+build/engine: test/engine.c $(SRC) $(HEADERS) build/domain.c
+	$(TCC) $(CFLAGS) -o build/engine test/engine.c $(filter-out src/main.c,$(SRC)) build/domain.c
+
 check-clang: build/domain.c
 	$(CC) $(CLANG_FLAGS) $(SRC) build/domain.c
 	$(CC) $(CLANG_FLAGS) $(FRONT_TOOL)
@@ -44,8 +47,9 @@ check-clang: build/domain.c
 	$(CC) $(CLANG_FLAGS) $(CUBICAL_TOOL) build/domain.c
 	$(CC) $(CLANG_FLAGS) test/sim.c $(filter-out src/main.c,$(SRC)) build/domain.c
 	$(CC) $(CLANG_FLAGS) test/report.c $(filter-out src/main.c,$(SRC)) build/domain.c
+	$(CC) $(CLANG_FLAGS) test/engine.c $(filter-out src/main.c,$(SRC)) build/domain.c
 
-check: build/langc build/fronttool build/diagnostics build/cubical build/sim build/report check-clang
+check: build/langc build/fronttool build/diagnostics build/cubical build/sim build/report build/engine check-clang
 	sh test/gate.sh
 	sh test/review.sh
 	build/fronttool

@@ -3,6 +3,7 @@
 #include <stdio.h>
 #include <string.h>
 
+#include "engine.h"
 #include "front/check.h"
 #include "front/fmt.h"
 #include "front/front.h"
@@ -153,13 +154,16 @@ static int read_source(Arena *arena, const char *path, char **out, size_t *len, 
   return 1;
 }
 
-/* Lowers the entries, then runs the ir, abi or build command. */
-static int run_target(const Options *opt, Machine *machine, Diag *diag) {
+/* Lowers the entries, adds the engine entries of each replicated form of
+   DECLS (S7; a diagnostic of the engine is in machine->diag), then runs the
+   ir, abi or build command. */
+static int run_target(const Options *opt, Machine *machine, const DeclList *decls, Diag *diag) {
   IrProgram prog;
   FILE *out;
   size_t i;
   int ok = 1;
   if (!lower_program(machine, &prog)) return 1;
+  if (!engine_program(machine, decls, &prog, stderr)) return 1;
   switch (opt->command) {
     case CMD_IR:
       ir_print(&prog, stdout);
@@ -199,7 +203,7 @@ static int run(const Options *opt, Arena *arena, Diag *diag) {
     case CMD_SIM: /* run_sim does sim */
       break;
   }
-  return run_target(opt, &machine, diag);
+  return run_target(opt, &machine, &front.decls, diag);
 }
 
 /* langc sim (S5 design sec 1 and 2): check in sim mode (Q57 (a)), then the
@@ -433,7 +437,7 @@ static int run_build(const Options *opt, Arena *arena, Diag *diag) {
     diag_print(&sink, stderr);
     return 2;
   }
-  return c.typed ? run_target(opt, &c.machine, diag) : c.loaded ? 1 : 2;
+  return c.typed ? run_target(opt, &c.machine, &c.front.decls, diag) : c.loaded ? 1 : 2;
 }
 
 /* Lexes and parses the program only (no domain, no check), then prints the

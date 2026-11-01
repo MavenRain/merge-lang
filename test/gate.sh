@@ -186,6 +186,47 @@ echo "differential: $cases cases, $mismatches mismatches"
 # A Bool argument larger than 1 traps (langc eval refuses it with EVAL_ARGS).
 got=$(node test/run-wasm.mjs "$tmp/entries.wasm" pick 2 4 9 2>&1) || true
 [ "$got" = "trap" ] || { echo "FAIL wasm pick 2 4 9: want trap, got $got"; fail=$((fail + 1)); }
+# The merge engine (S7): for each test/engine/NAME.abi, `langc build` of
+# test/engine/NAME.merge, test/report/NAME.merge or examples/NAME.merge gives a
+# valid module, and `langc abi` gives the bytes of the golden file.
+engines=0
+engine_bad=0
+for g in test/engine/*.abi; do
+  engines=$((engines + 1))
+  n=$(basename "$g" .abi)
+  f="examples/$n.merge"
+  [ ! -f "test/report/$n.merge" ] || f="test/report/$n.merge"
+  [ ! -f "test/engine/$n.merge" ] || f="test/engine/$n.merge"
+  w="$tmp/engine-$n.wasm"
+  if ! build/langc build "$f" -o "$w" 2>"$tmp/w.err" || ! wasm-validate "$w" 2>>"$tmp/w.err" ||
+    ! wasm-objdump -x "$w" >/dev/null 2>>"$tmp/w.err"; then
+    echo "FAIL engine $f: $(head -n 1 "$tmp/w.err")"
+    engine_bad=$((engine_bad + 1))
+    fail=$((fail + 1))
+    continue
+  fi
+  if ! build/langc abi "$f" >"$tmp/engine.abi" 2>"$tmp/w.err" || ! cmp -s "$tmp/engine.abi" "$g"; then
+    echo "FAIL engine $f: the abi is not $g"
+    engine_bad=$((engine_bad + 1))
+    fail=$((fail + 1))
+  fi
+done
+echo "engine: $engines modules, $engine_bad mismatches"
+# The engine against the guest (S7): build/engine writes the module, the call
+# script and the want lines of each form, test/run-wasm.mjs runs the script,
+# and `build/engine -c` compares the lines (with the decode lines, Q76 (a)).
+mkdir -p "$tmp/eng"
+if ! build/engine "$tmp/eng" >/dev/null 2>"$tmp/w.err"; then
+  echo "FAIL engine: $(head -n 1 "$tmp/w.err")"
+  fail=$((fail + 1))
+else
+  for c in "$tmp"/eng/*.calls; do
+    s="${c%.calls}"
+    node test/run-wasm.mjs "$s.wasm" - <"$c" >"$s.got" 2>"$tmp/w.err" ||
+      { echo "FAIL engine $s: $(head -n 1 "$tmp/w.err")"; fail=$((fail + 1)); }
+  done
+  build/engine -c "$tmp/eng" || fail=$((fail + 1))
+fi
 # The canonical printer. Each committed .lang file that parses is canonical:
 # `langc fmt F` equals F byte for byte, so fmt is idempotent on it. The
 # fronttool AST dump of F equals the dump of `fmt F` (the round trip). Each

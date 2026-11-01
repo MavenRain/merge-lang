@@ -7,10 +7,10 @@ pair of concurrent operations in one of three classes: independent,
 explicit conflict, or needs coordination. For a pair that needs
 coordination, it gives a concrete counterexample or it accepts a declared
 resource allocation rule. The host is TinyCC. The deterministic replica simulator (`langc sim`)
-and the JSON coordination report (`langc check --json`, `langc build`)
-are built. The planned target is a Wasm merge engine.
+the JSON coordination report (`langc check --json`, `langc build`) and
+the Wasm merge engine that `langc build` writes are built.
 
-## Status (S6)
+## Status (S7)
 
 This repository is the tcc-wasm kit seed of lang-template, the design, the
 plan, slice S1 (the port of the evolve-lang 1f87a5a surface and cubical
@@ -37,14 +37,16 @@ classes J4 to J6, the bounded search, `REFUSE_NEEDS_COORDINATION`,
 L5r, L6a, L6b, L7 and L8, the `Replica S` machine, and the `laws` and
 `pairs` counts of `check --json`), slice S5 (`langc sim`: the
 schedules in the 5.2 order, the transcript, the minimal counterexample,
-the golden files `test/sim/*.out` and the determinism gate) and slice
+the golden files `test/sim/*.out` and the determinism gate), slice
 S6 (the JSON coordination report of `check --json` and `build`, and the
-golden reports `test/report/*.report.json`; `docs/STATUS.md`). There is
-no merge engine yet.
+golden reports `test/report/*.report.json`) and slice S7 (the Wasm merge
+engine of `langc build`: six entries for each replicated form, one
+template for each part, the lowered invariants, and a differential gate
+against the guest on each simulator schedule; `docs/STATUS.md`).
 `make check` passes. `docs/PLAN.md` section 9 gives the slices.
 
 The compiler `langc` is a native program that tcc builds. It is not a Wasm
-module. The planned Wasm output is the merge engine that `langc` writes
+module. The Wasm output is the merge engine that `langc build` writes
 for each program (`docs/PLAN.md` 5.1).
 
 merge-lang does not prove facts about the network. It assumes that each

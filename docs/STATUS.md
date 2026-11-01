@@ -1,7 +1,7 @@
 # merge-lang status
 
 The build implements slices S1, S1b, S2, S2b, S2c, S2d, S3a, S3e, S3x,
-S3b, S4, S5 and S6 of `docs/PLAN.md` section 9: the port of the evolve-lang 1f87a5a
+S3b, S4, S5, S6 and S7 of `docs/PLAN.md` section 9: the port of the evolve-lang 1f87a5a
 surface and cubical kernel (S1), induction in the kernel (S1b), the
 merge-lang domain with the laws L1 to L4 as guest terms (S2), ℤ with the
 `stock` read (S2b), path constructors of dimension 2 with the `fold` over
@@ -12,8 +12,109 @@ examples in the gate (S3x), an `op` body as an `Ops` script of part
 reads and part operations (S3b), the checker: the classes, the bounded
 search, the coordination codes and the laws L5 to L8 (S4), the
 replica simulator `langc sim` with golden transcripts and a determinism
-gate (S5), and the JSON coordination report of `check --json` and
-`build` (S6). It does not complete M0. There is no merge engine yet.
+gate (S5), the JSON coordination report of `check --json` and `build`
+(S6), and the Wasm merge engine that `build` writes, with a differential
+gate against the guest on each simulator schedule (S7). It does not
+complete M0.
+
+## S7 (2026-11-01)
+
+- Scope (`docs/PLAN.md` section 9, the S7 row; Q70 (a) to Q76 (a)): the
+  writer changes of 5.1, one template for each part, the lowered
+  invariants and the engine ABI. The base is the USER S6 commit 1f94f15.
+- U1: `src/ir.h` has `keeps_heap` (the last field of `IrFunc`).
+  `src/wasm.c` exports `memory`, `alloc` and `reset` only when an entry
+  keeps the heap. The kit entries keep their old behavior.
+- U2: `engine_form` in `src/front/check.{c,h}` gives the engine view of
+  a form: the parts, the words, the ops and their steps.
+  `src/engine.{c,h}` add six entries for each replicated form NAME
+  (Q70 (a)): `NAME.apply`, `NAME.merge`, `NAME.check`, `NAME.encode`,
+  `NAME.decode` and `NAME.bot`. `memory`, `alloc` and `reset` are
+  shared. There is one template for each part (GSet, Counter, Escrow,
+  MVReg). `check` gives one bit for each invariant (the bit is 1 when
+  the invariant is false). A counter word or a sum above 2^63 - 1 traps
+  (Q71 (a)). The `arg` of an op with more than one parameter is the
+  mixed radix pack a0 + s0 (a1 + s1 (...)) (Q72 (a)). `decode` gives 0
+  for a layout that is not canonical (Q75 (a)): length L, each word at
+  most 2^63 - 1, a GSet word 0 or 1, an MVReg word 2 ctx or 2 ctx + 1.
+  `src/main.c` calls `engine_program` after `lower_program`. Golden ABI
+  files `test/engine/{tags,owner,inventory-escrow,classes}.abi`; the
+  gate builds each module, runs `wasm-validate` and `wasm-objdump -x`,
+  and compares `langc abi` with the golden file. Count line: `engine: 4
+  modules, 0 mismatches`. Build keeps no OUT on a refusal (Q74 (a)).
+- U3 (Q73 (a), Q74 (a), Q76 (a)): `search_visit` in
+  `src/front/search.{c,h}` calls a visitor for each schedule of the
+  bounded search (`search_pair` does not change). `test/engine.c` (C;
+  it links the front end, `src/engine.c` and `src/wasm.c`) writes the
+  engine module of each form of `examples/*.merge` and
+  `test/report/classes.merge`, also of the refused `inventory.merge`.
+  For each schedule, it writes a call script and the expected output
+  from the guest values: `bot`; for each step `apply` (0 when the guest
+  precondition fails), `encode` and the L words; at the merge `merge`,
+  `encode`, the L words and `check`. `test/run-wasm.mjs` has `@k` (the
+  result of call line k), `words P L` (the L words at P + 8) and `store
+  P W...` (it writes the words at P + 8 and prints P). The gate runs
+  node on each script and `build/engine -c` on the output. Count line:
+  `engine: 5 forms, 14419 schedules, 206 refusals, 279146 calls, 0
+  mismatches`. Schedules: tags 676, owner 147, inventory 33, Shop 620,
+  Card 12943. Refusals: inventory 9, Shop 197.
+- The decode lines (the first schedule of each form): `decode` of the
+  encoded state gives the canonical words; `decode` of the merge state
+  (word 0 is not L) gives 0; a word of 2^63 (`store`) gives 0; a bad
+  shape word (part 0 GSet 2, MVReg 2 ctx 0 + 2) gives 0.
+- No diagnostic code changed.
+- U4 mutants: 5/5 KILLED by the engine leg only, `check-clang` rc 0 on
+  each, `make -B` for each build. Only the engine count line changed
+  (`, M mismatches`). E1 the GSet add stores the old word (no OR): M
+  55882 (tags, classes). E2 no precondition on the Counter `dec`: M 9
+  (inventory). E3 no `U i` loop in the Escrow `can`: M 7
+  (inventory-escrow). E4 `SUB(1, live)` to `MUL(EQ(i, j), SUB(1,
+  live))` in the MVReg merge: M 149600 (owner, classes). E5 the
+  `nonneg` check with the sums in the wrong sides: M 12 (inventory).
+- Known edges:
+  - An op with a read step is INTERNAL in `engine_form`. No fixture has
+    one.
+  - `src/main.c` is not the same as the kit file (its header says
+    SHARED): `run_target` takes the declarations.
+  - Address 0 is the first block and also the refusal value of `apply`
+    and `decode`. A host cannot confuse the two: `bot` never refuses,
+    and `apply` and `decode` allocate after their input.
+  - `test/engine.c` runs each visit on its own fuel and on a scratch
+    arena of 1 << 26 bytes that it releases after each visit. It
+    computes `def_value` first (the only `Machine` cache that keeps a
+    pointer). The main arena is 1 << 30 bytes. Peak RSS of one run: 389
+    MB, 10.0 s.
+  - The S7 design gave the count line `engine: F forms, S schedules, C
+    calls, 0 mismatches` and a `cmp` of each output. The line also gives
+    R (the refusals) and M (the mismatches), and `build/engine -c`
+    compares the output (rc 1 on a mismatch; the first 5 mismatches of
+    a form go to stderr).
+  - The decode lines run in the first schedule of each form only.
+  - A Counter or Escrow part has no shape check in `decode`, only the
+    word limit.
+  - `store P W...` in `test/run-wasm.mjs` is a third pseudo call (Q76
+    (a)); Q73 (a) gave `@k` and `words P L` only.
+- `make check` EXIT 0: the S6 counts are the same, and there are two
+  new lines: `engine: 4 modules, 0 mismatches` and `engine: 5 forms,
+  14419 schedules, 206 refusals, 279146 calls, 0 mismatches`.
+
+### S7 review corrections (2026-11-01)
+
+- Write arguments may be constants or expressions over finite parameters.
+  `engine_form` evaluates each argument for every mixed radix pack, using
+  the same numeral-atoms conversion as the guest op. The engine selects
+  those values at runtime. Previously, a checked op such as
+  `op fixed := add tags ana` failed with INTERNAL during build.
+- Argument selection uses shallow assignments. A valid 4096-member pack
+  previously failed with WASM_DEPTH because the digit expressions were
+  nested. The maximum pack now builds and its last member runs correctly.
+- `test/engine/arguments.merge` covers constant and computed GSet, MVReg,
+  Counter and Escrow arguments, including transfer targets and numeral
+  atoms. Its C visitor compares the Wasm output with the guest values.
+  `test/engine/large-pack.merge` covers the last valid pack and traps on an
+  invalid pack, replica or op. Both have golden ABI files.
+- The engine gate now reports 6 modules and 7 forms, 14581 schedules,
+  320 refusals, 281813 calls and 0 mismatches.
 
 ## S6 (2026-11-01)
 

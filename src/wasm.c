@@ -6,8 +6,13 @@
      block does not fit, it grows the memory. When the memory cannot grow (the
      maximum is WASM_MAX_PAGES), it traps.
    - Function 1 + K is IR entry K, exported as its name. Each parameter and the
-     result is an i64. Each entry first resets the heap pointer to 0, and it
-     traps on a Bool argument larger than 1.
+     result is an i64. Each entry first resets the heap pointer to 0 (not an
+     entry with keeps_heap), and it traps on a Bool argument larger than 1.
+   - When an entry has keeps_heap (the merge engine), the module also exports
+     `memory` (memory 0), `alloc (bytes : i64) -> i64` (function 1 + N; it
+     traps when bytes is above 2^32 - 1, else it calls function 0) and
+     `reset () -> i64` (function 2 + N; it sets the heap pointer to 0 and
+     gives 0). N is the entry count.
    - A word is 8 bytes. Word K of the block at address A is at A + 8K.
 
    Each entry has three i64 scratch locals after the IR locals: S and S + 1
@@ -310,30 +315,56 @@ static int part_entry(Sink *s, const void *arg) {
   uint32_t t = fn->local_count;
   size_t k;
   int ok = put_uleb(s, 1) && put_uleb(s, (uint64_t)(fn->local_count - fn->param_count) + 3u) &&
-           put_byte(s, TYPE_I64) && i64_const(s, 0) && op2(s, OP_GLOBAL_SET, 0);
+           put_byte(s, TYPE_I64) && (fn->keeps_heap || (i64_const(s, 0) && op2(s, OP_GLOBAL_SET, 0)));
   for (k = 0; k < fn->param_count && ok; k++) ok = bool_guard(s, fn, k);
   return ok && emit_block(s, &fn->body, t, 0) && put_byte(s, OP_UNREACHABLE) && put_byte(s, OP_END);
 }
 
+/* alloc (bytes : i64) -> i64: trap when bytes > 2^32 - 1, else call 0. */
+static int part_alloc_export(Sink *s, const void *arg) {
+  (void)arg;
+  return put_uleb(s, 0) && op2(s, OP_LOCAL_GET, 0) && i64_const(s, 0xFFFFFFFFu) && put_byte(s, OP_I64_GT_U) &&
+         put_byte(s, OP_IF) && put_byte(s, TYPE_EMPTY) && put_byte(s, OP_UNREACHABLE) && put_byte(s, OP_END) &&
+         op2(s, OP_LOCAL_GET, 0) && put_byte(s, OP_I32_WRAP_I64) && op2(s, OP_CALL, 0) && put_byte(s, OP_END);
+}
+
+/* reset () -> i64: heap := 0; return 0. */
+static int part_reset(Sink *s, const void *arg) {
+  (void)arg;
+  return put_uleb(s, 0) && i64_const(s, 0) && op2(s, OP_GLOBAL_SET, 0) && i64_const(s, 0) && put_byte(s, OP_END);
+}
+
+/* 2 (alloc and reset) when an entry keeps the heap, else 0. */
+static size_t engine_extra(const IrProgram *prog) {
+  size_t i;
+  int engine = 0;
+  for (i = 0; i < prog->func_count; i++) engine = engine || prog->funcs[i].keeps_heap;
+  return engine ? 2u : 0u;
+}
+
 static int part_types(Sink *s, const void *arg) {
   const IrProgram *prog = arg;
+  size_t extra = engine_extra(prog);
   size_t i;
   size_t k;
-  int ok = put_uleb(s, 1u + prog->func_count) && put_byte(s, TYPE_FUNC) && put_uleb(s, 1) && put_byte(s, TYPE_I32) &&
-           put_uleb(s, 1) && put_byte(s, TYPE_I64);
+  int ok = put_uleb(s, 1u + prog->func_count + extra) && put_byte(s, TYPE_FUNC) && put_uleb(s, 1) &&
+           put_byte(s, TYPE_I32) && put_uleb(s, 1) && put_byte(s, TYPE_I64);
   for (i = 0; i < prog->func_count && ok; i++) {
     ok = put_byte(s, TYPE_FUNC) && put_uleb(s, prog->funcs[i].param_count);
     for (k = 0; k < prog->funcs[i].param_count && ok; k++) ok = put_byte(s, TYPE_I64);
     ok = ok && put_uleb(s, 1) && put_byte(s, TYPE_I64);
   }
-  return ok;
+  return ok && (extra == 0 || (put_byte(s, TYPE_FUNC) && put_uleb(s, 1) && put_byte(s, TYPE_I64) && put_uleb(s, 1) &&
+                               put_byte(s, TYPE_I64) && put_byte(s, TYPE_FUNC) && put_uleb(s, 0) &&
+                               put_uleb(s, 1) && put_byte(s, TYPE_I64)));
 }
 
 static int part_functions(Sink *s, const void *arg) {
   const IrProgram *prog = arg;
+  size_t n = prog->func_count + engine_extra(prog);
   size_t i;
-  int ok = put_uleb(s, 1u + prog->func_count);
-  for (i = 0; i <= prog->func_count && ok; i++) ok = put_uleb(s, i);
+  int ok = put_uleb(s, 1u + n);
+  for (i = 0; i <= n && ok; i++) ok = put_uleb(s, i);
   return ok;
 }
 
@@ -349,19 +380,36 @@ static int part_global(Sink *s, const void *arg) {
 
 static int part_exports(Sink *s, const void *arg) {
   const IrProgram *prog = arg;
+  size_t n = prog->func_count;
+  size_t extra = engine_extra(prog);
   size_t i;
-  int ok = put_uleb(s, prog->func_count);
-  for (i = 0; i < prog->func_count && ok; i++) {
+  int ok = put_uleb(s, n + (extra == 0 ? 0u : 3u));
+  for (i = 0; i < n && ok; i++) {
     ok = put_name(s, prog->funcs[i].name) && put_byte(s, 0) && put_uleb(s, 1u + i);
   }
-  return ok;
+  return ok && (extra == 0 || (put_name(s, "memory") && put_byte(s, 2) && put_uleb(s, 0) && put_name(s, "alloc") &&
+                               put_byte(s, 0) && put_uleb(s, 1u + n) && put_name(s, "reset") && put_byte(s, 0) &&
+                               put_uleb(s, 2u + n)));
 }
 
 static int part_code(Sink *s, const void *arg) {
   const IrProgram *prog = arg;
+  size_t extra = engine_extra(prog);
   size_t i;
-  int ok = put_uleb(s, 1u + prog->func_count) && sized(s, part_alloc, NULL);
+  int ok = put_uleb(s, 1u + prog->func_count + extra) && sized(s, part_alloc, NULL);
   for (i = 0; i < prog->func_count && ok; i++) ok = sized(s, part_entry, &prog->funcs[i]);
+  return ok && (extra == 0 || (sized(s, part_alloc_export, NULL) && sized(s, part_reset, NULL)));
+}
+
+/* An engine module may not have an entry with a shared export name. */
+static int names_free(const IrProgram *prog, FILE *err) {
+  size_t i;
+  int ok = 1;
+  for (i = 0; i < prog->func_count && ok && engine_extra(prog) != 0; i++) {
+    ok = strcmp(prog->funcs[i].name, "memory") != 0 && strcmp(prog->funcs[i].name, "alloc") != 0 &&
+         strcmp(prog->funcs[i].name, "reset") != 0;
+    if (!ok) fprintf(err, "langc: INTERNAL: %s: the name is an engine export\n", prog->funcs[i].name);
+  }
   return ok;
 }
 
@@ -376,8 +424,9 @@ int target_write(const IrProgram *prog, TargetPart part, FILE *out, FILE *err) {
   static const unsigned char header[8] = {0x00, 0x61, 0x73, 0x6D, 0x01, 0x00, 0x00, 0x00};
   Sink s = {out, 0, err};
   size_t i;
-  int ok = 1;
+  int ok = names_free(prog, err);
   (void)part;
+  if (!ok) return 0;
   for (i = 0; i < sizeof header && ok; i++) ok = put_byte(&s, header[i]);
   ok = ok && section(&s, SECTION_TYPE, part_types, prog) && section(&s, SECTION_FUNCTION, part_functions, prog) &&
        section(&s, SECTION_MEMORY, part_memory, NULL) && section(&s, SECTION_GLOBAL, part_global, NULL) &&

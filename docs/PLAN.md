@@ -414,7 +414,14 @@ Engine ABI (Q4 (a)):
   `decode` gives 0 for a layout that is not canonical;
 - no imports, no floats, no clock, no randomness;
 - the `stock` read (ℤ, S2b) is a signed `i64`; an `Ops` op body (S3b) is
-  one `apply` call.
+  one `apply` call;
+- the names (Q70 (a)): the entries of a replicated form NAME are
+  `NAME.apply`, `NAME.merge`, `NAME.check`, `NAME.encode`, `NAME.decode`
+  and `NAME.bot` (`bot() -> ptr`, the bottom state); `memory`, `alloc`
+  and `reset` are shared;
+- each counter word and each sum is at most 2^63 - 1, else a trap
+  (Q71 (a)); the `arg` of an op with more than one parameter is the
+  mixed radix pack a0 + s0 (a1 + s1 (...)) in parameter order (Q72 (a)).
 
 The writer changes: an engine entry does not reset the heap pointer, and
 the module exports `memory`, `alloc` and `reset`. The kit entries keep
@@ -575,7 +582,7 @@ on the new checks, docs, close (stage, commit message, next prompt).
 | S4 | the checker: J4 to J6, the bounded search core in C (shared with S5), `REFUSE_NEEDS_COORDINATION`, `REFUSE_RULE_MISMATCH`, `REFUSE_READ_WINNER`, `W_BOUNDED`; L5, L5r, L6a, L6b, L7, L8; the `Replica S` cofamily with `Event = local Op ∣ recv S` (Q16 (b), Q25 (a)); `laws` and `pairs` counts in `check --json` | one test per code with its JSON shape; `inventory.merge` refused, `inventory-escrow.merge` GREEN with L7 proved; L5r proved or bounded, never proved by a bounded run; mutants on each class test and on L7 DONE 2026-10-31 (on the USER S3b commit 263cf6d; Q45 (a), Q46 (b), Q47 (a), Q48 (a), Q49 (b), Q50 (a) to Q52 (a), Q53 (b), Q54 (c), Q55 (a)): `make check` EXIT 0: examples 13 checked, 0 failed; parse refusals 23 (`test/parse/allocate-for-no-body.lang`); check refusals 76 (`test/check/machine-open.lang`); evals 206 (`test/eval/machine.lang`); ir 13 lowered; wasm 16 modules valid; differential 1230 cases, 0 mismatches; fmt 163 canonical, 14 non-canonical pairs (`allocate-for`); merge examples 4 canonical, 3 checked, 1 refused (`inventory.merge` gets `REFUSE_NEEDS_COORDINATION`); json 35 fixtures (`REFUSE_NEEDS_COORDINATION`, `REFUSE_READ_WINNER`, `REFUSE_RULE_MISMATCH`, `W_BOUNDED`, `pair-law`), diagnostics 46 codes (32 with a fixture, 14 with no fixture); gate 0 failures; review, domain and diagnostic edit regressions passed; cubical 122 checks, 38 round trips. L5r is proved per form to `mergeSeq` (`NAMEL5r`), with the multiset step in the domain (`mergeSeqAll`, Q54 (c)); L6a and L6b are domain lemmas; L7 is proved per allocated part (`NAMEPARTL7`) for the 5.2 shape only; 25 builtin ℕ lemmas (Q53 (b), section 3). 12/12 mutants KILLED by a test, `check-clang` rc 0 on each: C1 and C2 on the class tests (`test/json/pair-law.lang`); C3 (`inventory-escrow.merge`, `W_BOUNDED` sell ∥ refill); C4 (`inventory.merge`, `REFUSE_NEEDS_COORDINATION.lang`); N1 `natLeTrans` without `q` (the row `natLeTrans`, `escrowRightsMerge` TYPE_MISMATCH); L1 `escrowStep` at `hs i`; L2 `form_l7` at `r + 1u` (`ShopStockL7` TYPE_MISMATCH); R1 the d ≠ c test (`REFUSE_RULE_MISMATCH.lang`); F1 `fmt` drops the clause (`allocate-for.canon`); O1 `op_reader` (`REFUSE_READ_WINNER.lang`); V1 `form_violation` (merge loop, json); U1 `law_refuted` (json progress line) |
 | S5 | `langc sim`: schedules, order, reduction, transcript; golden `test/sim/*.out` (the demo); determinism gate | the demo transcript equals its golden file; two runs byte-identical; mutants on the order and on the minimality test DONE 2026-10-31 (on the USER S4 commit 5b4138b; Q56 (a), Q57 (a), Q58 (b), Q59 (a)): `make check` EXIT 0: examples 13 checked, 0 failed; parse refusals 23; check refusals 76; evals 206; ir 13 lowered; wasm 16 modules valid; differential 1230 cases, 0 mismatches; fmt 163 canonical, 14 non-canonical pairs; merge examples 4 canonical, 3 checked, 1 refused; sim 2 golden, 0 mismatches (`test/sim/inventory.out`: 10 lines, schedules 33, `sell ∥ sell` refuted, rc 1; `test/sim/inventory-escrow.out`: 3 lines, schedules 620, the invariant kept, rc 0); json 35 fixtures, diagnostics 46 codes (32 with a fixture, 14 with no fixture); gate 0 failures; review, domain and diagnostic edit regressions passed; cubical 124 checks, 41 round trips. The sim search is the sentinel `SEARCH_ANY_OP` in `search_pair` (Q56 (a)); `langc sim` checks in sim mode, with no `form_search` (Q57 (a)); golden files for the two demo files only (Q58 (b)); K in a refused transcript is the count of kept schedules before the counterexample, plus 1 (Q59 (a)). Mutants: 4 of 6 KILLED by `test/sim/inventory.out`, `check-clang` rc 0 on each: O1 the `dfs` branch loop from the last replica (K 43, not 33); O3 the `place` op loop from the last op (K 49, not 33); N1 the outer loop from `max` down and N2 no `stop` after the first violation (the transcript differs from line 3). 2 SURVIVED, as the design expects: O2 `next_args` with the last argument most significant (no golden file refutes with a 2-argument op, Q58 (b)) and N3 the class row pair from the highest branch (no golden file has 3 replicas) |
 | S6 | JSON report: port of `json.c`, `NAME.report.json`, the 5.3 schema shared with `check --json` | golden reports; mutants on the class map DONE 2026-11-01 (on the USER S5 commit 290f396; Q60 (a) to Q69 (a)): `make check` EXIT 0: examples 13 checked, 0 failed; parse refusals 23; check refusals 76; evals 206; ir 13 lowered; wasm 16 modules valid; differential 1230 cases, 0 mismatches; fmt 163 canonical, 14 non-canonical pairs; merge examples 4 canonical, 3 checked, 1 refused; sim 4 golden, 0 mismatches (new: `test/sim/owner.out`, schedules 147, and `test/sim/tags.out`, schedules 676; no invariant, no verdict line, rc 0, Q67 (a)); report 5 golden, 0 mismatches, 4 same as `check --json` (`test/report/{owner,tags,inventory,inventory-escrow,classes}.report.json`; the class fixture `test/report/classes.merge`, Q69 (a)); json 35 fixtures, diagnostics 46 codes (32 with a fixture, 14 with no fixture); gate 0 failures; review, domain and diagnostic edit regressions passed; cubical 124 checks, 41 round trips; sim regressions 7 checks; report rows 7 checks. `langc check --json` prints one JSON document: the progress counts, the diagnostics and one row for each op pair O1 <= O2 of each replicated form (Q60 (a), Q62 (a), Q64 (a)). `langc build SRC -o OUT` writes the same document to the report file next to OUT, also on a refusal (Q61 (a), Q63 (a)). The writer `src/front/json.{c,h}` is the port of `hosts/tcc-json`. Fix: with no invariant, a pair that no law covers is independent and proved (L6a), not bounded. No diagnostic code changed. Mutants: 8/8 KILLED by a golden report, `check-clang` rc 0 on each, `make -B` for each build: K1 the L6b MVReg test (classes); K2 two class names swapped (owner, tags, inventory-escrow, classes); K3 an L6a row marked bounded (tags, classes); K4 the pair loops from O1 + 1 (all five); K5 `part` from the first MVReg part (classes); K6 `rule` for L6b rows only (inventory-escrow); K7 the rows in reverse order (inventory-escrow, classes); K8 the no-invariant path keeps the cover (classes). O2 (the S5 survivor) does not apply: no golden report has a refuted row with a 2-argument op |
-| S7 | Wasm engine: the writer changes of 5.1, part templates, lowered invariants, the engine ABI | `wasm-validate`; differential gate on every simulator schedule; mutants on one template per part |
+| S7 | Wasm engine: the writer changes of 5.1, part templates, lowered invariants, the engine ABI | `wasm-validate`; differential gate on every simulator schedule; mutants on one template per part DONE 2026-11-01 (on the USER S6 commit 1f94f15; Q70 (a) to Q76 (a)): `make check` EXIT 0: the S6 counts are the same, plus `engine: 4 modules, 0 mismatches` (`langc build`, `wasm-validate`, `wasm-objdump -x` and `langc abi` against `test/engine/{tags,owner,inventory-escrow,classes}.abi`) and `engine: 5 forms, 14419 schedules, 206 refusals, 279146 calls, 0 mismatches` (`test/engine.c`: for each schedule of each form of the examples and `test/report/classes.merge`, also the refused `inventory.merge` (Q74 (a)), a call script for `test/run-wasm.mjs` and the expected output from the guest values; schedules tags 676, owner 147, inventory 33, Shop 620, Card 12943). The six entries of each form NAME are `NAME.apply`, `NAME.merge`, `NAME.check`, `NAME.encode`, `NAME.decode` and `NAME.bot`; `memory`, `alloc` and `reset` are shared (Q70 (a), 5.1). `src/engine.{c,h}` has one template for each part (GSet, Counter, Escrow, MVReg) and the lowered invariants. `decode` refuses a layout that is not canonical (Q75 (a)). `test/run-wasm.mjs` has `@k`, `words P L` (Q73 (a)) and `store P W...` (Q76 (a)). No diagnostic code changed. Mutants: 5/5 KILLED by the engine leg only, `check-clang` rc 0 on each, `make -B` for each build: E1 the GSet add stores the old word (tags, classes); E2 no precondition on the Counter `dec` (inventory); E3 no `U i` loop in the Escrow `can` (inventory-escrow); E4 the MVReg merge keeps a dead value (owner, classes); E5 the `nonneg` check with the sums in the wrong sides (inventory). |
 | S8 | agent kit: `SKILL.md` with 5 graded examples, `langc mcp`, `explain-code`, final `AGENTS.md` and README table | MCP stdio test; each example passes `check` with the output in the file |
 | S9 | `docs/TOKEN-BASELINE.md` and its script | the script output equals the file |
 | S10 | close: `docs/STATUS.md`, `docs/VALIDATION.md`, full gate, mutant summary | full gate EXIT 0 |
@@ -1046,3 +1053,35 @@ RULED (letter) is a USER ruling.
   a Counter with `nonneg`, a 2-argument op, ops in an order that gives
   independent and explicit-conflict rows before the refuted row. (b) the
   four examples only (K1, K5 and K7 then survive).
+- Q70 the engine export names (S7 Unit 0, 2026-11-01). RULED (a). (a)
+  `NAME.apply` and the other entries for each form NAME, `memory`,
+  `alloc`, `reset` shared; PLAN 5.1 gets the names. (b) the 5.1 names
+  with no prefix, and build refuses a program with more than one form.
+  (c) no prefix for one form, a prefix for more than one.
+- Q71 the trap bound (S7 Unit 0, 2026-11-01). RULED (a). (a) each
+  counter word and each sum at most 2^63 - 1, so `stock` is a valid i64.
+  (b) the u64 carry only (a `stock` above 2^63 - 1 reads negative).
+- Q72 an op with more than one parameter (S7 Unit 0, 2026-11-01). RULED
+  (a). (a) `arg` is the mixed radix pack a0 + s0 (a1 + s1 (...)) in
+  parameter order. (b) build refuses an op with more than one
+  parameter. (c) one i64 parameter for each op parameter (the apply
+  arity is then per op).
+- Q73 the differential runner (S7 Unit 0, 2026-11-01). RULED (a). (a)
+  extend the existing test/run-wasm.mjs with `@k` and `words P L` (no
+  new harness; PLAN 5.1 says node). (b) an engine export `NAME.word(ptr,
+  k)`, and the runner gets `@k` only. (c) a Wasm interpreter in C
+  (large).
+- Q74 the engine of a refused program (S7 Unit 0, 2026-11-01). RULED
+  (a). (a) build keeps no OUT on a refusal; test/engine.c writes the
+  engine of each form with no check gate, so inventory.merge (the only
+  Counter example and the only check bit 1) is in the differential. (b)
+  build writes OUT also on a J4 refusal (rc stays 1). (c) a new Counter
+  fixture with one replica (check bits are then always 0).
+- Q75 the canonical check of `decode` (S7 Unit 0, 2026-11-01). RULED
+  (a). (a) length L, each word at most 2^63 - 1, GSet bits 0 or 1, MVReg
+  `m j y` in {2 ctx j, 2 ctx j + 1}. (b) length and the word bound
+  only.
+- Q76 the store call of the runner (S7 U3, 2026-11-01). RULED (a). (a)
+  a pseudo call `store P W...` in test/run-wasm.mjs writes the words at
+  P + 8 and prints P, so the decode lines can give a word of 2^63 and a
+  bad shape word.
