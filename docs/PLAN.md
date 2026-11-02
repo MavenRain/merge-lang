@@ -19,6 +19,8 @@ arguments, a `fold` over ℕ with a motive, the dependent `elim` for Bool and
 `Option`, and the builtin `sumFin`. S2 builds the merge-lang domain on the
 S1b kernel (O4 DONE): the parts, `Read n`, the product join and L1 to L4.
 The O12 replan is DONE (S2 unit 1, 2026-10-27). Section 9 gives the slices.
+The slices S1 to S9 and the close S10 are DONE; the plan is CLOSED
+(Q105 (a), 2026-11-02).
 
 merge-lang does not prove facts about the network. It assumes that each
 replica state that is sent arrives some time, and it does not model loss,
@@ -503,7 +505,7 @@ reports are compared byte for byte.
 | L5r | guest replicas: two `Replica S` values (S4) that got the same multiset of `recv` events after their last `local` event observe equal `eps` | proved when its guest term type-checks; else bounded (the simulator, each delivery order); a bounded run never gives proved. S4: proved per form to `mergeSeq` (`NAMEL5r`); the multiset step is the domain lemma `mergeSeqAll` at an abstract `S` (Q54 (c)), so two orders `f`, `g` with a path `fmOf NAME f n ≡ fmOf NAME g n` give equal states through `mergeSeqAll` and `cong NAMEL5` (not per form) | S4 |
 | L6a | `GSet`: `has (merge (add x a) (add y b)) x` and the same for `y` (D3) | proved (library) | S4 |
 | L6b | `MVReg`: concurrent `write x` and `write y` with `x ≠ y` read as `conflict {x, y}` (D4) | proved (library): the domain lemma `mvregConflict n r i j x y s wf hij hxy` at the `n` and `r` of each `MVReg` part is the instance (no per-form def). Its base state `s` has `wf : mvregWf n r s` (each witness at most `2 ctx + 1`, Q55 (a)); `mvregBotWf`, `mvregMergeWf` and `mvregWriteWf` show that `mvregBot`, `mvregMerge` and `mvregWrite` keep it. `hij : finEq r i j ≡ false` and `hxy : finEq n x y ≡ false` | S4 |
-| L7 | `Escrow`: in each reachable state, `rights i ≥ 0` for each `i` and the sum of the rights is `stock`, so `nonneg` holds (D5); with `restock` as `R i i` (O14) | proved (library) | S4 |
+| L7 | `Escrow`: in each reachable state, `rights i ≥ 0` for each `i` and the sum of the rights is `stock`, so `nonneg` holds (D5); with `restock` as `R i i` (O14) | library proof for bottom, one prefix op, one op per distinct replica branch, then merge; no guest induction over all histories (`docs/STATUS.md`, S4) | S4 |
 | L8 | a program invariant under an independent pair | proved with a user term, else bounded | S4 |
 
 Why L7 holds: replica `i` writes only its row of `R` and `U i`, and it
@@ -588,7 +590,7 @@ on the new checks, docs, close (stage, commit message, next prompt).
 | S7 | Wasm engine: the writer changes of 5.1, part templates, lowered invariants, the engine ABI | `wasm-validate`; differential gate on every simulator schedule; mutants on one template per part DONE 2026-11-01 (on the USER S6 commit 1f94f15; Q70 (a) to Q76 (a)): `make check` EXIT 0: the S6 counts are the same, plus `engine: 4 modules, 0 mismatches` (`langc build`, `wasm-validate`, `wasm-objdump -x` and `langc abi` against `test/engine/{tags,owner,inventory-escrow,classes}.abi`) and `engine: 5 forms, 14419 schedules, 206 refusals, 279146 calls, 0 mismatches` (`test/engine.c`: for each schedule of each form of the examples and `test/report/classes.merge`, also the refused `inventory.merge` (Q74 (a)), a call script for `test/run-wasm.mjs` and the expected output from the guest values; schedules tags 676, owner 147, inventory 33, Shop 620, Card 12943). The six entries of each form NAME are `NAME.apply`, `NAME.merge`, `NAME.check`, `NAME.encode`, `NAME.decode` and `NAME.bot`; `memory`, `alloc` and `reset` are shared (Q70 (a), 5.1). `src/engine.{c,h}` has one template for each part (GSet, Counter, Escrow, MVReg) and the lowered invariants. `decode` refuses a layout that is not canonical (Q75 (a)). `test/run-wasm.mjs` has `@k`, `words P L` (Q73 (a)) and `store P W...` (Q76 (a)). No diagnostic code changed. Mutants: 5/5 KILLED by the engine leg only, `check-clang` rc 0 on each, `make -B` for each build: E1 the GSet add stores the old word (tags, classes); E2 no precondition on the Counter `dec` (inventory); E3 no `U i` loop in the Escrow `can` (inventory-escrow); E4 the MVReg merge keeps a dead value (owner, classes); E5 the `nonneg` check with the sums in the wrong sides (inventory). |
 | S8 | agent kit: `SKILL.md` with 5 graded examples, `langc mcp`, `explain-code`, final `AGENTS.md` and README table | MCP stdio test; each example passes `check` with the output in the file DONE 2026-11-01 (on the USER S7 commit ff5720b; Q77 (a) to Q87 (a), Q89 (a)): `make check` EXIT 0: the S7 counts are the same, plus `skill: 5 examples, 5 outputs match` (`test/skill.c`: `check --json` of each example of `skills/merge-lang/SKILL.md`, the stdout byte for byte and the exit code, Q82 (a)), `explain-code: 46 codes, 0 mismatches` (`test/verbs.c`: the table of `src/codes.c` and `docs/DIAGNOSTICS.md` in both directions, Q80 (a)), `mcp: 33 requests, 0 mismatches; 5 examples` (`test/mcp.c`: the golden lines of `test/mcp/{requests,responses}.jsonl`, then `check` and `sim` on each graded example against the CLI, and the write error exit 2, Q84 (a)) and `readme: 7 rows, 9 verbs` (`test/readme.c`, Q86 (a)). Examples 1 to 4 cite `examples/{tags,owner,inventory,inventory-escrow}.merge`; example 5 is `examples/agent/seats.merge`, outside the gate globs (Q81 (a)). The MCP tools are `check`, `fmt`, `sim` and `explain-code` (Q77 (a), Q78 (a)); `initialize` gives the protocol revision 2025-11-25 (Q85 (a)). `sim_print` and its 2 helpers write to a `FILE *dst` (Q89 (a)). No diagnostic code changed. Mutants: 8/8 KILLED, `make -B` for each build: M1 no `sim` tool (mcp); M2 `isError` on `status == 0` (mcp); M3 jsonin takes "1.0" (mcp); M4 a word of an `explain-code` row (verbs); M5 a SKILL.md json block (skill); M6 a SKILL.md exit code (skill); M7 a `no` README row changed to `yes:` (readme); M8 `sim_step` to `stdout` (mcp). Q88 (CHECK_DEPTH) is OPEN for the USER. |
 | S9 | `docs/TOKEN-BASELINE.md` and its script | the script output equals the file DONE 2026-11-02 (on the USER S8 commit 7bbcd58; Q88 (a), Q90 (a) to Q97 (a)): `make check` EXIT 0 with 27 count lines: the S8 counts are the same, but json 35 fixtures, diagnostics 47 codes (32 with a fixture, 15 with no fixture) and `explain-code: 47 codes, 0 mismatches` (the CHECK_DEPTH row with a "no fixture:" reason in `docs/DIAGNOSTICS.md` and `src/codes.c`, and CHECK in the `test/gate.sh` prefix list, Q88 (a)), plus `tokens: 3 files, 2 rules, 4 ratios, 0 mismatches` and `tokens IO regressions: 5 cases, 0 failures`. The token count tool `test/tokcount.c` is the port of evolve-lang dd98209 (Q90 (a), Q96 (a)): `build/tokcount --check docs/TOKEN-BASELINE.md` counts the rules A and B and the non-ASCII tokens of `examples/inventory-escrow.merge` (the demo task, Q91 (a)) and of the two samples `test/baseline/inventory.py` and `test/baseline/inventory.rs` (the full model and its tests, Q92 (a), Q94 (a)), and compares the table and the ratio lines with the file. `test/tokcount-io.c` holds the C CLI regressions. The Makefile `check` recipe runs both, and `check-clang` compiles both (Q95 (a)). The measure of the Unicode surface is the `non-ASCII tokens` column and two share lines; no lexer change (Q93 (a)). SPEC 2.2 lists `∣` and `ℤ`, and the LEX_CHAR row adds `ℤ` (Q97 (a)). No change to the checker, the simulator, the report or the engine. Mutants: 6/6 KILLED, `make -B` for each build: M1 `end_run` with `(run + 2) / 4` (tokens); M2 the merge row of the doc with 84 tokens A (tokens); M3 the ratio with no half-up term (tokens); M4 `build/langc chek` (tokens); M5 no non-ASCII count (tokens); M6 `output_status` gives `status` only (tokens IO). |
-| S10 | close: `docs/STATUS.md`, `docs/VALIDATION.md`, full gate, mutant summary | full gate EXIT 0 |
+| S10 | close: `docs/STATUS.md`, `docs/VALIDATION.md`, full gate, mutant summary | full gate EXIT 0 DONE 2026-11-02 (on the USER S9 commit ebbc4be; Q98 (a) to Q106 (a), Q-S10-s2-1 (a)): the final gate `make -B check` EXIT 0 with the 27 count lines equal to S9 (`cmp` rc 0), and N 1692 (Q102 (a)). No code change, so no mutants. `docs/VALIDATION.md` is written in the evolve-lang S10 form (Q100 (a)). `docs/STATUS.md` has `## Mutant summary` (16 rows; the totals are 108 mutants, 105 KILLED, 3 SURVIVED; Q99 (a)) and `## Remaining work` (Q105 (a)). O11 and O14 DONE (Q103 (a), Q-S10-s2-1 (a)); O2, O3, O5 to O10 carried. The plan is CLOSED (Q105 (a)). |
 
 ## 10. Open items
 
@@ -621,7 +623,8 @@ on the new checks, docs, close (stage, commit message, next prompt).
 - O10 the bounded search is a refuter, not a decision procedure. A pair
   row with no counterexample in the bounds has the mark bounded. A
   complete I-confluence test (Whittaker and Hellerstein) is out of v1.
-- O11 TRIGGERED 2026-10-27 (S2 unit 3). The slot form
+- O11 TRIGGERED 2026-10-27 (S2 unit 3). DONE 2026-10-27 (S2, the
+  fallback). The slot form
   `Fin r → Option (Fin n × ℕ)` has no commutative merge at a tie: two
   entries with the same counter and different values. Single writer
   does not reach that state, but L1 is stated for all states. A pick by
@@ -642,9 +645,10 @@ on the new checks, docs, close (stage, commit message, next prompt).
   a closed multiset never meets `trunc`. DONE 2026-10-28 (S2c): the port
   is in, and the `sqFc` eval of `test/eval/hit.lang` prints the stuck
   fold at a 2-cell. `mergeAll` moves to S2d (Q29 (a)).
-- O14 the S0 rights formula of `Escrow` counted `R i i` in both sums.
-  With `restock` as `R i i` (Q12 (b)), the diagonal counts once (4.2).
-  The L7 proof (S4) must cover it.
+- O14 DONE 2026-11-02 (S10, Q-S10-s2-1 (a): the PLAN 6.1 L7 row and
+  `escrowL7`, proved in S4). The S0 rights formula of `Escrow` counted
+  `R i i` in both sums. With `restock` as `R i i` (Q12 (b)), the
+  diagonal counts once (4.2). The L7 proof (S4) must cover it.
 
 - O15 DONE 2026-10-27 (S1b). The S1 kernel had only eliminators with a
   fixed result type (`fold`, `flagIf`, `option`), and the builtins were
@@ -1187,3 +1191,52 @@ RULED (letter) is a USER ruling.
   in U5, add `∣` and `ℤ` to the SPEC 2.2 list and `ℤ` to the LEX_CHAR
   row (after an `rg -n` check of `src/front/lexer.c`). (b) leave them;
   record in STATUS.
+- Q98 the full gate (S10 Unit 0, 2026-11-02). RULED (a). (a) one
+  serial `make -B check` (it has `check-clang`, `test/gate.sh` and
+  `test/review.sh` inside), the counts `cmp` with the S9 count lines,
+  the seconds by `date +%s` in a side file; a doc-only edit after it
+  (the seconds) does not run it again. (b) also separate
+  `sh test/gate.sh` and `make check-clang` runs, and a second full gate
+  after the seconds edit.
+- Q99 the mutant summary (S10 Unit 0, 2026-11-02). RULED (a). (a) one
+  row a slice (16 rows, 108 mutants, 105 KILLED, 3 SURVIVED) in
+  `## Mutant summary` of docs/STATUS.md, with a Kill tests cell that
+  names the test of each mutant (from the section 9 DONE text); no
+  mutant runs again. (b) one row a mutant (108 rows) in
+  docs/VALIDATION.md.
+- Q100 docs/VALIDATION.md (S10 Unit 0, 2026-11-02). RULED (a). (a) the
+  evolve-lang S10 form (head, gate and N, differential and engine
+  checks, token baseline, slices, what the gate does not check, law
+  map). (b) the kit template only (head, gate, one paragraph a slice).
+- Q101 a law-id check (S10 Unit 0, 2026-11-02). RULED (a). (a) no new
+  tool: the law map is doc text, its paths checked by hand in U1; S10
+  adds no gate leg, so the counts stay 27 lines. (b) port evolve-lang
+  dd98209 `test/validation.c` and `test/validation-io.c`
+  (`build/validation-test`, 4 bad fixtures, 2 new count lines, a PLAN
+  sec 8 row, 6 mutants).
+- Q102 the rule for N (S10 Unit 0, 2026-11-02). RULED (a). (a) the
+  evolve-lang rule (Q-S10-5 there): the sum of the first number of each
+  count line whose next word is `checked`, `checks` or `cases`; the
+  other lines listed with the reason. (b) no N; the count lines only.
+- Q103 the O items (S10 Unit 0, 2026-11-02). RULED (a). (a) mark O11
+  and O14 DONE (after `rg` checks of the PLAN and STATUS text), carry
+  O2, O3, O5 to O10 in VALIDATION "What the gate does not check" and
+  STATUS; O8 carried with the note that no S1 list was found. (b) mark
+  nothing; carry all.
+- Q104 D-s5-1 (S10 Unit 0, 2026-11-02). RULED (a). (a) record it as
+  accepted by the USER S9 commit ebbc4be (the commit has the Q88 (a)
+  change of `src/codes.c` and `src/codes.h`), and close it. (b) keep it
+  open until a USER statement.
+- Q105 the plan state (S10 Unit 0, 2026-11-02). RULED (a). (a) S10 is
+  the last row of section 9: the plan is CLOSED in the PLAN head, the
+  STATUS head and README; `## Remaining M0 work` becomes
+  `## Remaining work` (none in section 9, the carried O items). (b) the
+  plan stays open for a later slice row that the USER names.
+- Q106 README status (S10 Unit 0, 2026-11-02). RULED (a). (a)
+  `## Status (S8)` to `## Status (S10)` with S9 and S10 added. (b)
+  README unchanged.
+- Q-S10-s2-1 O14, doc only (S10 s2, 2026-11-02). RULED (a) (USER,
+  2026-11-02, S10 s2). (a) mark O14 DONE on the evidence of the PLAN 6.1
+  L7 row, the domain lemmas `escrowRestockL4` and `escrowL7`, and STATUS
+  S2b; the STATUS S10 text says that the S4 text does not name `R i i`.
+  (b) carry O14.

@@ -1,7 +1,8 @@
 # merge-lang status
 
 The build implements slices S1, S1b, S2, S2b, S2c, S2d, S3a, S3e, S3x,
-S3b, S4, S5, S6, S7, S8 and S9 of `docs/PLAN.md` section 9: the port of the evolve-lang 1f87a5a
+S3b, S4, S5, S6, S7, S8 and S9 and the close S10 of `docs/PLAN.md`
+section 9. The plan is CLOSED (Q105 (a)). The slices: the port of the evolve-lang 1f87a5a
 surface and cubical kernel (S1), induction in the kernel (S1b), the
 merge-lang domain with the laws L1 to L4 as guest terms (S2), ℤ with the
 `stock` read (S2b), path constructors of dimension 2 with the `fold` over
@@ -17,8 +18,78 @@ gate (S5), the JSON coordination report of `check --json` and `build`
 gate against the guest on each simulator schedule (S7), and the agent
 kit: `SKILL.md` with 5 graded examples, `langc explain-code` and the
 stdio MCP server `langc mcp` (S8), and the token baseline
-`docs/TOKEN-BASELINE.md` with its gate leg (S9). It does not complete
-M0.
+`docs/TOKEN-BASELINE.md` with its gate leg (S9). The close (S10) writes
+`docs/VALIDATION.md` and the mutant summary.
+
+## S10 (2026-11-02)
+
+- Scope (`docs/PLAN.md` section 9, the S10 row; Q98 (a) to Q106 (a),
+  Q-S10-s2-1 (a)): the close of the plan. No `langc` code changes and no
+  gate leg is added. The base is the USER S9 commit ebbc4be.
+- Units: U0 the extracts and the rulings; U1 `docs/VALIDATION.md` (the
+  versions, the gate counts, N, the differential and engine checks, the
+  laws and judgements map, the slices); U2 this file (the head, this
+  section, `## Mutant summary`, `## Remaining work`, two Known limits
+  lines); U3 `docs/PLAN.md` (the S10 row, sections 10 and 11, the head)
+  and the README status; U4 the final gate and the stage.
+- The gate counts are the same as the S9 counts: the 27 count lines of
+  the final gate are equal to the S9 count file (`cmp` rc 0). N = 1692
+  (`docs/VALIDATION.md` gives the sum and its lines; Q102 (a)).
+- No mutant runs in S10. `## Mutant summary` gives the mutants of S1 to
+  S9 from the PLAN section 9 DONE text (Q99 (a)).
+- O item checks (PLAN section 10, Q103 (a)): O11 DONE (S2 took the
+  fallback, the dotted `MVReg`). O14 DONE (Q-S10-s2-1 (a)): the PLAN 6.1
+  L7 row gives `restock` as `R i i` and the mark proved (library), with
+  the domain lemmas `escrowRestockL4` and `escrowL7` and the S2b text of
+  `escrowStock`. The S4 text in this file does not name `R i i`. O8
+  stays open: no S1 list of the evolve-lang O10 to O18 was found.
+- D-s5-1 is closed (Q104 (a)): the USER S9 commit ebbc4be accepts it.
+- The final gate: `make -B check` EXIT 0 with no FAIL line, no
+  `build/merge-tokens-*` file left. `docs/VALIDATION.md` gives the
+  seconds and the date.
+
+## Mutant summary
+
+The counted mutation runs of S1 to S9, from the PLAN section 9 DONE
+text, and for S1 to S2d from the slice sections of this file. These are
+historical results at each slice, not reruns against S10. No mutant
+runs in S10.
+
+| Slice | Files | Mutants | Killed | Survivors | Kill tests |
+|---|---|---|---|---|---|
+| S1 | not given | 3 | 3 | 0 | the gate (test not named) |
+| S1b | not given | 3 | 3 | 0 | M1, M3 the gate (test not named); M2 `nat-motive-sort.lang` (`test/check/expect.txt`) |
+| S2 | not given (`domain/domain.lang` terms) | 7 | 7 | 0 | the gate (test not named): 3 at load, 2 evals, 2 at load with `TYPE_MISMATCH` |
+| S2b | `domain/domain.lang`, `src/front/eval.c` | 3 | 3 | 0 | the gate (test not named): 14, 2 and 4 eval failures |
+| S2c | not given | 4 | 3 | 1 (M3a) | M1, M2, M3b the gate (test not named): 13, 1 and 6 failures |
+| S2d | not given | 4 | 4 | 0 | M1 `TYPE_MISMATCH` at `mergeAll`; M2a `TYPE_ENDPOINT` at `fN`; M2b `TYPE_REFL` at `predTwoLaw`; M2c `TYPE_MISMATCH` at `absurdZS` |
+| S3a | not given | 11 | 11 | 0 | `atoms-mix-nat`; `atoms-mix-name`; `replicated-column`; `state-init-name`; `share-no-mapsto`; the form pairs; `form-replicated`, `inventory-escrow.merge`; `form-atoms-*`; `form.lang` (3) |
+| S3e | not given | 14 | 14 | 0 | `REFUSE_NO_MERGE.lang`; json, `form-replicated`; `op-fin-open`; eval `escrow`; json column; `alloc-sum`; `alloc-under`; `alloc-missing`; `raw-write`, eval `shop`; `op-arity`; eval `replicas`; eval `shop` |
+| S3x | `examples/tags.merge`, `owner.merge`, `inventory.merge`, `inventory-escrow.merge` | 4 | 4 | 0 | the `.merge` loop (`REFUSE_RAW_WRITE` 2, `REFUSE_NO_MERGE`, `REFUSE_ALLOC_SUM`) |
+| S3b | not given | 10 | 10 | 0 | M1 `cell-field`; M2 `cell-arrow-two`; M3b eval `ops`; M4, M5 the gate (test not named); M6 eval `script`; M7 `stock-mvreg`, eval `shop`; M8b `raw-write`; M9a eval `script`; M9b eval `script-dec` |
+| S4 | not given | 12 | 12 | 0 | C1, C2 `pair-law.lang`; C3 `inventory-escrow.merge` (`W_BOUNDED`); C4 `REFUSE_NEEDS_COORDINATION.lang`; N1 row `natLeTrans`; L1 the gate (test not named); L2 `ShopStockL7`; R1 `REFUSE_RULE_MISMATCH.lang`; F1 `allocate-for.canon`; O1 `REFUSE_READ_WINNER.lang`; V1 the merge loop, json; U1 the json progress line |
+| S5 | not given | 6 | 4 | 2 (O2, N3) | O1, O3, N1, N2 `test/sim/inventory.out` |
+| S6 | not given | 8 | 8 | 0 | K1 to K8 the golden reports (`classes`, `owner`, `tags`, `inventory`, `inventory-escrow`) |
+| S7 | not given | 5 | 5 | 0 | the engine leg: E1 tags, classes; E2 inventory; E3 inventory-escrow; E4 owner, classes; E5 inventory |
+| S8 | not given | 8 | 8 | 0 | M1 to M3, M8 mcp; M4 verbs; M5, M6 skill; M7 readme |
+| S9 | `test/tokcount.c` (M1, M3 to M6), `docs/TOKEN-BASELINE.md` (M2) | 6 | 6 | 0 | M1 to M5 tokens; M6 tokens IO |
+| total | | 108 | 105 | 3 | |
+
+The 3 survivors in the counted runs:
+
+- S2c M3a (the wrong end in the `fold` at a 1-cell): an end at an
+  interval variable does not show in a printed value.
+- S5 O2 (`next_args`): no golden file has a 2-argument op (Q58 (b)).
+- S5 N3 (the class row pair): no golden file has 3 replicas.
+
+The S3x DONE text also names two killed code mutants and a swap of `n`
+and `r` in `mvregWrite` that survived at S3x (its MVReg tests had 2 atoms
+and 2 replicas). Those three runs are outside the four counted S3x
+example mutants, so the table excludes those two kills and one historical
+survivor.
+S3b later added `test/eval/owner3.lang`, with 3 atoms and 2 replicas,
+to catch the `n`/`r` swap. The historical totals do not measure the
+current tree's mutation coverage.
 
 ## S9 (2026-11-02)
 
@@ -1118,14 +1189,21 @@ checks and 38 round trips; the other S2d counts above are unchanged.
   `test/sim/inventory-escrow.out` (Q58 (b)); the determinism gate in
   `test/gate.sh`.
 
-## Remaining M0 work
+## Remaining work
 
-1. S6: the JSON report: a port of `json.c`, `NAME.report.json`, the 5.3
-   schema shared with `check --json`; golden reports; mutants on the
-   class map (`docs/PLAN.md` section 9, the S6 row). `owner.merge` and
-   `tags.merge` come in with S6 (Q58 (b)). It needs the USER S5 commit.
-2. The later slices of `docs/PLAN.md` section 9. Each needs the slice
-   before it.
+No slice of `docs/PLAN.md` section 9 is left; the plan is CLOSED (Q105
+(a)). The open items that S10 carries (PLAN section 10):
+
+- O2: the 2024 HN thread is not found; the docs cite "an HN discussion
+  (2024)".
+- O3: no wasmtime leg in the differential gate (not in v1).
+- O5: `Glue` and `ua` are not ported; no merge-lang law needs them.
+- O6: a user merge function with proof terms (on a USER ask only).
+- O7: counter growth in ℕ; the engine traps at `i64` overflow.
+- O8: no S1 list of the evolve-lang O10 to O18 was found.
+- O9: the Automerge facts are from 2026-10-27; check them before a public
+  README.
+- O10: the bounded search is a refuter, not a prover.
 
 ## Known limits
 
@@ -1169,6 +1247,10 @@ checks and 38 round trips; the other S2d counts above are unchanged.
 - The sim transcript renders Counter and Escrow parts. A GSet or MVReg
   part prints its `value_display` text.
 - A kept invariant in `langc sim` is bounded, not proved.
+- Counters and version counters grow without bound in ℕ. The engine
+  traps at `i64` overflow (PLAN O7).
+- The bounded search is a refuter, not a prover: it can find a
+  counterexample, but it cannot prove a law for all states (PLAN O10).
 
 ## Internal boundaries
 

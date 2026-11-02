@@ -10,7 +10,7 @@ resource allocation rule. The host is TinyCC. The deterministic replica simulato
 the JSON coordination report (`langc check --json`, `langc build`) and
 the Wasm merge engine that `langc build` writes are built.
 
-## Status (S8)
+## Status (S10)
 
 This repository is the tcc-wasm kit seed of lang-template, the design, the
 plan, slice S1 (the port of the evolve-lang 1f87a5a surface and cubical
@@ -47,6 +47,10 @@ kit: `langc explain-code CODE`, the MCP server `langc mcp` with the
 tools `check`, `fmt`, `sim` and `explain-code` (protocol revision
 2025-11-25), `skills/merge-lang/SKILL.md` and its 5 graded examples;
 `docs/STATUS.md`).
+Slice S9 adds the token baseline `docs/TOKEN-BASELINE.md` and its gate
+leg (`build/tokcount --check`). Slice S10 is the close:
+`docs/VALIDATION.md` and the mutant summary in `docs/STATUS.md`. The
+plan is CLOSED.
 `make check` passes. `docs/PLAN.md` section 9 gives the slices.
 
 The compiler `langc` is a native program that tcc builds. It is not a Wasm
