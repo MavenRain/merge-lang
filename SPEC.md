@@ -115,8 +115,8 @@ letters, digits, `_` or `'`. The symbol `ℕ` is the name of the natural
 numbers. A NAT is a decimal numeral from 0 to 2^64-1 (`LEX_NAT_RANGE` if
 it is larger). The keywords are `rec`, `postulate`, `data`, `codata`,
 `where`, `Type`, `fun` and `Sigma`. The non-ASCII symbols are `→`, `λ`,
-`×`, `ℕ`, `∧`, `∨` and `↦`; any other non-ASCII character outside a
-comment gives `LEX_CHAR`.
+`×`, `ℕ`, `ℤ`, `∧`, `∨`, `↦` and `∣`; any other non-ASCII character
+outside a comment gives `LEX_CHAR`.
 
 ### 2.3 Spellings and ASCII aliases
 

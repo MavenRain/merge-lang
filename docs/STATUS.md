@@ -1,7 +1,7 @@
 # merge-lang status
 
 The build implements slices S1, S1b, S2, S2b, S2c, S2d, S3a, S3e, S3x,
-S3b, S4, S5, S6, S7 and S8 of `docs/PLAN.md` section 9: the port of the evolve-lang 1f87a5a
+S3b, S4, S5, S6, S7, S8 and S9 of `docs/PLAN.md` section 9: the port of the evolve-lang 1f87a5a
 surface and cubical kernel (S1), induction in the kernel (S1b), the
 merge-lang domain with the laws L1 to L4 as guest terms (S2), ℤ with the
 `stock` read (S2b), path constructors of dimension 2 with the `fold` over
@@ -16,7 +16,82 @@ gate (S5), the JSON coordination report of `check --json` and `build`
 (S6), the Wasm merge engine that `build` writes, with a differential
 gate against the guest on each simulator schedule (S7), and the agent
 kit: `SKILL.md` with 5 graded examples, `langc explain-code` and the
-stdio MCP server `langc mcp` (S8). It does not complete M0.
+stdio MCP server `langc mcp` (S8), and the token baseline
+`docs/TOKEN-BASELINE.md` with its gate leg (S9). It does not complete
+M0.
+
+## S9 (2026-11-02)
+
+- Scope (`docs/PLAN.md` section 9, the S9 row; Q88 (a), Q90 (a) to Q97
+  (a)): the token baseline `docs/TOKEN-BASELINE.md` and its script. The
+  base is the USER S8 commit 7bbcd58. The port source is evolve-lang
+  dd98209 (PLAN section 8, Q96 (a)).
+- New files: `test/tokcount.c` (the token count tool, Q90 (a)),
+  `test/tokcount-io.c` (its C CLI regressions) and
+  `docs/TOKEN-BASELINE.md`. The two samples `test/baseline/inventory.py`
+  and `test/baseline/inventory.rs` (Q94 (a)) hold the full model of the
+  demo task `examples/inventory-escrow.merge` (Q91 (a)) and its tests:
+  the merge laws and the invariant over the bounded domain of the file
+  (Q92 (a)).
+- The table of `docs/TOKEN-BASELINE.md` (rules A and B, Q90 (a); the
+  `non-ASCII tokens` column and two share lines, Q93 (a), so no lexer
+  change). The ratios over the merge file: Python 10.20 (A) and 9.71
+  (B), Rust 18.90 (A) and 16.87 (B). The non-ASCII share of the merge
+  file: 0.11 (A) and 0.08 (B).
+
+| file | bytes | code points | tokens A | tokens B | non-ASCII tokens |
+|---|---:|---:|---:|---:|---:|
+| examples/inventory-escrow.merge | 312 | 306 | 83 | 110 | 9 |
+| test/baseline/inventory.py | 3071 | 3071 | 847 | 1068 | 0 |
+| test/baseline/inventory.rs | 5345 | 5345 | 1569 | 1856 | 0 |
+
+- Gate leg (Q95 (a)): the Makefile `check` recipe runs `build/tokcount
+  --check docs/TOKEN-BASELINE.md` on the 3 files and
+  `build/tokcount-io`; `check-clang` compiles both C files. Count lines:
+  `tokens: 3 files, 2 rules, 4 ratios, 0 mismatches` and `tokens IO
+  regressions: 5 cases, 0 failures`.
+- U4 mutants: 6/6 KILLED, `make -B` for each build. After each mutant,
+  the tree is restored and `cmp` gives rc 0. Each `check` leg mutant (M1
+  to M5) also makes `build/tokcount-io` fail (`check exits 1, expected
+  0`).
+
+| # | Mutant | Kill |
+|---|---|---|
+| M1 | `end_run` with `(run + 2) / 4` | tokens: doc line 90 (tokens B 87, not 110) |
+| M2 | the merge row of the doc with 84 tokens A, not 83 | tokens: doc line 90 |
+| M3 | the ratio with no half-up term | tokens: `201 over 200 gives 1.00, not 1.01` and doc line 95 (9.70) |
+| M4 | `build/langc chek` for `build/langc check` | tokens: the check of `examples/inventory-escrow.merge` exits 2, not 0 |
+| M5 | no non-ASCII count | tokens: doc line 90 (the last column 0, not 9) |
+| M6 | `output_status` gives `status` only | tokens IO: `table` and `check` with an unwritable stdout exit 0, not 2 |
+
+- Q88 (a): the CHECK_DEPTH row (error, check, `The term nests deeper
+  than the checker limit of 2000 levels.`) is after TYPE_LINE in
+  `docs/DIAGNOSTICS.md`, with a `no fixture:` reason (the parser refuses
+  a term deeper than 1000 levels, `PARSE_DEPTH`). `test/gate.sh` adds
+  CHECK to its prefix list. `src/codes.c` holds the rows of
+  `docs/DIAGNOSTICS.md` in the same order, and `test/verbs.c` compares
+  the two tables cell for cell. Thus the row is also in `src/codes.c`,
+  and the `src/codes.h` comment gives 47 codes. These are the only agent
+  kit changes. `src/front/check.c` already emits CHECK_DEPTH; S9 adds
+  only its row.
+- Q97 (a): SPEC.md 2.2 lists `→`, `λ`, `×`, `ℕ`, `ℤ`, `∧`, `∨`, `↦` and
+  `∣` (`src/front/lexer.c`: `∣` is TOK_BAR, `ℤ` is TOK_IDENT). The
+  LEX_CHAR row of `docs/DIAGNOSTICS.md` and of `src/codes.c` adds `ℤ`.
+- Port notes:
+  - The evolve `test/tokcount-io.c` writes its NUL document to
+    `/tmp/evolve-tokens-XXXXXX`. The sandbox refuses writes to `/tmp`,
+    so the port uses `build/merge-tokens-XXXXXX` (`build/` is in
+    `.gitignore`).
+  - The count filter `^[a-z][a-z -]*: ` does not match `tokens IO
+    regressions: ...`. The count filter of the gate runs is
+    `^[a-zA-Z][a-zA-Z -]*: `.
+- No change to the checker, the simulator, the report or the engine.
+- `make check` EXIT 0 (final gate): the S8 counts are the same (25
+  lines), but `json: 35 fixtures; diagnostics: 47 codes, 32 with a
+  fixture, 15 with no fixture` and `explain-code: 47 codes, 0
+  mismatches`. There are two new lines: `tokens: 3 files, 2 rules, 4
+  ratios, 0 mismatches` and `tokens IO regressions: 5 cases, 0
+  failures`.
 
 ## S8 (2026-11-01)
 

@@ -56,6 +56,14 @@ build/readme-test: test/readme.c
 	mkdir -p build
 	$(TCC) $(CFLAGS) -o build/readme-test test/readme.c
 
+build/tokcount: test/tokcount.c
+	mkdir -p build
+	$(TCC) $(CFLAGS) -o build/tokcount test/tokcount.c
+
+build/tokcount-io: test/tokcount-io.c
+	mkdir -p build
+	$(TCC) $(CFLAGS) -o build/tokcount-io test/tokcount-io.c
+
 check-clang: build/domain.c
 	$(CC) $(CLANG_FLAGS) $(SRC) build/domain.c
 	$(CC) $(CLANG_FLAGS) $(FRONT_TOOL)
@@ -68,8 +76,10 @@ check-clang: build/domain.c
 	$(CC) $(CLANG_FLAGS) test/verbs.c $(filter-out src/main.c,$(SRC)) build/domain.c
 	$(CC) $(CLANG_FLAGS) $(MCP_TEST)
 	$(CC) $(CLANG_FLAGS) test/readme.c
+	$(CC) $(CLANG_FLAGS) test/tokcount.c
+	$(CC) $(CLANG_FLAGS) test/tokcount-io.c
 
-check: build/langc build/fronttool build/diagnostics build/cubical build/sim build/report build/engine build/skill-test build/verbs-test build/mcp-test build/readme-test check-clang
+check: build/langc build/fronttool build/diagnostics build/cubical build/sim build/report build/engine build/skill-test build/verbs-test build/mcp-test build/readme-test build/tokcount build/tokcount-io check-clang
 	sh test/gate.sh
 	sh test/review.sh
 	build/fronttool
@@ -81,6 +91,8 @@ check: build/langc build/fronttool build/diagnostics build/cubical build/sim bui
 	build/verbs-test
 	build/mcp-test
 	build/readme-test
+	build/tokcount --check docs/TOKEN-BASELINE.md examples/inventory-escrow.merge test/baseline/inventory.py test/baseline/inventory.rs
+	build/tokcount-io
 
 clean:
 	rm -rf build

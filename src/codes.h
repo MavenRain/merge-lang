@@ -15,7 +15,7 @@ typedef struct {
   const char *fixture;
 } CodeRow;
 
-/* The number of rows: the 46 codes of docs/DIAGNOSTICS.md. */
+/* The number of rows: the 47 codes of docs/DIAGNOSTICS.md. */
 size_t code_count(void);
 
 /* Row INDEX in the order of docs/DIAGNOSTICS.md, or NULL when INDEX is not

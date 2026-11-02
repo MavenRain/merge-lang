@@ -559,6 +559,7 @@ EXTRA.
 | tether | 1f84803 | README head (distinct space) |
 | automerge-cat | 61aa688 | README head: merge as the colimit in the posetal category of states |
 | evolve-lang | 8c5d8e1 | S8 (pinned 2026-11-01, Q87 (a)): the stdio MCP server in C `src/mcp.{c,h}`, the JSON reader `src/front/jsonin.{c,h}`, the `explain-code` table `src/codes.{c,h}`, and the 4 tests `test/skill.c`, `test/verbs.c`, `test/mcp.c` and `test/readme.c` |
+| evolve-lang | dd98209 | S9 (pinned 2026-11-02, Q96 (a)): the token count tool `test/tokcount.c` and its C CLI regressions `test/tokcount-io.c` |
 
 The S8 MCP server is the port of the evolve-lang 8c5d8e1 server in C, so
 O1 is false (Q87 (a)).
@@ -586,7 +587,7 @@ on the new checks, docs, close (stage, commit message, next prompt).
 | S6 | JSON report: port of `json.c`, `NAME.report.json`, the 5.3 schema shared with `check --json` | golden reports; mutants on the class map DONE 2026-11-01 (on the USER S5 commit 290f396; Q60 (a) to Q69 (a)): `make check` EXIT 0: examples 13 checked, 0 failed; parse refusals 23; check refusals 76; evals 206; ir 13 lowered; wasm 16 modules valid; differential 1230 cases, 0 mismatches; fmt 163 canonical, 14 non-canonical pairs; merge examples 4 canonical, 3 checked, 1 refused; sim 4 golden, 0 mismatches (new: `test/sim/owner.out`, schedules 147, and `test/sim/tags.out`, schedules 676; no invariant, no verdict line, rc 0, Q67 (a)); report 5 golden, 0 mismatches, 4 same as `check --json` (`test/report/{owner,tags,inventory,inventory-escrow,classes}.report.json`; the class fixture `test/report/classes.merge`, Q69 (a)); json 35 fixtures, diagnostics 46 codes (32 with a fixture, 14 with no fixture); gate 0 failures; review, domain and diagnostic edit regressions passed; cubical 124 checks, 41 round trips; sim regressions 7 checks; report rows 7 checks. `langc check --json` prints one JSON document: the progress counts, the diagnostics and one row for each op pair O1 <= O2 of each replicated form (Q60 (a), Q62 (a), Q64 (a)). `langc build SRC -o OUT` writes the same document to the report file next to OUT, also on a refusal (Q61 (a), Q63 (a)). The writer `src/front/json.{c,h}` is the port of `hosts/tcc-json`. Fix: with no invariant, a pair that no law covers is independent and proved (L6a), not bounded. No diagnostic code changed. Mutants: 8/8 KILLED by a golden report, `check-clang` rc 0 on each, `make -B` for each build: K1 the L6b MVReg test (classes); K2 two class names swapped (owner, tags, inventory-escrow, classes); K3 an L6a row marked bounded (tags, classes); K4 the pair loops from O1 + 1 (all five); K5 `part` from the first MVReg part (classes); K6 `rule` for L6b rows only (inventory-escrow); K7 the rows in reverse order (inventory-escrow, classes); K8 the no-invariant path keeps the cover (classes). O2 (the S5 survivor) does not apply: no golden report has a refuted row with a 2-argument op |
 | S7 | Wasm engine: the writer changes of 5.1, part templates, lowered invariants, the engine ABI | `wasm-validate`; differential gate on every simulator schedule; mutants on one template per part DONE 2026-11-01 (on the USER S6 commit 1f94f15; Q70 (a) to Q76 (a)): `make check` EXIT 0: the S6 counts are the same, plus `engine: 4 modules, 0 mismatches` (`langc build`, `wasm-validate`, `wasm-objdump -x` and `langc abi` against `test/engine/{tags,owner,inventory-escrow,classes}.abi`) and `engine: 5 forms, 14419 schedules, 206 refusals, 279146 calls, 0 mismatches` (`test/engine.c`: for each schedule of each form of the examples and `test/report/classes.merge`, also the refused `inventory.merge` (Q74 (a)), a call script for `test/run-wasm.mjs` and the expected output from the guest values; schedules tags 676, owner 147, inventory 33, Shop 620, Card 12943). The six entries of each form NAME are `NAME.apply`, `NAME.merge`, `NAME.check`, `NAME.encode`, `NAME.decode` and `NAME.bot`; `memory`, `alloc` and `reset` are shared (Q70 (a), 5.1). `src/engine.{c,h}` has one template for each part (GSet, Counter, Escrow, MVReg) and the lowered invariants. `decode` refuses a layout that is not canonical (Q75 (a)). `test/run-wasm.mjs` has `@k`, `words P L` (Q73 (a)) and `store P W...` (Q76 (a)). No diagnostic code changed. Mutants: 5/5 KILLED by the engine leg only, `check-clang` rc 0 on each, `make -B` for each build: E1 the GSet add stores the old word (tags, classes); E2 no precondition on the Counter `dec` (inventory); E3 no `U i` loop in the Escrow `can` (inventory-escrow); E4 the MVReg merge keeps a dead value (owner, classes); E5 the `nonneg` check with the sums in the wrong sides (inventory). |
 | S8 | agent kit: `SKILL.md` with 5 graded examples, `langc mcp`, `explain-code`, final `AGENTS.md` and README table | MCP stdio test; each example passes `check` with the output in the file DONE 2026-11-01 (on the USER S7 commit ff5720b; Q77 (a) to Q87 (a), Q89 (a)): `make check` EXIT 0: the S7 counts are the same, plus `skill: 5 examples, 5 outputs match` (`test/skill.c`: `check --json` of each example of `skills/merge-lang/SKILL.md`, the stdout byte for byte and the exit code, Q82 (a)), `explain-code: 46 codes, 0 mismatches` (`test/verbs.c`: the table of `src/codes.c` and `docs/DIAGNOSTICS.md` in both directions, Q80 (a)), `mcp: 33 requests, 0 mismatches; 5 examples` (`test/mcp.c`: the golden lines of `test/mcp/{requests,responses}.jsonl`, then `check` and `sim` on each graded example against the CLI, and the write error exit 2, Q84 (a)) and `readme: 7 rows, 9 verbs` (`test/readme.c`, Q86 (a)). Examples 1 to 4 cite `examples/{tags,owner,inventory,inventory-escrow}.merge`; example 5 is `examples/agent/seats.merge`, outside the gate globs (Q81 (a)). The MCP tools are `check`, `fmt`, `sim` and `explain-code` (Q77 (a), Q78 (a)); `initialize` gives the protocol revision 2025-11-25 (Q85 (a)). `sim_print` and its 2 helpers write to a `FILE *dst` (Q89 (a)). No diagnostic code changed. Mutants: 8/8 KILLED, `make -B` for each build: M1 no `sim` tool (mcp); M2 `isError` on `status == 0` (mcp); M3 jsonin takes "1.0" (mcp); M4 a word of an `explain-code` row (verbs); M5 a SKILL.md json block (skill); M6 a SKILL.md exit code (skill); M7 a `no` README row changed to `yes:` (readme); M8 `sim_step` to `stdout` (mcp). Q88 (CHECK_DEPTH) is OPEN for the USER. |
-| S9 | `docs/TOKEN-BASELINE.md` and its script | the script output equals the file |
+| S9 | `docs/TOKEN-BASELINE.md` and its script | the script output equals the file DONE 2026-11-02 (on the USER S8 commit 7bbcd58; Q88 (a), Q90 (a) to Q97 (a)): `make check` EXIT 0 with 27 count lines: the S8 counts are the same, but json 35 fixtures, diagnostics 47 codes (32 with a fixture, 15 with no fixture) and `explain-code: 47 codes, 0 mismatches` (the CHECK_DEPTH row with a "no fixture:" reason in `docs/DIAGNOSTICS.md` and `src/codes.c`, and CHECK in the `test/gate.sh` prefix list, Q88 (a)), plus `tokens: 3 files, 2 rules, 4 ratios, 0 mismatches` and `tokens IO regressions: 5 cases, 0 failures`. The token count tool `test/tokcount.c` is the port of evolve-lang dd98209 (Q90 (a), Q96 (a)): `build/tokcount --check docs/TOKEN-BASELINE.md` counts the rules A and B and the non-ASCII tokens of `examples/inventory-escrow.merge` (the demo task, Q91 (a)) and of the two samples `test/baseline/inventory.py` and `test/baseline/inventory.rs` (the full model and its tests, Q92 (a), Q94 (a)), and compares the table and the ratio lines with the file. `test/tokcount-io.c` holds the C CLI regressions. The Makefile `check` recipe runs both, and `check-clang` compiles both (Q95 (a)). The measure of the Unicode surface is the `non-ASCII tokens` column and two share lines; no lexer change (Q93 (a)). SPEC 2.2 lists `∣` and `ℤ`, and the LEX_CHAR row adds `ℤ` (Q97 (a)). No change to the checker, the simulator, the report or the engine. Mutants: 6/6 KILLED, `make -B` for each build: M1 `end_run` with `(run + 2) / 4` (tokens); M2 the merge row of the doc with 84 tokens A (tokens); M3 the ratio with no half-up term (tokens); M4 `build/langc chek` (tokens); M5 no non-ASCII count (tokens); M6 `output_status` gives `status` only (tokens IO). |
 | S10 | close: `docs/STATUS.md`, `docs/VALIDATION.md`, full gate, mutant summary | full gate EXIT 0 |
 
 ## 10. Open items
@@ -1134,7 +1135,7 @@ RULED (letter) is a USER ruling.
   (a). (a) add the evolve-lang 8c5d8e1 row (mcp, jsonin, codes, the 4
   tests) and close O1 as false. (b) leave sec 8; note the port in
   STATUS only.
-- Q88 the CHECK_DEPTH row (S8 U2, 2026-11-01). OPEN.
+- Q88 the CHECK_DEPTH row (S8 U2, 2026-11-01). RULED (a) (S9 Unit 0, 2026-11-02).
   `src/front/check.c:2185` emits `CHECK_DEPTH`, but `docs/DIAGNOSTICS.md`
   has no row for it, so `langc explain-code CHECK_DEPTH` gives rc 1. The
   code-list check of `test/gate.sh` takes only the prefixes LEX, PARSE,
@@ -1150,3 +1151,39 @@ RULED (letter) is a USER ruling.
   (printf to fprintf, putchar to fputc, puts to fputs with a newline),
   and `run_sim` gives its OUT. (b) swap the stdout fd. (c) no `sim`
   tool.
+- Q90 the port source (S9 Unit 0, 2026-11-02). RULED (a). (a)
+  evolve-lang dd98209 `test/tokcount.c` and `test/tokcount-io.c` (C,
+  rules A and B, `--check DOC`). (b) quorum-lang 0c729b6
+  `test/tokproxy.c` (rule B only) and a shell table loop in
+  test/gate.sh. (c) cairn-lang a56e602 (API counts outside the gate;
+  contradicts Q19 (a)).
+- Q91 the demo task (S9 Unit 0, 2026-11-02). RULED (a). (a) one task:
+  `examples/inventory-escrow.merge` unchanged (the kept, proved form).
+  (b) two tasks: also `examples/inventory.merge` (the refused form). (c)
+  a new demo file.
+- Q92 the content of the Python and Rust samples (S9 Unit 0,
+  2026-11-02). RULED (a). (a) the full model (state with rights, `sell`,
+  `refill`, invariant, escrow allocation, merge) and its tests: the merge
+  laws and the invariant over the bounded domain of the file, so each
+  sample carries the guarantee that `langc check` gives. (b) the model
+  only, no tests.
+- Q93 the Unicode surface measure (S9 Unit 0, 2026-11-02). RULED (a).
+  (a) a `non-ASCII tokens` column and two share lines; no lexer change.
+  (b) add ASCII aliases `|->` for `↦` and `|` for `∣` (lexer, fmt, SPEC
+  2.3, W_NONCANON), then an ASCII twin with the evolve `langc fmt`
+  round-trip leg; a checker change. (c) an ASCII text twin that is
+  counted but not checked.
+- Q94 where the samples live (S9 Unit 0, 2026-11-02). RULED (a). (a)
+  `test/baseline/inventory.py` and `test/baseline/inventory.rs` (as
+  evolve, quorum and cairn). (b) `docs/token-baseline/` (as leaf-lang).
+- Q95 the gate leg (S9 Unit 0, 2026-11-02). RULED (a). (a) two lines in
+  the Makefile `check` recipe (`build/tokcount --check ...`,
+  `build/tokcount-io`) and both files in `check-clang`; the counts go to
+  27 lines. (b) a test/gate.sh leg.
+- Q96 the PLAN sec 8 port row (S9 Unit 0, 2026-11-02). RULED (a). (a)
+  add the evolve-lang dd98209 row (`test/tokcount.c`,
+  `test/tokcount-io.c`). (b) STATUS note only.
+- Q97 the glyph lists, doc only (S9 Unit 0, 2026-11-02). RULED (a). (a)
+  in U5, add `∣` and `ℤ` to the SPEC 2.2 list and `ℤ` to the LEX_CHAR
+  row (after an `rg -n` check of `src/front/lexer.c`). (b) leave them;
+  record in STATUS.

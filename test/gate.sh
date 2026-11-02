@@ -427,7 +427,7 @@ done
 # docs/DIAGNOSTICS.md has one row for each code in src/. Each code has
 # test/json/CODE.lang (its first JSON diagnostic has that code), or its row gives
 # "no fixture:" and a reason; not the two.
-rg -o -I -N -r '$1$2$3' '"((?:LEX|PARSE|REFUSE|TYPE|NAME|EVAL|DOMAIN|W)_[A-Z_]+)"|"(OOM|IO|IO_SIZE|USAGE|INTERNAL)"|langc: ((?:EVAL|REFUSE|TYPE)_[A-Z_]+):' src |
+rg -o -I -N -r '$1$2$3' '"((?:LEX|PARSE|REFUSE|TYPE|NAME|EVAL|DOMAIN|W|CHECK)_[A-Z_]+)"|"(OOM|IO|IO_SIZE|USAGE|INTERNAL)"|langc: ((?:EVAL|REFUSE|TYPE)_[A-Z_]+):' src |
   LC_ALL=C sort -u >"$tmp/src-codes.txt"
 rg -o -N -r '$1' '^\| `([A-Z_]+)` \|' docs/DIAGNOSTICS.md | LC_ALL=C sort -u >"$tmp/doc-codes.txt"
 if ! cmp -s "$tmp/src-codes.txt" "$tmp/doc-codes.txt"; then

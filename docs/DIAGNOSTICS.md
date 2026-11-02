@@ -63,7 +63,7 @@ reason. test/json/expect.txt holds the exact JSON lines of each fixture.
 
 | Code | Severity | Stage | Meaning | Fixture |
 |---|---|---|---|---|
-| `LEX_CHAR` | error | lex | A character outside a comment that starts no token: a non-ASCII character other than `→`, `λ`, `×`, `ℕ`, `∧`, `∨`, `↦` and `∣`, or an ASCII character that the lexer does not use. | test/json/LEX_CHAR.lang |
+| `LEX_CHAR` | error | lex | A character outside a comment that starts no token: a non-ASCII character other than `→`, `λ`, `×`, `ℕ`, `ℤ`, `∧`, `∨`, `↦` and `∣`, or an ASCII character that the lexer does not use. | test/json/LEX_CHAR.lang |
 | `LEX_NAT_RANGE` | error | lex | A numeral larger than 2^64-1. | test/json/LEX_NAT_RANGE.lang |
 | `PARSE_EXPECT` | error | parse | A token that the grammar does not permit at that position. | test/json/PARSE_EXPECT.lang |
 | `PARSE_DEPTH` | error | parse | The terms nest deeper than the parser limit. | test/json/PARSE_DEPTH.lang |
@@ -93,6 +93,7 @@ reason. test/json/expect.txt holds the exact JSON lines of each fixture.
 | `TYPE_ENDPOINT` | error | check | A path `λ i → t` where `t` at `i0` or at `i1` does not have the same normal form as the end that the `Path` or `PathP` type gives. The message gives the two normal forms. | test/json/TYPE_ENDPOINT.lang |
 | `TYPE_SYSTEM` | error | check | A system `[ φ ↦ u , ... ]` that does not agree with its `Partial ψ A` type: the join of the cell faces is not `ψ`, two branches do not have the same normal form where their faces meet, a face overlap is not in the face bounds (16 meets of 8 literals), or the system has more than 16 cells. An `hcomp` face that depends on its side binder is also refused. The message identifies the failing condition. | test/json/TYPE_SYSTEM.lang |
 | `TYPE_LINE` | error | check | A `transp A r u` where the line `A` is not constant where `r` holds. The checker compares `A i` with `A i0` on each meet of `r` and of the faces of the enclosing system cells. An atom in a meet stays free, so the test is conservative there. A face that is not in the face bounds needs a constant line. The message gives the line. | test/json/TYPE_LINE.lang |
+| `CHECK_DEPTH` | error | check | The term nests deeper than the checker limit of 2000 levels. | no fixture: S9 adds no input that reaches this limit; the parser refuses a term deeper than 1000 levels (`PARSE_DEPTH`) |
 | `W_BOUNDED` | warning | check | An op pair of a replicated form with an invariant that no library law covers (L6a, L6b, L7), and the bounded search finds no violation on its K schedules (prefix 1, 2 ops for each replica, the declared replicas). One record for each such pair, at the `op` word of the first op. The mark of the pair is bounded, not proved. | test/json/W_BOUNDED.lang |
 | `W_NONCANON` | warning | check | The first declaration (or the tail of the file) whose text is not the `langc fmt` text. `found` is the input text; `expected` and `fix` are the canonical text. | test/json/W_NONCANON.lang |
 | `REFUSE_RUNTIME_CLOSURE` | error | lowering | A function value must exist at run time. The Wasm target cannot hold one (HOST-LIMIT). | no fixture: `langc ir` and `langc build` have no JSON mode; test/gate.sh checks test/ir/closure.lang |

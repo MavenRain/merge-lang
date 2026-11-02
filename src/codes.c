@@ -9,7 +9,7 @@
 static const CodeRow CODE_ROWS[] = {
   {"LEX_CHAR", "error", "lex",
    "A character outside a comment that starts no token: a non-ASCII character other than `→`, "
-   "`λ`, `×`, `ℕ`, `∧`, `∨`, `↦` and `∣`, or an ASCII character that the lexer does "
+   "`λ`, `×`, `ℕ`, `ℤ`, `∧`, `∨`, `↦` and `∣`, or an ASCII character that the lexer does "
    "not use.",
    "test/json/LEX_CHAR.lang"},
   {"LEX_NAT_RANGE", "error", "lex",
@@ -153,6 +153,10 @@ static const CodeRow CODE_ROWS[] = {
    "a meet stays free, so the test is conservative there. A face that is not in the face bounds "
    "needs a constant line. The message gives the line.",
    "test/json/TYPE_LINE.lang"},
+  {"CHECK_DEPTH", "error", "check",
+   "The term nests deeper than the checker limit of 2000 levels.",
+   "no fixture: S9 adds no input that reaches this limit; the parser refuses a term deeper than "
+   "1000 levels (`PARSE_DEPTH`)"},
   {"W_BOUNDED", "warning", "check",
    "An op pair of a replicated form with an invariant that no library law covers (L6a, L6b, L7), "
    "and the bounded search finds no violation on its K schedules (prefix 1, 2 ops for each "
