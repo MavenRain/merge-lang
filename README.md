@@ -10,7 +10,7 @@ resource allocation rule. The host is TinyCC. The deterministic replica simulato
 the JSON coordination report (`langc check --json`, `langc build`) and
 the Wasm merge engine that `langc build` writes are built.
 
-## Status (S7)
+## Status (S8)
 
 This repository is the tcc-wasm kit seed of lang-template, the design, the
 plan, slice S1 (the port of the evolve-lang 1f87a5a surface and cubical
@@ -39,10 +39,14 @@ L5r, L6a, L6b, L7 and L8, the `Replica S` machine, and the `laws` and
 schedules in the 5.2 order, the transcript, the minimal counterexample,
 the golden files `test/sim/*.out` and the determinism gate), slice
 S6 (the JSON coordination report of `check --json` and `build`, and the
-golden reports `test/report/*.report.json`) and slice S7 (the Wasm merge
+golden reports `test/report/*.report.json`), slice S7 (the Wasm merge
 engine of `langc build`: six entries for each replicated form, one
 template for each part, the lowered invariants, and a differential gate
-against the guest on each simulator schedule; `docs/STATUS.md`).
+against the guest on each simulator schedule) and slice S8 (the agent
+kit: `langc explain-code CODE`, the MCP server `langc mcp` with the
+tools `check`, `fmt`, `sim` and `explain-code` (protocol revision
+2025-11-25), `skills/merge-lang/SKILL.md` and its 5 graded examples;
+`docs/STATUS.md`).
 `make check` passes. `docs/PLAN.md` section 9 gives the slices.
 
 The compiler `langc` is a native program that tcc builds. It is not a Wasm
@@ -76,15 +80,18 @@ verdict line.
 
 ## When to use merge-lang
 
-| Task | merge-lang? |
-|---|---|
-| offline-first replicated state with domain invariants | yes (S4) |
-| a tag set where concurrent additions must both stay | yes (S4) |
-| an owner field where concurrent writes must stay an explicit conflict | yes (S4) |
-| a stock that must never become negative after offline decrements | yes: refused with a counterexample, or kept with an escrow rule (S4, S5) |
-| text co-editing | no: merge-lang has no sequence or text type (`docs/PLAN.md` 3.3) |
-| a server-only database | no: one server applies its own constraints and needs no merge |
-| Redis scripts | no: use tether |
+| Task | merge-lang? | Parts |
+|---|---|---|
+| offline-first replicated state with domain invariants | yes | `GSet`, `MVReg`, `Counter`, `Escrow` |
+| a tag set where concurrent additions must both stay | yes | `GSet` |
+| an owner field where concurrent writes must stay an explicit conflict | yes | `MVReg` |
+| a stock that must never become negative after offline decrements | yes: refused with a counterexample, or kept with an escrow rule | `Counter`, `Escrow` |
+| text co-editing | no: merge-lang has no sequence or text type (`docs/PLAN.md` 3.3) | |
+| a server-only database | no: one server applies its own constraints and needs no merge | |
+| Redis scripts | no: use tether | |
+
+The Parts column names the admitted parts of `docs/PLAN.md` 3.2 that do
+the task. The gate (`build/readme-test`) checks the table.
 
 ## A distinct space
 
@@ -103,6 +110,8 @@ laws and puts each pair of concurrent operations in a coordination class.
 - `docs/COMPARISON.md`: the Automerge conflict semantics and the planned
   merge-lang semantics.
 - `AGENTS.md`: how an agent uses this repository.
+- `skills/merge-lang/SKILL.md` and `examples/agent/`: the agent skill and
+  its graded examples.
 - `SPEC.md`, `formers/`, `probe/`, `domain/`, `docs/STATUS.md`,
   `docs/VALIDATION.md`, `docs/host/README.md`: the kit files. The slices
   fill them.

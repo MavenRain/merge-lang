@@ -28,7 +28,7 @@ int check_program_sim(Arena *arena, const DeclList *decls, Machine *m, Diag *dia
 int sim_form(Machine *m, const DeclList *decls, size_t i, SearchBounds b, SearchOutcome *out);
 /* The sim transcript after the header (S5 design sec 4) of the violation
    OUT of the form at decl I, on stdout. Returns 0 after a diagnostic. */
-int sim_print(Machine *m, const DeclList *decls, size_t i, SearchBounds b, const SearchOutcome *out);
+int sim_print(Machine *m, const DeclList *decls, size_t i, SearchBounds b, const SearchOutcome *out, FILE *dst);
 /* The engine view of a replicated form (S7 design sec 3 and 4), for
    src/engine.c and test/engine.c. */
 #define ENGINE_PACK_MAX 4096u

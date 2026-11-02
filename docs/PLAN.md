@@ -536,9 +536,9 @@ EXTRA.
 |---|---|---|---|
 | 1. One canonical form per operation and a `langc fmt` canonical printer | the Agda-like surface (Q7) with one spelling per form; `langc fmt`; `W_NONCANON` with a fix for non-canonical input; the `replicated` forms in S3 | S1, S3 | `fmt` is idempotent and round-trips on each example and on `test/fmt/`; each example is canonical |
 | 2. `langc check --json` with fix hints and progress counts (parsed, typed, laws discharged) | the 5.3 schema; `progress` with `parsed`, `typed`, `laws` (n of m, split proved, bounded, refuted) and `pairs`; `docs/DIAGNOSTICS.md` | S1, S4, S6 | each refusal code has a fixture that checks its JSON shape; counts in each result |
-| 3. `SKILL.md` with 3 to 5 graded examples | `skills/merge-lang/SKILL.md` with 5 examples from easy to hard: tags (independent); task owner (explicit conflict); inventory (refused, counterexample); inventory with escrow (kept, proved); seats (3 replicas, escrow with `transfer`, a tag set; the expected output names the transfer that a refused sale needs). Each has its expected `check --json` output | S8 | each example gives the output in the file |
-| 4. An MCP server written in TinyCC (`langc mcp`) | a stdio JSON-RPC MCP server in C that tcc builds; tools `check`, `fmt`, `sim`, `report`, `explain-code` | S8 | an MCP stdio test drives `check` and `sim` on each graded example |
-| 5. `AGENTS.md` and a README table saying when to use the language | `AGENTS.md` routing rule; README "When to use merge-lang" table: use for offline-first replicated state with domain invariants; not for text co-editing, server-only databases or Redis scripts | S0, S8 | the table matches the admitted parts |
+| 3. `SKILL.md` with 3 to 5 graded examples | `skills/merge-lang/SKILL.md` with 5 examples from easy to hard: tags (independent); task owner (explicit conflict); inventory (refused, counterexample); inventory with escrow (kept, proved); seats (3 replicas, escrow with `transfer`, a tag set; `check --json` refuses the sale of the form with no rule and gives its counterexample row; the example text names the transfer that the sale needs from that row (Q83 (a), S8 U1 probe)). Each has its expected `check --json` output | S8 (built 2026-11-01) | each example gives the output in the file |
+| 4. An MCP server written in TinyCC (`langc mcp`) | a stdio JSON-RPC MCP server in C that tcc builds; tools `check`, `fmt`, `sim`, `explain-code` (`check` gives the report document, Q77 (a)); protocol revision 2025-11-25 (Q85 (a)) | S8 (built 2026-11-01) | an MCP stdio test drives `check` and `sim` on each graded example |
+| 5. `AGENTS.md` and a README table saying when to use the language | `AGENTS.md` routing rule; README "When to use merge-lang" table: use for offline-first replicated state with domain invariants; not for text co-editing, server-only databases or Redis scripts | S0, S8 (built 2026-11-01) | the table matches the admitted parts (`test/readme.c`, Q86 (a)) |
 | 6. A token-count comparison against Python and Rust | `docs/TOKEN-BASELINE.md`: the inventory demo (state, `sell`, invariant, escrow rule, the merge laws) in merge-lang, Python and Rust; the tokenizer is named (Q19); a script gives the counts; it also measures the cost of the Unicode surface | S9 | the script output equals the counts in the file |
 | EXTRA | the Wasm engine lets an agent with no C toolchain run `apply`, `merge` and `check` | S7 | differential gate |
 
@@ -558,8 +558,10 @@ EXTRA.
 | dil-lang | 9e57528 | diagnostic fix text; README head (distinct space) |
 | tether | 1f84803 | README head (distinct space) |
 | automerge-cat | 61aa688 | README head: merge as the colimit in the posetal category of states |
+| evolve-lang | 8c5d8e1 | S8 (pinned 2026-11-01, Q87 (a)): the stdio MCP server in C `src/mcp.{c,h}`, the JSON reader `src/front/jsonin.{c,h}`, the `explain-code` table `src/codes.{c,h}`, and the 4 tests `test/skill.c`, `test/verbs.c`, `test/mcp.c` and `test/readme.c` |
 
-No *-lang repository has an MCP server in C yet (O1).
+The S8 MCP server is the port of the evolve-lang 8c5d8e1 server in C, so
+O1 is false (Q87 (a)).
 
 ## 9. Slices
 
@@ -583,14 +585,16 @@ on the new checks, docs, close (stage, commit message, next prompt).
 | S5 | `langc sim`: schedules, order, reduction, transcript; golden `test/sim/*.out` (the demo); determinism gate | the demo transcript equals its golden file; two runs byte-identical; mutants on the order and on the minimality test DONE 2026-10-31 (on the USER S4 commit 5b4138b; Q56 (a), Q57 (a), Q58 (b), Q59 (a)): `make check` EXIT 0: examples 13 checked, 0 failed; parse refusals 23; check refusals 76; evals 206; ir 13 lowered; wasm 16 modules valid; differential 1230 cases, 0 mismatches; fmt 163 canonical, 14 non-canonical pairs; merge examples 4 canonical, 3 checked, 1 refused; sim 2 golden, 0 mismatches (`test/sim/inventory.out`: 10 lines, schedules 33, `sell ∥ sell` refuted, rc 1; `test/sim/inventory-escrow.out`: 3 lines, schedules 620, the invariant kept, rc 0); json 35 fixtures, diagnostics 46 codes (32 with a fixture, 14 with no fixture); gate 0 failures; review, domain and diagnostic edit regressions passed; cubical 124 checks, 41 round trips. The sim search is the sentinel `SEARCH_ANY_OP` in `search_pair` (Q56 (a)); `langc sim` checks in sim mode, with no `form_search` (Q57 (a)); golden files for the two demo files only (Q58 (b)); K in a refused transcript is the count of kept schedules before the counterexample, plus 1 (Q59 (a)). Mutants: 4 of 6 KILLED by `test/sim/inventory.out`, `check-clang` rc 0 on each: O1 the `dfs` branch loop from the last replica (K 43, not 33); O3 the `place` op loop from the last op (K 49, not 33); N1 the outer loop from `max` down and N2 no `stop` after the first violation (the transcript differs from line 3). 2 SURVIVED, as the design expects: O2 `next_args` with the last argument most significant (no golden file refutes with a 2-argument op, Q58 (b)) and N3 the class row pair from the highest branch (no golden file has 3 replicas) |
 | S6 | JSON report: port of `json.c`, `NAME.report.json`, the 5.3 schema shared with `check --json` | golden reports; mutants on the class map DONE 2026-11-01 (on the USER S5 commit 290f396; Q60 (a) to Q69 (a)): `make check` EXIT 0: examples 13 checked, 0 failed; parse refusals 23; check refusals 76; evals 206; ir 13 lowered; wasm 16 modules valid; differential 1230 cases, 0 mismatches; fmt 163 canonical, 14 non-canonical pairs; merge examples 4 canonical, 3 checked, 1 refused; sim 4 golden, 0 mismatches (new: `test/sim/owner.out`, schedules 147, and `test/sim/tags.out`, schedules 676; no invariant, no verdict line, rc 0, Q67 (a)); report 5 golden, 0 mismatches, 4 same as `check --json` (`test/report/{owner,tags,inventory,inventory-escrow,classes}.report.json`; the class fixture `test/report/classes.merge`, Q69 (a)); json 35 fixtures, diagnostics 46 codes (32 with a fixture, 14 with no fixture); gate 0 failures; review, domain and diagnostic edit regressions passed; cubical 124 checks, 41 round trips; sim regressions 7 checks; report rows 7 checks. `langc check --json` prints one JSON document: the progress counts, the diagnostics and one row for each op pair O1 <= O2 of each replicated form (Q60 (a), Q62 (a), Q64 (a)). `langc build SRC -o OUT` writes the same document to the report file next to OUT, also on a refusal (Q61 (a), Q63 (a)). The writer `src/front/json.{c,h}` is the port of `hosts/tcc-json`. Fix: with no invariant, a pair that no law covers is independent and proved (L6a), not bounded. No diagnostic code changed. Mutants: 8/8 KILLED by a golden report, `check-clang` rc 0 on each, `make -B` for each build: K1 the L6b MVReg test (classes); K2 two class names swapped (owner, tags, inventory-escrow, classes); K3 an L6a row marked bounded (tags, classes); K4 the pair loops from O1 + 1 (all five); K5 `part` from the first MVReg part (classes); K6 `rule` for L6b rows only (inventory-escrow); K7 the rows in reverse order (inventory-escrow, classes); K8 the no-invariant path keeps the cover (classes). O2 (the S5 survivor) does not apply: no golden report has a refuted row with a 2-argument op |
 | S7 | Wasm engine: the writer changes of 5.1, part templates, lowered invariants, the engine ABI | `wasm-validate`; differential gate on every simulator schedule; mutants on one template per part DONE 2026-11-01 (on the USER S6 commit 1f94f15; Q70 (a) to Q76 (a)): `make check` EXIT 0: the S6 counts are the same, plus `engine: 4 modules, 0 mismatches` (`langc build`, `wasm-validate`, `wasm-objdump -x` and `langc abi` against `test/engine/{tags,owner,inventory-escrow,classes}.abi`) and `engine: 5 forms, 14419 schedules, 206 refusals, 279146 calls, 0 mismatches` (`test/engine.c`: for each schedule of each form of the examples and `test/report/classes.merge`, also the refused `inventory.merge` (Q74 (a)), a call script for `test/run-wasm.mjs` and the expected output from the guest values; schedules tags 676, owner 147, inventory 33, Shop 620, Card 12943). The six entries of each form NAME are `NAME.apply`, `NAME.merge`, `NAME.check`, `NAME.encode`, `NAME.decode` and `NAME.bot`; `memory`, `alloc` and `reset` are shared (Q70 (a), 5.1). `src/engine.{c,h}` has one template for each part (GSet, Counter, Escrow, MVReg) and the lowered invariants. `decode` refuses a layout that is not canonical (Q75 (a)). `test/run-wasm.mjs` has `@k`, `words P L` (Q73 (a)) and `store P W...` (Q76 (a)). No diagnostic code changed. Mutants: 5/5 KILLED by the engine leg only, `check-clang` rc 0 on each, `make -B` for each build: E1 the GSet add stores the old word (tags, classes); E2 no precondition on the Counter `dec` (inventory); E3 no `U i` loop in the Escrow `can` (inventory-escrow); E4 the MVReg merge keeps a dead value (owner, classes); E5 the `nonneg` check with the sums in the wrong sides (inventory). |
-| S8 | agent kit: `SKILL.md` with 5 graded examples, `langc mcp`, `explain-code`, final `AGENTS.md` and README table | MCP stdio test; each example passes `check` with the output in the file |
+| S8 | agent kit: `SKILL.md` with 5 graded examples, `langc mcp`, `explain-code`, final `AGENTS.md` and README table | MCP stdio test; each example passes `check` with the output in the file DONE 2026-11-01 (on the USER S7 commit ff5720b; Q77 (a) to Q87 (a), Q89 (a)): `make check` EXIT 0: the S7 counts are the same, plus `skill: 5 examples, 5 outputs match` (`test/skill.c`: `check --json` of each example of `skills/merge-lang/SKILL.md`, the stdout byte for byte and the exit code, Q82 (a)), `explain-code: 46 codes, 0 mismatches` (`test/verbs.c`: the table of `src/codes.c` and `docs/DIAGNOSTICS.md` in both directions, Q80 (a)), `mcp: 33 requests, 0 mismatches; 5 examples` (`test/mcp.c`: the golden lines of `test/mcp/{requests,responses}.jsonl`, then `check` and `sim` on each graded example against the CLI, and the write error exit 2, Q84 (a)) and `readme: 7 rows, 9 verbs` (`test/readme.c`, Q86 (a)). Examples 1 to 4 cite `examples/{tags,owner,inventory,inventory-escrow}.merge`; example 5 is `examples/agent/seats.merge`, outside the gate globs (Q81 (a)). The MCP tools are `check`, `fmt`, `sim` and `explain-code` (Q77 (a), Q78 (a)); `initialize` gives the protocol revision 2025-11-25 (Q85 (a)). `sim_print` and its 2 helpers write to a `FILE *dst` (Q89 (a)). No diagnostic code changed. Mutants: 8/8 KILLED, `make -B` for each build: M1 no `sim` tool (mcp); M2 `isError` on `status == 0` (mcp); M3 jsonin takes "1.0" (mcp); M4 a word of an `explain-code` row (verbs); M5 a SKILL.md json block (skill); M6 a SKILL.md exit code (skill); M7 a `no` README row changed to `yes:` (readme); M8 `sim_step` to `stdout` (mcp). Q88 (CHECK_DEPTH) is OPEN for the USER. |
 | S9 | `docs/TOKEN-BASELINE.md` and its script | the script output equals the file |
 | S10 | close: `docs/STATUS.md`, `docs/VALIDATION.md`, full gate, mutant summary | full gate EXIT 0 |
 
 ## 10. Open items
 
-- O1 the MCP server has no C precedent in the *-lang repositories. S8
-  pins the MCP protocol revision it implements.
+- O1 FALSE 2026-11-01 (S8, Q87 (a)). The MCP server has a C precedent:
+  evolve-lang 8c5d8e1 `src/mcp.c`, and the S8 server is its port
+  (section 8). `initialize` gives the protocol revision 2025-11-25 (Q85
+  (a)).
 - O2 the 2024 HN thread of the description was not found by two web
   searches (2026-10-27). Docs cite it only as "an HN discussion (2024)".
 - O3 a wasmtime leg for the differential gate (wasmtime is installed,
@@ -1085,3 +1089,64 @@ RULED (letter) is a USER ruling.
   a pseudo call `store P W...` in test/run-wasm.mjs writes the words at
   P + 8 and prints P, so the decode lines can give a word of 2^63 and a
   bad shape word.
+- Q77 the MCP tool list (S8 Unit 0, 2026-11-01). RULED (a). (a)
+  `check`, `fmt`, `sim`, `explain-code`; `check` gives the S6 report
+  document, so PLAN 7 bullet 4 drops `report`. (b) also `report`, an
+  alias of `check`. (c) also `build` (writes OUT.wasm and
+  OUT.report.json in a path the client gives).
+- Q78 the `sim` arguments (S8 Unit 0, 2026-11-01). RULED (a). (a)
+  `path` required; `replicas`, `prefix`, `ops` optional JSON integers
+  with the CLI bounds; a non-integer gives -32602. (b) `path` only.
+- Q79 `list-steps` of the port (S8 Unit 0, 2026-11-01). RULED (a). (a)
+  not ported (no merge-lang meaning). (b) a `list-forms` tool with the
+  7 merge forms.
+- Q80 the `explain-code` table (S8 Unit 0, 2026-11-01). RULED (a). (a)
+  compiled into src/codes.c, the Meaning cell verbatim, test/verbs.c
+  compares it with docs/DIAGNOSTICS.md both ways. (b) read
+  docs/DIAGNOSTICS.md at run time (needs the repo root as cwd).
+- Q81 the place of the graded examples (S8 Unit 0, 2026-11-01). RULED
+  (a). (a) examples 1 to 4 cite examples/{tags,owner,inventory,
+  inventory-escrow}.merge; example 5 is new examples/agent/seats.merge,
+  outside the gate globs. (b) 5 copies in examples/agent/0N-*.merge.
+  (c) seats in examples/seats.merge, with the count line changes and
+  new sim and report goldens.
+- Q82 the output a SKILL.md example carries (S8 Unit 0, 2026-11-01).
+  RULED (a). (a) the full stdout of `check --json PATH`, byte for byte,
+  and `The exit code is N.` (b) the `progress` member only.
+- Q83 the transfer that a refused seats sale needs (S8 Unit 0,
+  2026-11-01). RULED (a). (a) U1 probes first; if the `check --json`
+  output does not name the transfer, the example text names it from
+  the counterexample row, the PLAN 7 row is edited, and the checker
+  does not change. (b) add a fix hint that names the transfer to
+  REFUSE_NEEDS_COORDINATION (a checker change in S8).
+- Q84 the MCP test (S8 Unit 0, 2026-11-01). RULED (a). (a) port
+  test/mcp.c: golden request and response lines, then `check` and `sim`
+  on each graded example, and the write error exit 2. (b) the golden
+  lines only.
+- Q85 the MCP protocol revision (S8 Unit 0, 2026-11-01). RULED (a). (a)
+  `initialize` always gives "2025-11-25" (as the port) and serverInfo
+  `merge-lang` `S8`. (b) echo the client revision when it is one of a
+  known list.
+- Q86 the README table check (S8 Unit 0, 2026-11-01). RULED (a). (a)
+  port test/readme.c: each `yes` row names an admitted part, each `no`
+  row none, AGENTS.md names each verb. (b) no gate; the table is prose.
+- Q87 the PLAN sec 8 port row and O1 (S8 Unit 0, 2026-11-01). RULED
+  (a). (a) add the evolve-lang 8c5d8e1 row (mcp, jsonin, codes, the 4
+  tests) and close O1 as false. (b) leave sec 8; note the port in
+  STATUS only.
+- Q88 the CHECK_DEPTH row (S8 U2, 2026-11-01). OPEN.
+  `src/front/check.c:2185` emits `CHECK_DEPTH`, but `docs/DIAGNOSTICS.md`
+  has no row for it, so `langc explain-code CHECK_DEPTH` gives rc 1. The
+  code-list check of `test/gate.sh` takes only the prefixes LEX, PARSE,
+  REFUSE, TYPE, NAME, EVAL, DOMAIN and W, so it does not see the code.
+  The port has the same gap (evolve-lang check.c:2190). (a) add a
+  CHECK_DEPTH row with a "no fixture:" reason, and CHECK to the gate.sh
+  prefix list (the `diagnostics:` line and the `explain-code` count go
+  to 47). (b) leave it and record it.
+- Q89 the output stream of the sim transcript (S8 U3, 2026-11-01). RULED
+  (a). In `langc mcp`, stdout is the JSON-RPC channel, and `src/mcp.c`
+  captures a tool output by `open_memstream` (no fd). (a) `sim_state`,
+  `sim_step` and `sim_print` in `src/front/check.c` take `FILE *dst`
+  (printf to fprintf, putchar to fputc, puts to fputs with a newline),
+  and `run_sim` gives its OUT. (b) swap the stdout fd. (c) no `sim`
+  tool.

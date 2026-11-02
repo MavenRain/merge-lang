@@ -1,0 +1,20 @@
+-- Seats: three box offices sell the seats of one hall.
+replicas A B C
+
+atoms Amount := 1 ∣ 2
+
+atoms Tag := vip ∣ late
+
+replicated Hall
+  state seats : Counter (init 2)
+  op sell (k : Amount) := dec seats k
+  op give (k : Amount) := transfer seats C k
+  invariant nonneg seats
+  allocate seats by escrow (A ↦ 1, B ↦ 1, C ↦ 0)
+
+replicated Door
+  state seats : Counter (init 2)
+  state tags : GSet Tag
+  op sell (k : Amount) := dec seats k
+  op tag (t : Tag) := add tags t
+  invariant nonneg seats

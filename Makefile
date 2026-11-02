@@ -5,9 +5,10 @@ CFLAGS = -std=c99 -Wall -Werror -Isrc
 CLANG_FLAGS = -std=c99 -Wall -Wextra -Wswitch-enum -Werror -fsyntax-only -Isrc
 FRONT = src/front/base.c src/front/json.c src/front/lexer.c src/front/parser.c src/front/fmt.c src/front/front.c src/front/eval.c src/front/check.c src/front/search.c src/front/lower.c
 TARGET = src/wasm.c
-SRC = src/main.c $(FRONT) $(TARGET) src/engine.c
+SRC = src/main.c $(FRONT) $(TARGET) src/engine.c src/codes.c src/mcp.c src/front/jsonin.c
 FRONT_TOOL = test/fronttool.c $(filter-out src/front/front.c src/front/lower.c,$(FRONT))
 CUBICAL_TOOL = test/cubical.c $(filter-out src/front/lower.c,$(FRONT))
+MCP_TEST = test/mcp.c src/mcp.c src/front/jsonin.c src/front/base.c
 HEADERS = $(wildcard src/*.h src/front/*.h)
 
 .PHONY: build check check-clang clean
@@ -40,6 +41,21 @@ build/report: test/report.c $(SRC) $(HEADERS) build/domain.c
 build/engine: test/engine.c $(SRC) $(HEADERS) build/domain.c
 	$(TCC) $(CFLAGS) -o build/engine test/engine.c $(filter-out src/main.c,$(SRC)) build/domain.c
 
+build/skill-test: test/skill.c
+	mkdir -p build
+	$(TCC) $(CFLAGS) -o build/skill-test test/skill.c
+
+build/verbs-test: test/verbs.c $(SRC) $(HEADERS) build/domain.c
+	$(TCC) $(CFLAGS) -o build/verbs-test test/verbs.c $(filter-out src/main.c,$(SRC)) build/domain.c
+
+build/mcp-test: $(MCP_TEST) $(HEADERS)
+	mkdir -p build
+	$(TCC) $(CFLAGS) -o build/mcp-test $(MCP_TEST)
+
+build/readme-test: test/readme.c
+	mkdir -p build
+	$(TCC) $(CFLAGS) -o build/readme-test test/readme.c
+
 check-clang: build/domain.c
 	$(CC) $(CLANG_FLAGS) $(SRC) build/domain.c
 	$(CC) $(CLANG_FLAGS) $(FRONT_TOOL)
@@ -48,8 +64,12 @@ check-clang: build/domain.c
 	$(CC) $(CLANG_FLAGS) test/sim.c $(filter-out src/main.c,$(SRC)) build/domain.c
 	$(CC) $(CLANG_FLAGS) test/report.c $(filter-out src/main.c,$(SRC)) build/domain.c
 	$(CC) $(CLANG_FLAGS) test/engine.c $(filter-out src/main.c,$(SRC)) build/domain.c
+	$(CC) $(CLANG_FLAGS) test/skill.c
+	$(CC) $(CLANG_FLAGS) test/verbs.c $(filter-out src/main.c,$(SRC)) build/domain.c
+	$(CC) $(CLANG_FLAGS) $(MCP_TEST)
+	$(CC) $(CLANG_FLAGS) test/readme.c
 
-check: build/langc build/fronttool build/diagnostics build/cubical build/sim build/report build/engine check-clang
+check: build/langc build/fronttool build/diagnostics build/cubical build/sim build/report build/engine build/skill-test build/verbs-test build/mcp-test build/readme-test check-clang
 	sh test/gate.sh
 	sh test/review.sh
 	build/fronttool
@@ -57,6 +77,10 @@ check: build/langc build/fronttool build/diagnostics build/cubical build/sim bui
 	build/cubical
 	build/sim
 	build/report
+	build/skill-test
+	build/verbs-test
+	build/mcp-test
+	build/readme-test
 
 clean:
 	rm -rf build

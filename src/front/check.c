@@ -5153,11 +5153,11 @@ static int sim_state_text(SimForm *x, const Value *s, const char **text) {
 }
 
 /* HEAD, then the text of the state S after one space. */
-static int sim_state(SimForm *x, const char *head, const Value *s) {
+static int sim_state(SimForm *x, const char *head, const Value *s, FILE *dst) {
   const char *text;
   if (!sim_state_text(x, s, &text))
     return 0;
-  printf("%s%s%s\n", head, text[0] == '\0' ? "" : " ", text);
+  fprintf(dst, "%s%s%s\n", head, text[0] == '\0' ? "" : " ", text);
   return 1;
 }
 
@@ -5274,7 +5274,7 @@ static const char *sim_term_text(SimForm *x, const FormItem *op, const SearchSte
    that the op writes (BEFORE is the state before the step), then `
    requires c ≥ k: held` for each `dec c k` in the body. An Ops op body is
    one line, with one requires clause for each dec in the script. */
-static int sim_step(SimForm *x, const SearchStep *st, const Value *before) {
+static int sim_step(SimForm *x, const SearchStep *st, const Value *before, FILE *dst) {
   const FormItem *op = x->ops[st->op];
   const Term *sp[SIM_SPINE];
   char *wrote = arena_alloc(x->c.m->arena, x->k + 1u);
@@ -5284,12 +5284,12 @@ static int sim_step(SimForm *x, const SearchStep *st, const Value *before) {
   if (wrote == NULL)
     return FAIL(&x->c, "OOM", "out of memory");
   memset(wrote, 0, x->k + 1u);
-  printf("%s: %s", st->seg == 0u ? "prefix" : x->replicas->names[st->seg - 1u].text, op->name.text);
+  fprintf(dst, "%s: %s", st->seg == 0u ? "prefix" : x->replicas->names[st->seg - 1u].text, op->name.text);
   for (j = 0; j < op->param_count; j++) {
     const char *arg = form_arg_text(&x->g, op->params[j].type, x->replicas, st->args[j]);
     if (arg == NULL)
       return FAIL(&x->c, "OOM", "out of memory");
-    printf(" %s", arg);
+    fprintf(dst, " %s", arg);
   }
   for (w = 0; w <= op->step_count; w++) {
     const Term *t = w < op->step_count ? op->steps[w].write : op->body;
@@ -5302,7 +5302,7 @@ static int sim_step(SimForm *x, const SearchStep *st, const Value *before) {
     if (wrote[j] && (!sim_value(x, j, before, 0, &before_text, &v) || !sim_value(x, j, st->after, 0, &after_text, &v)))
       return 0;
     if (wrote[j])
-      printf("   %s %s -> %s", x->parts[j].it->name.text, before_text, after_text);
+      fprintf(dst, "   %s %s -> %s", x->parts[j].it->name.text, before_text, after_text);
   }
   for (w = 0; w <= op->step_count; w++) {
     const Term *t = w < op->step_count ? op->steps[w].write : op->body;
@@ -5312,13 +5312,13 @@ static int sim_step(SimForm *x, const SearchStep *st, const Value *before) {
         (k = sim_term_text(x, op, st, sp[2])) == NULL)
       return FAIL(&x->c, "OOM", "out of memory");
     if (k != NULL)
-      printf("   requires %s ≥ %s: held", sp[1]->name, k);
+      fprintf(dst, "   requires %s ≥ %s: held", sp[1]->name, k);
   }
-  putchar('\n');
+  fputc('\n', dst);
   return 1;
 }
 
-int sim_print(Machine *m, const DeclList *decls, size_t i, SearchBounds b, const SearchOutcome *out) {
+int sim_print(Machine *m, const DeclList *decls, size_t i, SearchBounds b, const SearchOutcome *out, FILE *dst) {
   SimForm x;
   const char *text;
   const Value *anc;
@@ -5343,38 +5343,38 @@ int sim_print(Machine *m, const DeclList *decls, size_t i, SearchBounds b, const
   if ((anc = def_value(m, x.f.bot)) == NULL)
     return 0;
   for (s = 0; s < out->step_count && out->steps[s].seg == 0u; s++) {
-    if (!sim_step(&x, &out->steps[s], anc))
+    if (!sim_step(&x, &out->steps[s], anc, dst))
       return 0;
     anc = out->steps[s].after;
   }
-  if (!sim_state(&x, "ancestor:", anc))
+  if (!sim_state(&x, "ancestor:", anc, dst))
     return 0;
   for (; s < out->step_count; s++) {
     const SearchStep *st = &out->steps[s];
-    if (!sim_step(&x, st, s > 0u && out->steps[s - 1u].seg == st->seg ? out->steps[s - 1u].after : anc))
+    if (!sim_step(&x, st, s > 0u && out->steps[s - 1u].seg == st->seg ? out->steps[s - 1u].after : anc, dst))
       return 0;
     o[seen < 2u ? seen : 1u] = seen < 2u && (seen == 0u || st->seg != last) ? st->op : o[seen < 2u ? seen : 1u];
     seen += seen < 2u && (seen == 0u || st->seg != last);
     last = st->seg;
     branch_steps++;
   }
-  printf("reconnect: merge");
-  for (j = 0; j < b.replicas; j++) printf(" %s", x.replicas->names[j].text);
-  putchar('\n');
-  if (!sim_state(&x, "merged:", out->merged) || !sim_value(&x, broken, out->merged, 0, &text, &v))
+  fprintf(dst, "reconnect: merge");
+  for (j = 0; j < b.replicas; j++) fprintf(dst, " %s", x.replicas->names[j].text);
+  fputc('\n', dst);
+  if (!sim_state(&x, "merged:", out->merged, dst) || !sim_value(&x, broken, out->merged, 0, &text, &v))
     return 0;
-  printf("REFUTED invariant nonneg %s: %s = %s\n", x.parts[broken].it->name.text, x.parts[broken].it->name.text, text);
+  fprintf(dst, "REFUTED invariant nonneg %s: %s = %s\n", x.parts[broken].it->name.text, x.parts[broken].it->name.text, text);
   /* Only two one-step branches witness a particular op pair. More
      complex schedules can start with a pair that preserves the invariant. */
   if (branch_steps == 2u && seen == 2u)
-    printf("%s ∥ %s: needs coordination (REFUSE_NEEDS_COORDINATION)\n", x.ops[o[1] < o[0] ? o[1] : o[0]]->name.text,
+    fprintf(dst, "%s ∥ %s: needs coordination (REFUSE_NEEDS_COORDINATION)\n", x.ops[o[1] < o[0] ? o[1] : o[0]]->name.text,
            x.ops[o[1] > o[0] ? o[1] : o[0]]->name.text);
   else
-    puts("schedule: needs coordination (REFUSE_NEEDS_COORDINATION)");
-  printf("fix: allocate %s by escrow (", x.parts[broken].it->name.text);
+    fputs("schedule: needs coordination (REFUSE_NEEDS_COORDINATION)\n", dst);
+  fprintf(dst, "fix: allocate %s by escrow (", x.parts[broken].it->name.text);
   for (j = 0; j < x.replicas->name_count; j++)
-    printf("%s%s ↦ %llu", j == 0u ? "" : ", ", x.replicas->names[j].text, j == 0u ? (unsigned long long)x.parts[broken].s0 : 0ULL);
-  puts(")");
+    fprintf(dst, "%s%s ↦ %llu", j == 0u ? "" : ", ", x.replicas->names[j].text, j == 0u ? (unsigned long long)x.parts[broken].s0 : 0ULL);
+  fputs(")\n", dst);
   return 1;
 }
 

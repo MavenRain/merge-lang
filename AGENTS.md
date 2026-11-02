@@ -7,9 +7,9 @@ state that replicas change while they are disconnected and merge when they
 reconnect. Do not use it for text co-editing, server-only databases or
 Redis scripts.
 
-## Status (S7)
+## Status (S8)
 
-S1, S1b, S2, S2b, S2c, S2d, S3a, S3e, S3x, S3b, S4, S5, S6 and S7 are built: the port of the evolve-lang
+S1, S1b, S2, S2b, S2c, S2d, S3a, S3e, S3x, S3b, S4, S5, S6, S7 and S8 are built: the port of the evolve-lang
 1f87a5a surface and cubical kernel (S1), induction in the kernel (S1b:
 `natMax`, a `fold` over ℕ with a motive, `elim` for Bool and `Option`,
 and `sumFin`), the domain with the laws L1 to L4 as guest terms (S2:
@@ -39,11 +39,13 @@ determinism gate), and the JSON coordination report (S6: `check --json`
 and `build`, the op pair rows and counterexamples, and golden reports
 in `test/report/*.report.json`), and the Wasm merge engine (S7: the six
 entries of each replicated form, the golden ABI files
-`test/engine/*.abi` and the differential gate of `test/engine.c`;
-`docs/STATUS.md`).
+`test/engine/*.abi` and the differential gate of `test/engine.c`),
+and the agent kit (S8: `langc explain-code`, `langc mcp`,
+`skills/merge-lang/SKILL.md` and the graded examples; `docs/STATUS.md`).
 `langc check --json`, `langc build`, `langc fmt` and `langc sim` work.
-`langc mcp`, `SKILL.md` and the graded examples are
-planned (`docs/PLAN.md` section 7 and section 9). Do not cite them as built.
+S8 adds the agent kit: `langc explain-code`, the MCP server `langc mcp`
+(protocol revision 2025-11-25), the skill `skills/merge-lang/SKILL.md`
+and its 5 graded examples in `examples/agent/` and `examples/`.
 `langc` is a native program, not a Wasm module.
 
 ## Commands that work now
@@ -67,6 +69,15 @@ planned (`docs/PLAN.md` section 7 and section 9). Do not cite them as built.
   transcript (rc 1). A kept invariant is bounded, not proved (rc 0). The
   golden files are `test/sim/*.out`. A form with no invariant counts all
   enabled schedules. A file with no invariants has no verdict line.
+- `build/langc explain-code CODE`: print the row of CODE in
+  `docs/DIAGNOSTICS.md` as one JSON line. An unknown code gives rc 1.
+- `build/langc mcp`: the MCP server on stdin and stdout. Its tools are
+  `check`, `fmt`, `sim` and `explain-code`; each tool result is the
+  output of the same verb.
+- `build/langc eval PROG NAME [ARGS...]`, `build/langc ir PROG` and
+  `build/langc abi PROG`: the kit back end.
+- `skills/merge-lang/SKILL.md`: the agent loop, the verbs and 5 graded
+  examples. The gate runs each example and compares the output.
 
 ## Rules for a change
 

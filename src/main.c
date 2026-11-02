@@ -1,8 +1,10 @@
 /* The langc command line. SHARED by the tcc kits.
-   Exit 0: ok. Exit 1: the program is refused. Exit 2: usage or IO. */
+   Exit 0: ok. Exit 1: the program is refused, or explain-code has no row
+   for the code. Exit 2: usage or IO. */
 #include <stdio.h>
 #include <string.h>
 
+#include "codes.h"
 #include "engine.h"
 #include "front/check.h"
 #include "front/fmt.h"
@@ -10,6 +12,7 @@
 #include "front/json.h"
 #include "front/lower.h"
 #include "front/parser.h"
+#include "mcp.h"
 #include "target.h"
 
 #define ARENA_LIMIT_BYTES ((size_t)1 << 30)
@@ -21,7 +24,9 @@ typedef enum {
   CMD_ABI,
   CMD_BUILD,
   CMD_FMT,
-  CMD_SIM
+  CMD_SIM,
+  CMD_EXPLAIN_CODE,
+  CMD_MCP
 } Command;
 
 /* The sim bounds (S5 design sec 1): replicas N, prefix P, ops M. */
@@ -31,6 +36,7 @@ static const char *const BOUND_FLAGS[BOUND_COUNT] = {"--replicas", "--prefix", "
 typedef struct {
   Command command;
   const char *prog_path;
+  const char *code; /* explain-code */
   const char *entry;
   char **args;
   int arg_count;
@@ -52,6 +58,8 @@ static const struct {
   {"build", CMD_BUILD},
   {"fmt", CMD_FMT},
   {"sim", CMD_SIM},
+  {"explain-code", CMD_EXPLAIN_CODE},
+  {"mcp", CMD_MCP},
 };
 
 static int usage(FILE *err) {
@@ -61,7 +69,9 @@ static int usage(FILE *err) {
         "       langc abi PROG\n"
         "       langc build PROG -o OUT [--runtime]\n"
         "       langc fmt PROG\n"
-        "       langc sim PROG [--replicas N] [--prefix P] [--ops M]\n", err);
+        "       langc sim PROG [--replicas N] [--prefix P] [--ops M]\n"
+        "       langc explain-code CODE\n"
+        "       langc mcp\n", err);
   return 2;
 }
 
@@ -113,6 +123,7 @@ static int parse_sim_options(int argc, char **argv, Options *opt, Diag *diag) {
 
 static int parse_options(int argc, char **argv, Options *opt, Diag *diag) {
   memset(opt, 0, sizeof *opt);
+  if (argc == 2 && find_command(argv[1], &opt->command) && opt->command == CMD_MCP) return 1;
   if (argc < 3 || !find_command(argv[1], &opt->command)) {
     return diag_fail(diag, "USAGE", NULL, "expected a command and a program path");
   }
@@ -135,6 +146,12 @@ static int parse_options(int argc, char **argv, Options *opt, Diag *diag) {
       return parse_build_options(argc, argv, opt, diag);
     case CMD_SIM:
       return parse_sim_options(argc, argv, opt, diag);
+    case CMD_EXPLAIN_CODE:
+      if (argc != 3) return diag_fail(diag, "USAGE", NULL, "explain-code needs one code");
+      opt->code = argv[2];
+      return 1;
+    case CMD_MCP:
+      return diag_fail(diag, "USAGE", NULL, "mcp takes no argument");
   }
   return 0;
 }
@@ -176,6 +193,8 @@ static int run_target(const Options *opt, Machine *machine, const DeclList *decl
     case CMD_BUILD:
     case CMD_FMT:
     case CMD_SIM:
+    case CMD_EXPLAIN_CODE:
+    case CMD_MCP:
       break;
   }
   out = fopen(opt->out_path, "wb");
@@ -201,6 +220,8 @@ static int run(const Options *opt, Arena *arena, Diag *diag) {
     case CMD_BUILD: /* run_build does build */
     case CMD_FMT: /* run_fmt does fmt */
     case CMD_SIM: /* run_sim does sim */
+    case CMD_EXPLAIN_CODE: /* run_explain_code does explain-code */
+    case CMD_MCP: /* main serves mcp */
       break;
   }
   return run_target(opt, &machine, &front.decls, diag);
@@ -219,12 +240,12 @@ static int has_invariant(const Decl *d) {
   return found;
 }
 
-static int run_sim(const Options *opt, Arena *arena, Diag *diag) {
+static int run_sim(const Options *opt, Arena *arena, Diag *diag, FILE *out) {
   char *text = NULL;
   size_t len = 0, i, at = 0;
   Front front;
   Machine machine;
-  SearchOutcome out;
+  SearchOutcome res;
   SearchBounds b = {opt->bound[BOUND_PREFIX], opt->bound[BOUND_OPS], opt->bound[BOUND_REPLICAS]};
   const Decl *replicas = NULL;
   uint64_t kept = 0;
@@ -242,23 +263,23 @@ static int run_sim(const Options *opt, Arena *arena, Diag *diag) {
     return diag_fail(diag, "USAGE", NULL, "sim: the bounds give more than %u instances", SEARCH_CAP) + 2;
   for (i = 0; i < front.decls.count && !refuted; i++) {
     if (front.decls.items[i].kind != DECL_REPLICATED) continue;
-    if (!sim_form(&machine, &front.decls, i, b, &out)) return 1;
-    if (out.result == SEARCH_ABOVE_CAP)
+    if (!sim_form(&machine, &front.decls, i, b, &res)) return 1;
+    if (res.result == SEARCH_ABOVE_CAP)
       return diag_fail(diag, "INTERNAL", NULL, "sim: %s visits more than %u schedules", front.decls.items[i].name, SEARCH_CAP) + 1;
-    kept += out.kept;
-    refuted = out.result == SEARCH_VIOLATION;
+    kept += res.kept;
+    refuted = res.result == SEARCH_VIOLATION;
     invariant = invariant || has_invariant(&front.decls.items[i]);
     at = i;
   }
-  printf("merge-lang sim %s\nreplicas", opt->prog_path);
-  for (i = 0; i < b.replicas; i++) printf(" %s", replicas->names[i].text);
-  printf("; bounds prefix %u, ops %u; schedules %llu\n", b.prefix, b.ops, (unsigned long long)(kept + (uint64_t)refuted));
+  fprintf(out, "merge-lang sim %s\nreplicas", opt->prog_path);
+  for (i = 0; i < b.replicas; i++) fprintf(out, " %s", replicas->names[i].text);
+  fprintf(out, "; bounds prefix %u, ops %u; schedules %llu\n", b.prefix, b.ops, (unsigned long long)(kept + (uint64_t)refuted));
   if (refuted) {
-    (void)sim_print(&machine, &front.decls, at, b, &out); /* rc 1 both ways: a failure is INTERNAL */
+    (void)sim_print(&machine, &front.decls, at, b, &res, out); /* rc 1 both ways: a failure is INTERNAL */
     return 1;
   }
   if (invariant)
-    printf("invariant kept on all %llu schedules (bounded: %u, %u, %u)\n", (unsigned long long)kept, b.prefix, b.ops, b.replicas);
+    fprintf(out, "invariant kept on all %llu schedules (bounded: %u, %u, %u)\n", (unsigned long long)kept, b.prefix, b.ops, b.replicas);
   return 0;
 }
 
@@ -383,23 +404,23 @@ static int write_report(const Options *opt, Arena *arena, Checked *c, const Diag
    most one), then `ok` (text). JSON mode gives one report document (one
    line) that holds these diagnostics. A warning does not change the exit
    code. */
-static int run_check(const Options *opt, Arena *arena, Diag *diag) {
+static int run_check(const Options *opt, Arena *arena, Diag *diag, FILE *out, FILE *err) {
   Checked c;
   check_source(opt, arena, &c, diag);
   if (opt->json) {
     Diag sink;
     diag_init(&sink);
-    int printed = write_report(opt, arena, &c, diag, stdout, &sink)
+    int printed = write_report(opt, arena, &c, diag, out, &sink)
                   || diag_fail(&sink, "IO", NULL, "cannot write the JSON output");
     if (!printed) {
-      diag_print(&sink, stderr);
+      diag_print(&sink, err);
       return 2;
     }
   } else {
-    if (diag->set) diag_print(diag, stderr);
-    for (uint32_t i = 0; i < c.machine.warn_count; i++) diag_print(c.machine.warns[i], stderr);
-    if (c.warn.set) diag_print(&c.warn, stderr);
-    if (c.typed) puts("ok");
+    if (diag->set) diag_print(diag, err);
+    for (uint32_t i = 0; i < c.machine.warn_count; i++) diag_print(c.machine.warns[i], err);
+    if (c.warn.set) diag_print(&c.warn, err);
+    if (c.typed) fputs("ok\n", out);
   }
   return c.typed ? 0 : c.loaded ? 1 : 2;
 }
@@ -442,7 +463,7 @@ static int run_build(const Options *opt, Arena *arena, Diag *diag) {
 
 /* Lexes and parses the program only (no domain, no check), then prints the
    canonical text. */
-static int run_fmt(const Options *opt, Arena *arena, Diag *diag) {
+static int run_fmt(const Options *opt, Arena *arena, Diag *diag, FILE *out) {
   char *text = NULL;
   size_t len = 0;
   if (!read_source(arena, opt->prog_path, &text, &len, diag)) return 2;
@@ -450,14 +471,76 @@ static int run_fmt(const Options *opt, Arena *arena, Diag *diag) {
   DeclList decls = {NULL, 0, 0};
   if (!lex_source(arena, opt->prog_path, text, len, &toks, diag)) return 1;
   if (!parse_source(arena, opt->prog_path, ORIGIN_PROGRAM, &toks, &decls, diag)) return 1;
-  FmtText out;
-  fmt_text_init(&out, arena);
-  if (!fmt_program(&out, decls.items, decls.count, &toks)) {
+  FmtText canon;
+  fmt_text_init(&canon, arena);
+  if (!fmt_program(&canon, decls.items, decls.count, &toks)) {
     return diag_fail(diag, "OOM", NULL, "no memory for the canonical text of %s", opt->prog_path) + 2;
   }
-  size_t written = out.len == 0 ? 0 : fwrite(out.data, 1, out.len, stdout);
-  if (written != out.len || fflush(stdout) != 0) return diag_fail(diag, "IO", NULL, "cannot write the canonical text") + 2;
+  size_t written = canon.len == 0 ? 0 : fwrite(canon.data, 1, canon.len, out);
+  if (written != canon.len || fflush(out) != 0) return diag_fail(diag, "IO", NULL, "cannot write the canonical text") + 2;
   return 0;
+}
+
+/* langc explain-code (S8 design sec 3): the row of CODE in
+   docs/DIAGNOSTICS.md as one JSON line on stdout. A code with no row gives
+   one USAGE line on stderr (main prints it) and exit 1. */
+static int run_explain_code(const Options *opt, Arena *arena, Diag *diag, FILE *out) {
+  const CodeRow *row = code_find(opt->code);
+  if (row == NULL) return diag_fail(diag, "USAGE", NULL, "explain-code: no row for the code '%s'", opt->code) + 1;
+  Out o;
+  out_init(&o, arena, diag);
+  int ok = put_text(&o, "{\"code\":") && put_string(&o, row->code) && put_text(&o, ",\"severity\":") &&
+           put_string(&o, row->severity) && put_text(&o, ",\"stage\":") && put_string(&o, row->stage) &&
+           put_text(&o, ",\"meaning\":") && put_string(&o, row->meaning) && put_text(&o, ",\"fixture\":") &&
+           put_string(&o, row->fixture) && put_text(&o, "}\n");
+  if (!ok) return 2;
+  if (fwrite(o.data, 1, o.len, out) != o.len || fflush(out) != 0) {
+    return diag_fail(diag, "IO", NULL, "cannot write the explain-code output") + 2;
+  }
+  return 0;
+}
+
+/* The verbs of `langc mcp` (mcp.h, S8 design sec 2): TOOL as the CLI runs
+   it, with fresh Options, Diag and Arena, on OUT and ERR. ARG is the
+   program path, or the code of explain-code. The argv is `langc check
+   --json PATH`, `langc fmt PATH`, `langc explain-code CODE`, or `langc sim
+   PATH` with a flag for each non-NULL item of BOUNDS, so a bad bound gives
+   the CLI USAGE diagnostic and exit 2. */
+static int run_tool(McpTool tool, const char *arg, const char *const *bounds, FILE *out, FILE *err) {
+  static char ARG_LANGC[] = "langc", ARG_CHECK[] = "check", ARG_JSON[] = "--json", ARG_FMT[] = "fmt",
+              ARG_SIM[] = "sim", ARG_EXPLAIN[] = "explain-code";
+  char *argv[3 + 2 * BOUND_COUNT] = {ARG_LANGC};
+  int argc = 1;
+  Options opt;
+  Diag diag;
+  diag_init(&diag);
+  argv[argc++] = tool == MCP_TOOL_FMT            ? ARG_FMT
+                 : tool == MCP_TOOL_SIM          ? ARG_SIM
+                 : tool == MCP_TOOL_EXPLAIN_CODE ? ARG_EXPLAIN
+                                                 : ARG_CHECK;
+  if (tool == MCP_TOOL_CHECK) argv[argc++] = ARG_JSON;
+  argv[argc++] = (char *)arg;
+  for (int k = 0; k < BOUND_COUNT && tool == MCP_TOOL_SIM; k++) {
+    if (bounds[k] != NULL) {
+      argv[argc] = (char *)BOUND_FLAGS[k];
+      argv[argc + 1] = (char *)bounds[k];
+      argc += 2;
+    }
+  }
+  if (!parse_options(argc, argv, &opt, &diag)) {
+    diag_print(&diag, err);
+    return usage(err);
+  }
+  Arena arena;
+  arena_init(&arena, ARENA_LIMIT_BYTES);
+  int status = opt.command == CMD_FMT            ? run_fmt(&opt, &arena, &diag, out)
+               : opt.command == CMD_SIM          ? run_sim(&opt, &arena, &diag, out)
+               : opt.command == CMD_EXPLAIN_CODE ? run_explain_code(&opt, &arena, &diag, out)
+                                                 : run_check(&opt, &arena, &diag, out, err);
+  arena_release(&arena);
+  /* run_check prints its own diagnostics. */
+  if (status != 0 && diag.set && opt.command != CMD_CHECK) diag_print(&diag, err);
+  return status;
 }
 
 int main(int argc, char **argv) {
@@ -468,13 +551,15 @@ int main(int argc, char **argv) {
     diag_print(&diag, stderr);
     return usage(stderr);
   }
+  if (opt.command == CMD_MCP) return mcp_serve(stdin, stdout, run_tool);
   Arena arena;
   arena_init(&arena, ARENA_LIMIT_BYTES);
-  int status = opt.command == CMD_FMT     ? run_fmt(&opt, &arena, &diag)
-               : opt.command == CMD_CHECK ? run_check(&opt, &arena, &diag)
-               : opt.command == CMD_SIM   ? run_sim(&opt, &arena, &diag)
-               : opt.command == CMD_BUILD ? run_build(&opt, &arena, &diag)
-                                          : run(&opt, &arena, &diag);
+  int status = opt.command == CMD_FMT            ? run_fmt(&opt, &arena, &diag, stdout)
+               : opt.command == CMD_CHECK        ? run_check(&opt, &arena, &diag, stdout, stderr)
+               : opt.command == CMD_SIM          ? run_sim(&opt, &arena, &diag, stdout)
+               : opt.command == CMD_BUILD        ? run_build(&opt, &arena, &diag)
+               : opt.command == CMD_EXPLAIN_CODE ? run_explain_code(&opt, &arena, &diag, stdout)
+                                                 : run(&opt, &arena, &diag);
   arena_release(&arena);
   /* run_check prints its own diagnostics. */
   if (status != 0 && diag.set && opt.command != CMD_CHECK) diag_print(&diag, stderr);

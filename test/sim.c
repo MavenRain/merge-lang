@@ -31,7 +31,7 @@ static int sim_case(const char *label, const char *source, SearchBounds bounds, 
   capture = tmpfile();
   if (capture == NULL || fflush(stdout) != 0 || (saved = dup(STDOUT_FILENO)) < 0 ||
       dup2(fileno(capture), STDOUT_FILENO) < 0) goto done;
-  printed = sim_print(&machine, &front.decls, i, bounds, &out);
+  printed = sim_print(&machine, &front.decls, i, bounds, &out, stdout);
   if (fflush(stdout) != 0 || dup2(saved, STDOUT_FILENO) < 0) goto done;
   close(saved);
   saved = -1;

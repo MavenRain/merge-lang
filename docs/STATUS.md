@@ -1,7 +1,7 @@
 # merge-lang status
 
 The build implements slices S1, S1b, S2, S2b, S2c, S2d, S3a, S3e, S3x,
-S3b, S4, S5, S6 and S7 of `docs/PLAN.md` section 9: the port of the evolve-lang 1f87a5a
+S3b, S4, S5, S6, S7 and S8 of `docs/PLAN.md` section 9: the port of the evolve-lang 1f87a5a
 surface and cubical kernel (S1), induction in the kernel (S1b), the
 merge-lang domain with the laws L1 to L4 as guest terms (S2), ℤ with the
 `stock` read (S2b), path constructors of dimension 2 with the `fold` over
@@ -13,9 +13,120 @@ reads and part operations (S3b), the checker: the classes, the bounded
 search, the coordination codes and the laws L5 to L8 (S4), the
 replica simulator `langc sim` with golden transcripts and a determinism
 gate (S5), the JSON coordination report of `check --json` and `build`
-(S6), and the Wasm merge engine that `build` writes, with a differential
-gate against the guest on each simulator schedule (S7). It does not
-complete M0.
+(S6), the Wasm merge engine that `build` writes, with a differential
+gate against the guest on each simulator schedule (S7), and the agent
+kit: `SKILL.md` with 5 graded examples, `langc explain-code` and the
+stdio MCP server `langc mcp` (S8). It does not complete M0.
+
+## S8 (2026-11-01)
+
+- Scope (`docs/PLAN.md` section 9, the S8 row; Q77 (a) to Q87 (a), Q89
+  (a)): the agent kit of PLAN section 7, rows 3, 4 and 5. The base is
+  the USER S7 commit ff5720b. The port source is evolve-lang 8c5d8e1
+  (PLAN section 8, Q87 (a)).
+- U1 (Q81 (a) to Q83 (a)): `skills/merge-lang/SKILL.md` has 5 graded
+  examples from easy to hard: tags (independent), task owner (explicit
+  conflict), inventory (refused, counterexample), inventory with escrow
+  (kept, proved) and seats. Examples 1 to 4 cite
+  `examples/{tags,owner,inventory,inventory-escrow}.merge`. Example 5 is
+  the new `examples/agent/seats.merge`, outside the gate globs: 3
+  replicas, the form `Hall` (`sell` and `give`, a `transfer` to C, an
+  escrow rule) and the form `Door` (`sell` with no rule, and `tag`).
+  `check --json` refuses the `Door` sale and gives its counterexample
+  row. The example text names the transfer that the sale needs from
+  that row (Q83 (a); the checker does not change). Each example has the
+  full stdout of `check --json PATH`, byte for byte, and `The exit code
+  is N.` (Q82 (a)). `test/skill.c` runs each example and compares the
+  stdout and the exit code with the file. Count line: `skill: 5
+  examples, 5 outputs match`.
+- U2 (Q80 (a)): `langc explain-code CODE` prints one JSON object with
+  the row of CODE in `docs/DIAGNOSTICS.md` (`code`, `severity`, `stage`,
+  and the Meaning cell verbatim as `meaning`). A code with no row gives
+  rc 1. The table is compiled into `src/codes.{c,h}` (46 codes).
+  `test/verbs.c` compares the table with `docs/DIAGNOSTICS.md` in both
+  directions. Count line: `explain-code: 46 codes, 0 mismatches`.
+- U3 (Q77 (a), Q78 (a), Q84 (a), Q85 (a), Q89 (a)): `langc mcp` is a
+  stdio JSON-RPC MCP server in C that tcc builds: `src/mcp.{c,h}` and
+  the JSON reader `src/front/jsonin.{c,h}`. `initialize` gives the
+  protocol revision 2025-11-25 and serverInfo `merge-lang` `S8` (Q85
+  (a)). It needs `protocolVersion` in params, as the port; else the
+  error is -32602. The tools are `check` (the S6 report document),
+  `fmt`, `sim` and `explain-code` (Q77 (a)). `sim` takes `path` and the
+  optional JSON integers `replicas`, `prefix` and `ops` with the CLI
+  bounds; a value that is not an integer gives -32602 (Q78 (a)). Each
+  tool call goes through `parse_options` with a CLI argv, so a bad tool
+  argument gives the same USAGE diagnostic and usage text as the CLI.
+  Q89 (a): `sim_state`, `sim_step` and `sim_print` in
+  `src/front/check.c` write to a `FILE *dst`, and `run_sim` gives its
+  OUT, so the transcript does not go to the JSON-RPC stdout of `langc
+  mcp`. `test/mcp.c` makes its own temp directory, sends
+  `test/mcp/requests.jsonl` and compares the replies with
+  `test/mcp/responses.jsonl`, sends `check` and `sim` for each graded
+  example and compares the result with the CLI, and checks that an
+  output write error gives exit 2 (Q84 (a)). Count line: `mcp: 33
+  requests, 0 mismatches; 5 examples`.
+- U4 (Q86 (a)): `AGENTS.md` has `## Status (S8)`, names the kit verbs
+  `explain-code` and `mcp`, also `eval`, `ir` and `abi`, and points to
+  SKILL.md. README has `## Status (S8)`, SKILL.md and `examples/agent/`
+  in `## Files`, and the "When to use merge-lang" table with a Parts
+  column (`GSet`, `MVReg`, `Counter`, `Escrow`). `test/readme.c` (the
+  port of evolve-lang `test/readme.c`) checks the table: a `yes` row
+  names an admitted part of PLAN 3.2, a `no` row names none, and each
+  part is in some row. It also checks AGENTS.md in two directions: each
+  `langc VERB` of AGENTS.md is in the usage text, and each usage verb
+  is in AGENTS.md. Count line: `readme: 7 rows, 9 verbs`.
+- No diagnostic code changed.
+- U4 mutants: 8/8 KILLED, `make -B` for each build. After each mutant,
+  the tree is restored and `cmp` gives rc 0.
+
+| # | Mutant | Kill |
+|---|---|---|
+| M1 | the `sim` tool removed from `src/mcp.c` | mcp: reply 3 (`tools/list`) |
+| M2 | `isError` on `status == 0` | mcp: reply 4 and the next replies |
+| M3 | jsonin also takes "1.0" | mcp: reply 15 (-32600 expected, a result found) |
+| M4 | a word changed in the REFUSE_NO_MERGE row of `src/codes.c` | verbs: the `explain-code` cell |
+| M5 | a `:` changed to `;` in the json block of SKILL.md example 1 | skill: example 1 json block |
+| M6 | the exit code of SKILL.md example 3 changed from 1 to 0 | skill: example 3 exit code sentence |
+| M7 | the text co-editing row of the README table changed to `yes:` | readme: the row names no part |
+| M8 | (Q89) `sim_step` writes to `stdout` | mcp: reply 4 and the `sim` drive of inventory |
+
+- Known edges (not S8 changes):
+  - `examples/agent/seats.merge` has `tag` in the form `Door`. In the U1
+    probe, a `Hall` form with 3 replicas and the ops `sell`, `give` and
+    `tag` stopped with EVAL_FUEL.
+  - The fix text of REFUSE_NEEDS_COORDINATION names the part `stock` as
+    a constant (`src/front/check.c:4358`), also for a form whose part
+    has a different name (`seats` in `Door`).
+  - Q88 (OPEN, the USER rules): `src/front/check.c:2185` emits
+    `CHECK_DEPTH`, but `docs/DIAGNOSTICS.md` has no row for it, so
+    `explain-code CHECK_DEPTH` gives rc 1. The code-list check of
+    `test/gate.sh` takes only the prefixes LEX, PARSE, REFUSE, TYPE,
+    NAME, EVAL, DOMAIN and W. The port has the same gap.
+  - Port deltas: `src/front/jsonin.c` has its own `json_utf8_size`;
+    `put_string` of `src/mcp.c` uses the rule of `put_string` in
+    `src/front/json.c`; the `McpRunTool` callback has a BOUNDS array for
+    `sim` in place of the PROTOCOL argument of the port; `run_fmt`,
+    `run_sim` and `run_explain_code` take OUT only.
+  - `test/readme.c` checks the 4 parts of PLAN 3.2 in place of the
+    `list-steps` of the port (Q79 (a)), and a `yes` row has no slice
+    tag. AGENTS.md names `eval`, `ir` and `abi` because of the check in
+    two directions.
+- `make check` EXIT 0 (serial gate run 10): the S7 counts are the same
+  (21 lines), and there are four new lines: `skill: 5 examples, 5
+  outputs match`, `explain-code: 46 codes, 0 mismatches`, `mcp: 33
+  requests, 0 mismatches; 5 examples` and `readme: 7 rows, 9 verbs`.
+
+### S8 review corrections (2026-11-02)
+
+- MCP simulator bounds now follow the integer schema and Q78 (a).
+  Values such as `1.0` and `1e0` are normalized to decimal before CLI
+  parsing; fractional values give -32602. Integer values outside the
+  supported range still receive the CLI USAGE diagnostic.
+- `test/mcp.c` adds 25 cases for decimal and exponent spellings,
+  negative zero, range boundaries, and fractions that a floating
+  conversion would round or underflow. The new regression had 20
+  failures before the fix and passes after it. The fractional-bound
+  golden response now pins -32602.
 
 ## S7 (2026-11-01)
 
